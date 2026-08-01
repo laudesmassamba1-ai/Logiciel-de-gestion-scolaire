@@ -603,11 +603,11 @@ tr:hover td{background:#FAFAFE}
   <div class="card" style="margin-bottom:16px">
     <div class="card-body" style="padding:12px 16px">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <select class="form-input form-select" style="width:auto;font-size:12px" id="notes-classe-filter">
+        <select class="form-input form-select" style="width:auto;font-size:12px" id="notes-classe-filter" onchange="filterNotes()">
           <option value="">Toutes les classes</option>
-          <option>CP-A</option><option>CE1-A</option><option>6ème A</option>
+          <option>CP-A</option><option>CE1-A</option><option>CE2-A</option><option>CM1-A</option><option>CM2-A</option><option>6ème A</option>
         </select>
-        <select class="form-input form-select" style="width:auto;font-size:12px" id="notes-matiere-filter">
+        <select class="form-input form-select" style="width:auto;font-size:12px" id="notes-matiere-filter" onchange="filterNotes()">
           <option value="">Toutes les matières</option>
           <option>Français</option><option>Mathématiques</option><option>Sciences</option><option>Histoire-Géo</option>
         </select>
@@ -690,16 +690,16 @@ tr:hover td{background:#FAFAFE}
     </div>
   </div>
   <div class="grid-3" style="margin-bottom:16px">
-    <div class="stat-card"><div class="stat-icon" style="background:var(--green-bg)">✅</div><div class="stat-val" style="color:var(--green)">239</div><div class="stat-label">Présents aujourd'hui</div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:var(--red-bg)">❌</div><div class="stat-val" style="color:var(--red)">9</div><div class="stat-label">Absents aujourd'hui</div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:var(--amber-bg)">⏰</div><div class="stat-val" style="color:var(--amber)">3</div><div class="stat-label">Retards</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:var(--green-bg)">✅</div><div class="stat-val" id="stat-presents" style="color:var(--green)">0</div><div class="stat-label">Présents aujourd'hui</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:var(--red-bg)">❌</div><div class="stat-val" id="stat-absents" style="color:var(--red)">0</div><div class="stat-label">Absents aujourd'hui</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:var(--amber-bg)">⏰</div><div class="stat-val" id="stat-retards" style="color:var(--amber)">0</div><div class="stat-label">Retards</div></div>
   </div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">📋 Feuille de présence — <span id="presence-date">Aujourd'hui</span></span>
       <div style="display:flex;gap:8px">
         <select class="form-input form-select" style="width:auto;font-size:12px" onchange="loadPresenceByClasse(this.value)">
-          <option>CP-A</option><option>CE1-A</option><option>6ème A</option>
+          <option>CP-A</option><option>CE1-A</option><option>CE2-A</option><option>CM1-A</option><option>CM2-A</option><option>6ème A</option>
         </select>
       </div>
     </div>
@@ -1389,6 +1389,364 @@ tr:hover td{background:#FAFAFE}
   </div>
 </div>
 
+<!-- ============================================================
+     NOUVEAUX FORMULAIRES (complètent les boutons "Ajouter")
+     Chaque fenêtre permet d'enregistrer une donnée dans le
+     logiciel, comme pour les élèves ou les notes.
+     ============================================================ -->
+
+<!-- Modal: Ajouter un enseignant -->
+<div id="modal-add-enseignant" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-enseignant')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">👨‍🏫 Ajouter un enseignant</span>
+      <button class="modal-close" onclick="closeModal('modal-add-enseignant')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Nom *</label><input type="text" class="form-input" id="ens-nom"/></div>
+        <div class="form-group"><label class="form-label">Prénom *</label><input type="text" class="form-input" id="ens-prenom"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Matières</label><input type="text" class="form-input" id="ens-matieres" placeholder="Ex: Mathématiques, Français"/></div>
+        <div class="form-group"><label class="form-label">Classes</label><input type="text" class="form-input" id="ens-classes" placeholder="Ex: CM1-A, CM2-A"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Heures / semaine</label><input type="number" class="form-input" id="ens-heures" value="20"/></div>
+        <div class="form-group"><label class="form-label">Statut</label><select class="form-input form-select" id="ens-statut"><option>Actif</option><option>En congé</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-enseignant')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveEnseignant()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter un parent -->
+<div id="modal-add-parent" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-parent')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">👨‍👩‍👧 Ajouter un parent</span>
+      <button class="modal-close" onclick="closeModal('modal-add-parent')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Nom complet *</label><input type="text" class="form-input" id="parent-nom"/></div>
+        <div class="form-group"><label class="form-label">Téléphone *</label><input type="tel" class="form-input" id="parent-tel" placeholder="+242 06..."/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input" id="parent-email" placeholder="parent@email.com"/></div>
+        <div class="form-group"><label class="form-label">Adresse</label><input type="text" class="form-input" id="parent-adresse" placeholder="Quartier, Brazzaville"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-parent')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveParent()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Créer une classe -->
+<div id="modal-add-classe" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-classe')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🏫 Créer une classe</span>
+      <button class="modal-close" onclick="closeModal('modal-add-classe')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Nom de la classe *</label><input type="text" class="form-input" id="classe-nom" placeholder="Ex: CM2-B"/></div>
+        <div class="form-group"><label class="form-label">Niveau</label><select class="form-input form-select" id="classe-niveau"><option>CP</option><option>CE1</option><option>CE2</option><option>CM1</option><option>CM2</option><option>6ème</option><option>5ème</option></select></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Enseignant principal</label><input type="text" class="form-input" id="classe-enseignant" placeholder="Ex: Mme IKAMA Sandrine"/></div>
+        <div class="form-group"><label class="form-label">Salle</label><input type="text" class="form-input" id="classe-salle" placeholder="Ex: Salle 07"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-classe')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveClasse()">💾 Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter un menu cantine -->
+<div id="modal-add-menu" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-menu')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🍽 Ajouter un menu</span>
+      <button class="modal-close" onclick="closeModal('modal-add-menu')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Jour</label><select class="form-input form-select" id="menu-jour"><option>Lundi</option><option>Mardi</option><option>Mercredi</option><option>Jeudi</option><option>Vendredi</option></select></div>
+        <div class="form-group"><label class="form-label">Prix (FCFA)</label><input type="number" class="form-input" id="menu-prix" value="800"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Plat du jour *</label><input type="text" class="form-input" id="menu-plat" placeholder="Ex: Riz + Poulet sauce tomate"/></div>
+      <div class="form-group"><label class="form-label">Composition / Taille</label><input type="text" class="form-input" id="menu-taille" placeholder="Ex: Assiette complète + fruit"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-menu')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveMenu()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter un bus -->
+<div id="modal-add-bus" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-bus')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🚌 Ajouter un bus</span>
+      <button class="modal-close" onclick="closeModal('modal-add-bus')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Nom du bus *</label><input type="text" class="form-input" id="bus-nom" placeholder="Ex: Bus Ligne 3"/></div>
+        <div class="form-group"><label class="form-label">Plaque</label><input type="text" class="form-input" id="bus-plaque" placeholder="Ex: BC-003-CG"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Chauffeur</label><input type="text" class="form-input" id="bus-chauffeur" placeholder="Ex: M. KOUKA Jean"/></div>
+        <div class="form-group"><label class="form-label">Capacité (places)</label><input type="number" class="form-input" id="bus-capacite" value="40"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Itinéraire</label><input type="text" class="form-input" id="bus-itineraire" placeholder="Ex: Bacongo → École"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-bus')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveBus()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter un livre -->
+<div id="modal-add-livre" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-livre')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📚 Ajouter un livre</span>
+      <button class="modal-close" onclick="closeModal('modal-add-livre')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Titre *</label><input type="text" class="form-input" id="livre-titre"/></div>
+        <div class="form-group"><label class="form-label">Auteur</label><input type="text" class="form-input" id="livre-auteur"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Catégorie</label><select class="form-input form-select" id="livre-categorie"><option>Manuel scolaire</option><option>Littérature</option><option>Histoire</option><option>Sciences</option><option>Dictionnaire</option></select></div>
+        <div class="form-group"><label class="form-label">Quantité</label><input type="number" class="form-input" id="livre-stock" value="1"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-livre')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLivre()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Enregistrer un emprunt -->
+<div id="modal-emprunt" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-emprunt')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📖 Enregistrer un emprunt</span>
+      <button class="modal-close" onclick="closeModal('modal-emprunt')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Livre</label><select class="form-input form-select" id="emprunt-livre"></select></div>
+      <div class="form-group"><label class="form-label">Élève</label><select class="form-input form-select" id="emprunt-eleve"></select></div>
+      <div class="form-group"><label class="form-label">Date de retour prévue</label><input type="date" class="form-input" id="emprunt-retour"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-emprunt')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveEmprunt()">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Planifier un examen -->
+<div id="modal-add-examen" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-examen')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🎯 Planifier un examen</span>
+      <button class="modal-close" onclick="closeModal('modal-add-examen')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Nom de l'examen *</label><input type="text" class="form-input" id="examen-nom" placeholder="Ex: Examen de Maths"/></div>
+        <div class="form-group"><label class="form-label">Classe</label><select class="form-input form-select" id="examen-classe"><option>CP-A</option><option>CE1-A</option><option>CE2-A</option><option>CM1-A</option><option>CM2-A</option><option>6ème A</option></select></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="examen-date"/></div>
+        <div class="form-group"><label class="form-label">Salle</label><input type="text" class="form-input" id="examen-salle" placeholder="Ex: Grande salle"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Surveillants</label><input type="text" class="form-input" id="examen-surveillants" placeholder="Ex: Mme ONDONGO, M. MAKOSSO"/></div>
+        <div class="form-group"><label class="form-label">Statut</label><select class="form-input form-select" id="examen-statut"><option>Planifié</option><option>En cours</option><option>Terminé</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-examen')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveExamen()">💾 Planifier</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Enregistrer une visite à l'infirmerie -->
+<div id="modal-add-soin" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-soin')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">💊 Enregistrer une visite</span>
+      <button class="modal-close" onclick="closeModal('modal-add-soin')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Élève</label><select class="form-input form-select" id="soin-eleve"></select></div>
+        <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="soin-date"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Motif *</label><input type="text" class="form-input" id="soin-motif" placeholder="Ex: Fièvre, mal de tête..."/></div>
+      <div class="form-group"><label class="form-label">Traitement donné</label><input type="text" class="form-input" id="soin-traitement" placeholder="Ex: Paracétamol, repos"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-soin')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveSoin()">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter un article de stock -->
+<div id="modal-add-stock" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-stock')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📦 Ajouter un article</span>
+      <button class="modal-close" onclick="closeModal('modal-add-stock')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Article *</label><input type="text" class="form-input" id="stock-article" placeholder="Ex: Craies blanches"/></div>
+        <div class="form-group"><label class="form-label">Catégorie</label><select class="form-input form-select" id="stock-categorie"><option>Fournitures</option><option>Mobilier</option><option>Informatique</option><option>Nettoyage</option></select></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Quantité de départ</label><input type="number" class="form-input" id="stock-qte" value="10"/></div>
+        <div class="form-group"><label class="form-label">Stock minimum (alerte)</label><input type="number" class="form-input" id="stock-min" value="5"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Unité</label><input type="text" class="form-input" id="stock-unite" placeholder="Ex: boîte, pcs, lot" value="pcs"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-stock')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveStock()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Sortie de stock -->
+<div id="modal-sortie-stock" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-sortie-stock')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">↗ Sortie de stock</span>
+      <button class="modal-close" onclick="closeModal('modal-sortie-stock')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Article</label><select class="form-input form-select" id="sortie-stock-article"></select></div>
+      <div class="form-group"><label class="form-label">Quantité à sortir</label><input type="number" class="form-input" id="sortie-stock-qte" value="1"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-sortie-stock')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveSortieStock()">↗ Valider la sortie</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter du personnel -->
+<div id="modal-add-personnel" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-personnel')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">👷 Ajouter du personnel</span>
+      <button class="modal-close" onclick="closeModal('modal-add-personnel')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Nom complet *</label><input type="text" class="form-input" id="personnel-nom"/></div>
+        <div class="form-group"><label class="form-label">Poste</label><select class="form-input form-select" id="personnel-poste"><option>Secrétaire</option><option>Comptable</option><option>Surveillant</option><option>Cuisinière</option><option>Gardien</option><option>Infirmier(e)</option></select></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Contact</label><input type="text" class="form-input" id="personnel-contact" placeholder="+242 06..."/></div>
+        <div class="form-group"><label class="form-label">Contrat</label><select class="form-input form-select" id="personnel-contrat"><option>CDI</option><option>CDD</option><option>Stage</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Statut</label><select class="form-input form-select" id="personnel-statut"><option>Actif</option><option>En congé</option></select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-personnel')">Annuler</button>
+      <button class="btn btn-primary" onclick="savePersonnel()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter un barème de frais -->
+<div id="modal-add-frais" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-add-frais')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">💰 Ajouter un barème de frais</span>
+      <button class="modal-close" onclick="closeModal('modal-add-frais')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Niveau *</label><input type="text" class="form-input" id="frais-niveau" placeholder="Ex: 5ème"/></div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Inscription (FCFA)</label><input type="number" class="form-input" id="frais-inscription" value="0"/></div>
+        <div class="form-group"><label class="form-label">Scolarité / Trimestre</label><input type="number" class="form-input" id="frais-scolarite" value="0"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Cantine / Mois</label><input type="number" class="form-input" id="frais-cantine" value="0"/></div>
+        <div class="form-group"><label class="form-label">Transport / Mois</label><input type="number" class="form-input" id="frais-transport" value="0"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-frais')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveFrais()">💾 Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Nouveau message -->
+<div id="modal-send-message" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-send-message')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">✉ Nouveau message</span>
+      <button class="modal-close" onclick="closeModal('modal-send-message')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Destinataire</label><select class="form-input form-select" id="msg-dest"></select></div>
+      <div class="form-group"><label class="form-label">Message</label><textarea class="form-input" rows="5" id="msg-content" placeholder="Écrivez votre message..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-send-message')">Annuler</button>
+      <button class="btn btn-primary" onclick="sendNewMessage()">📨 Envoyer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Générer un document -->
+<div id="modal-gen-doc" class="modal-overlay" style="display:none" onclick="closeModalOuter(event,'modal-gen-doc')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📄 Générer un document</span>
+      <button class="modal-close" onclick="closeModal('modal-gen-doc')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Type de document</label>
+        <select class="form-input form-select" id="gen-doc-type">
+          <option>Attestation d'inscription</option>
+          <option>Certificat de scolarité</option>
+          <option>Lettre de transfert</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Élève</label><select class="form-input form-select" id="gen-doc-eleve"></select></div>
+      <div class="alert alert-info">📌 Le document sera généré avec un QR Code de vérification.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-gen-doc')">Annuler</button>
+      <button class="btn btn-primary" onclick="genDocModal()">📄 Générer + QR Code</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // DB (magasin de données en mémoire)
@@ -1410,6 +1768,8 @@ let DB = {
   sante: [],
   transport: [],
   messages: [],
+  cantine: [],        // menus de la cantine
+  parents: [],        // parents ajoutés à la main
   users: [],
   schools: []
 };
@@ -1683,6 +2043,15 @@ function seedData() {
     {id:'T2',nom:'Bus Ligne 2',chauffeur:'ITOUA Marcel',plaque:'BC-002-CG',capacite:35,eleves:28,itineraire:'Poto-Poto → École'},
   ];
 
+  // Menus de la semaine pour la cantine
+  DB.cantine = [
+    {id:'MEN1',jour:'Lundi',plat:'Riz + Poulet sauce tomate',taille:'Assiette complète',prix:800},
+    {id:'MEN2',jour:'Mardi',plat:'Haricots + Plantain mûr',taille:'Assiette complète',prix:800},
+    {id:'MEN3',jour:'Mercredi',plat:'Riz + Poisson braisé',taille:'Assiette complète',prix:900},
+    {id:'MEN4',jour:'Jeudi',plat:'Pâtes + Viande',taille:'Assiette complète',prix:900},
+    {id:'MEN5',jour:'Vendredi',plat:'Riz + Sauce arachide',taille:'Assiette complète',prix:850},
+  ];
+
   DB.documents = [
     {id:'D1',type:'Attestation d\'inscription',eleve:'NZINGA Jean',date:'2024-10-15',par:'Direction',qr:'QR-001'},
     {id:'D2',type:'Certificat de scolarité',eleve:'MOUKALA Marie',date:'2024-10-14',par:'Direction',qr:'QR-002'},
@@ -1748,6 +2117,7 @@ function renderPage(id){
     case 'documents': renderDocuments();break;
     case 'bibliotheque': renderBibliotheque();break;
     case 'transport': renderTransport();break;
+    case 'cantine': renderCantine();break;
     case 'stocks': renderStocks();break;
     case 'sante': renderSante();break;
     case 'examens': renderExamens();break;
@@ -1766,6 +2136,11 @@ function renderDashboard(){
   document.getElementById('current-date-display').textContent=`${jours[d.getDay()]} ${d.getDate()} ${mois[d.getMonth()]} ${d.getFullYear()}`;
   document.getElementById('stat-eleves').textContent=DB.eleves.length;
   document.getElementById('stat-enseignants').textContent=DB.enseignants.length;
+
+  // Total des paiements encaissés (pour la carte "Revenus")
+  const totalPaiements=DB.paiements.reduce((a,p)=>a+(p.montant||0),0);
+  const statFin=document.getElementById('stat-finances');
+  if(statFin) statFin.textContent= totalPaiements>=1000000 ? (totalPaiements/1000000).toFixed(1)+'M' : totalPaiements.toLocaleString();
 
   // Perf classes
   const perfs=[
@@ -1828,6 +2203,8 @@ function renderDashboard(){
 function renderEleves(list){
   list = list||DB.eleves;
   document.getElementById('eleves-count-sub').textContent=`${list.length} élèves`;
+  const pagInfo=document.getElementById('eleves-pagination-info');
+  if(pagInfo) pagInfo.textContent=`Affichage 1-${list.length} sur ${DB.eleves.length}`;
   document.getElementById('eleves-table').innerHTML=list.map(e=>`
     <tr>
       <td><div class="cell-with-avatar">
@@ -1885,8 +2262,9 @@ function renderEnseignants(){
 // ============================================================
 // NOTES
 // ============================================================
-function renderNotes(){
-  document.getElementById('notes-table').innerHTML=DB.notes.slice(0,20).map(n=>`
+function renderNotes(list){
+  list = list || DB.notes;
+  document.getElementById('notes-table').innerHTML=list.slice(0,20).map(n=>`
     <tr>
       <td style="font-size:12px;font-weight:600">${n.eleveNom}</td>
       <td><span class="badge badge-violet">${n.classe}</span></td>
@@ -1909,6 +2287,16 @@ function getNoteColor(note,sur){
   return'var(--red)';
 }
 
+// Filtre les notes par classe et par matière
+function filterNotes(){
+  const c=document.getElementById('notes-classe-filter').value;
+  const m=document.getElementById('notes-matiere-filter').value;
+  let list=DB.notes;
+  if(c) list=list.filter(n=>n.classe===c);
+  if(m) list=list.filter(n=>n.matiere===m);
+  renderNotes(list);
+}
+
 // ============================================================
 // PRESENCES
 // ============================================================
@@ -1923,11 +2311,21 @@ function renderPresences(classe){
     return;
   }
   
-  document.getElementById('presences-table').innerHTML=eleves.map((e,i)=>{
+  // On fabrique d'abord la liste (élève + statut) pour pouvoir compter
+  const rows=eleves.map((e,i)=>{
     const statuses = ['Présent', 'Absent', 'Retard'];
     const statut = statuses[i % 3 === 0 ? 0 : (i % 7 === 0 ? 1 : 2)];
-    const colors={Présent:'badge-green',Absent:'badge-red',Retard:'badge-amber'};
-    return`<tr>
+    return {e,statut};
+  });
+  
+  // Mise à jour des chiffres en haut de la page
+  const cp=document.getElementById('stat-presents'); if(cp)cp.textContent=rows.filter(r=>r.statut==='Présent').length;
+  const ca=document.getElementById('stat-absents'); if(ca)ca.textContent=rows.filter(r=>r.statut==='Absent').length;
+  const cr=document.getElementById('stat-retards'); if(cr)cr.textContent=rows.filter(r=>r.statut==='Retard').length;
+  
+  const colors={Présent:'badge-green',Absent:'badge-red',Retard:'badge-amber'};
+  document.getElementById('presences-table').innerHTML=rows.map(({e,statut})=>`
+    <tr>
       <td><div class="cell-with-avatar">
         <div class="avatar-sm" style="background:linear-gradient(135deg,var(--violet-l),var(--teal-l))">${e.prenom[0]}${e.nom[0]}</div>
         <div class="cell-name">${e.nom} ${e.prenom}</div>
@@ -1943,8 +2341,7 @@ function renderPresences(classe){
           <option ${statut==='Retard'?'selected':''}>Retard</option>
         </select>
       </td>
-    </tr>`;
-  }).join('');
+    </tr>`).join('');
 }
 
 function loadPresenceByClasse(c){renderPresences(c);}
@@ -2104,8 +2501,10 @@ function loadEmploiDuTemps(v){renderEmploiDuTemps(v);}
 // PARENTS
 // ============================================================
 function renderParents(){
-  const parents=[...new Map(DB.eleves.map(e=>[e.parentTel,{nom:e.parentNom,tel:e.parentTel,enfants:[]}])).values()];
-  DB.eleves.forEach(e=>{const p=parents.find(p=>p.tel===e.parentTel);if(p)p.enfants.push(e.prenom);});
+  // On combine les parents issus des élèves + ceux ajoutés manuellement
+  const derived=[...new Map(DB.eleves.filter(e=>e.parentNom).map(e=>[e.parentTel,{nom:e.parentNom,tel:e.parentTel,enfants:[]}])).values()];
+  DB.eleves.forEach(e=>{const p=derived.find(p=>p.tel===e.parentTel);if(p)p.enfants.push(e.prenom);});
+  const parents=[...DB.parents,...derived];
   document.getElementById('parents-table').innerHTML=parents.slice(0,10).map(p=>`
     <tr>
       <td><div class="cell-with-avatar">
@@ -2473,6 +2872,29 @@ function loadModalData(id){
     const sel=document.getElementById('creneau-enseignant');
     if(sel)sel.innerHTML='<option>-- Sélectionner --</option>'+DB.enseignants.map(e=>`<option>${e.prenom} ${e.nom}</option>`).join('');
   }
+  // Nouveaux formulaires : on remplit les listes d'élèves, de livres, d'articles...
+  if(id==='modal-add-soin'){
+    fillSelect('soin-eleve',eleveOptions(),'-- Sélectionner un élève --');
+    document.getElementById('soin-date').value=new Date().toISOString().split('T')[0];
+  }
+  if(id==='modal-emprunt'){
+    fillSelect('emprunt-livre',DB.livres.map(l=>({value:l.id,label:l.titre+(l.emprunte?' (déjà prêté)':'')})),'-- Sélectionner un livre --');
+    fillSelect('emprunt-eleve',eleveOptions(),'-- Sélectionner un élève --');
+    document.getElementById('emprunt-retour').value=new Date(Date.now()+14*24*60*60*1000).toISOString().split('T')[0];
+  }
+  if(id==='modal-sortie-stock'){
+    fillSelect('sortie-stock-article',DB.stocks.map(s=>({value:s.id,label:s.article+' ('+s.stock+' '+s.unite+')'})),'-- Sélectionner un article --');
+  }
+  if(id==='modal-gen-doc'){
+    fillSelect('gen-doc-eleve',eleveOptions(),'-- Sélectionner un élève --');
+  }
+  if(id==='modal-add-examen'){
+    document.getElementById('examen-date').value=new Date().toISOString().split('T')[0];
+  }
+  if(id==='modal-send-message'){
+    const noms=[...DB.enseignants.map(e=>e.prenom+' '+e.nom),...DB.eleves.map(e=>e.parentNom).filter(Boolean)];
+    fillSelect('msg-dest',[...new Set(noms)].map(n=>({value:n,label:n})),'-- Choisir un destinataire --');
+  }
 }
 
 function loadAppelEleves(classe){
@@ -2512,6 +2934,7 @@ function saveEleve(){
       el.nom = nom.toUpperCase();
       el.prenom = prenom;
       el.classe = document.getElementById('eleve-classe').value;
+      el.lieuNaissance = document.getElementById('eleve-lieu-naissance').value;
       el.ddn = document.getElementById('eleve-ddn').value;
       el.sexe = document.getElementById('eleve-sexe').value;
       el.nationalite = document.getElementById('eleve-nationalite').value;
@@ -2529,6 +2952,7 @@ function saveEleve(){
       nom:nom.toUpperCase(),prenom,
       classe:document.getElementById('eleve-classe').value,
       ddn:document.getElementById('eleve-ddn').value,
+      lieuNaissance:document.getElementById('eleve-lieu-naissance').value,
       sexe:document.getElementById('eleve-sexe').value,
       nationalite:document.getElementById('eleve-nationalite').value,
       adresse:document.getElementById('eleve-adresse').value,
@@ -2553,9 +2977,11 @@ function saveNotes(){
   let count=0;
   inputs.forEach(inp=>{
     if(inp.value){
+      const eleve=DB.eleves.find(x=>x.id===inp.dataset.eleve);
       const note={
         id:'N'+Math.random().toString(36).substr(2,6),
         eleveId:inp.dataset.eleve,
+        eleveNom:eleve ? eleve.nom+' '+eleve.prenom : 'Élève inconnu',
         classe:document.getElementById('note-classe').value,
         matiere:document.getElementById('note-matiere').value,
         type:document.getElementById('note-type').value,
@@ -2746,6 +3172,327 @@ function createSchoolAndDirector(){
 }
 
 // ============================================================
+// NOUVEAUX AJOUTS : enregistrement des nouveaux formulaires
+// Chaque fonction suit le même principe : on récupère ce que
+// l'utilisateur a rempli, on l'ajoute à la base, on le sauve
+// sur Firebase, puis on rafraîchit la page.
+// ============================================================
+
+// Remplit une liste déroulante avec une liste d'options
+function fillSelect(id,items,placeholder){
+  const sel=document.getElementById(id);
+  if(!sel)return;
+  sel.innerHTML=placeholder ? '<option value="--">'+placeholder+'</option>' : '';
+  sel.innerHTML+=items.map(o=>'<option value="'+o.value+'">'+o.label+'</option>').join('');
+}
+
+// Prépare la liste des élèves pour les listes déroulantes
+function eleveOptions(){
+  return DB.eleves.map(e=>({value:e.id,label:e.nom+' '+e.prenom+' ('+e.classe+')'}));
+}
+
+function saveEnseignant(){
+  if(!enforceRoleAccess('manage-students')) return;
+  const nom=document.getElementById('ens-nom').value.trim();
+  const prenom=document.getElementById('ens-prenom').value.trim();
+  if(!nom||!prenom){showToast('error','Nom et prénom obligatoires');return;}
+  const e={
+    id:'E'+Math.random().toString(36).substr(2,5).toUpperCase(),
+    nom:nom.toUpperCase(),prenom,
+    matieres:document.getElementById('ens-matieres').value.trim()||'Toutes matières',
+    classes:document.getElementById('ens-classes').value.trim()||'—',
+    heures:parseInt(document.getElementById('ens-heures').value)||0,
+    statut:document.getElementById('ens-statut').value
+  };
+  DB.enseignants.push(e);
+  saveToFirebase('enseignants',e);
+  closeModal('modal-add-enseignant');
+  renderEnseignants();
+  showToast('success','Enseignant ajouté : '+nom+' '+prenom);
+}
+
+function saveParent(){
+  if(!enforceRoleAccess('manage-students')) return;
+  const nom=document.getElementById('parent-nom').value.trim();
+  const tel=document.getElementById('parent-tel').value.trim();
+  if(!nom||!tel){showToast('error','Nom et téléphone obligatoires');return;}
+  const p={
+    id:'PAR'+Math.random().toString(36).substr(2,5),
+    nom,tel,
+    email:document.getElementById('parent-email').value.trim(),
+    adresse:document.getElementById('parent-adresse').value.trim(),
+    enfants:[]
+  };
+  DB.parents.push(p);
+  saveToFirebase('parents',p);
+  closeModal('modal-add-parent');
+  renderParents();
+  showToast('success','Parent ajouté : '+nom);
+}
+
+function saveClasse(){
+  if(!enforceRoleAccess('manage-students')) return;
+  const nom=document.getElementById('classe-nom').value.trim();
+  if(!nom){showToast('error','Nom de la classe obligatoire');return;}
+  const c={
+    id:'cl-'+nom.toLowerCase().replace(/[^a-z0-9]+/g,'-'),
+    nom,
+    niveau:document.getElementById('classe-niveau').value,
+    enseignant:document.getElementById('classe-enseignant').value.trim(),
+    salle:document.getElementById('classe-salle').value.trim(),
+    effectif:0
+  };
+  DB.classes.push(c);
+  saveToFirebase('classes',c);
+  closeModal('modal-add-classe');
+  renderClasses();
+  showToast('success','Classe créée : '+nom);
+}
+
+function saveMenu(){
+  const plat=document.getElementById('menu-plat').value.trim();
+  if(!plat){showToast('error','Le plat du jour est obligatoire');return;}
+  const m={
+    id:'MEN'+Math.random().toString(36).substr(2,4),
+    jour:document.getElementById('menu-jour').value,
+    plat,
+    taille:document.getElementById('menu-taille').value.trim()||'Assiette complète',
+    prix:parseInt(document.getElementById('menu-prix').value)||0
+  };
+  DB.cantine.push(m);
+  saveToFirebase('cantine',m);
+  closeModal('modal-add-menu');
+  renderCantine();
+  showToast('success','Menu ajouté pour le '+m.jour);
+}
+
+function saveBus(){
+  const nom=document.getElementById('bus-nom').value.trim();
+  if(!nom){showToast('error','Nom du bus obligatoire');return;}
+  const b={
+    id:'T'+Math.random().toString(36).substr(2,4),
+    nom,
+    chauffeur:document.getElementById('bus-chauffeur').value.trim(),
+    plaque:document.getElementById('bus-plaque').value.trim(),
+    capacite:parseInt(document.getElementById('bus-capacite').value)||40,
+    eleves:0,
+    itineraire:document.getElementById('bus-itineraire').value.trim()
+  };
+  DB.transport.push(b);
+  saveToFirebase('transport',b);
+  closeModal('modal-add-bus');
+  renderTransport();
+  showToast('success','Bus ajouté : '+nom);
+}
+
+function saveLivre(){
+  const titre=document.getElementById('livre-titre').value.trim();
+  if(!titre){showToast('error','Le titre du livre est obligatoire');return;}
+  const l={
+    id:'L'+Math.random().toString(36).substr(2,4),
+    titre,
+    auteur:document.getElementById('livre-auteur').value.trim(),
+    categorie:document.getElementById('livre-categorie').value,
+    stock:parseInt(document.getElementById('livre-stock').value)||1,
+    emprunte:false
+  };
+  DB.livres.push(l);
+  saveToFirebase('livres',l);
+  closeModal('modal-add-livre');
+  renderBibliotheque();
+  showToast('success','Livre ajouté : '+titre);
+}
+
+function saveEmprunt(){
+  const livreId=document.getElementById('emprunt-livre').value;
+  const eleveId=document.getElementById('emprunt-eleve').value;
+  if(livreId.includes('--')||eleveId.includes('--')){showToast('error','Choisissez un livre et un élève');return;}
+  const l=DB.livres.find(x=>x.id===livreId);
+  const el=DB.eleves.find(x=>x.id===eleveId);
+  if(!l||!el)return;
+  if(l.emprunte){showToast('error','Ce livre est déjà prêté');return;}
+  l.emprunte=true;
+  l.empruntePar=el.nom+' '+el.prenom;
+  l.retour=document.getElementById('emprunt-retour').value||new Date(Date.now()+14*24*60*60*1000).toISOString().split('T')[0];
+  saveToFirebase('livres',l);
+  closeModal('modal-emprunt');
+  renderBibliotheque();
+  showToast('success','Emprunt enregistré pour '+l.empruntePar);
+}
+
+function saveExamen(){
+  const nom=document.getElementById('examen-nom').value.trim();
+  if(!nom){showToast('error','Nom de l\'examen obligatoire');return;}
+  const e={
+    id:'EX'+Math.random().toString(36).substr(2,4),
+    nom,
+    classe:document.getElementById('examen-classe').value,
+    date:document.getElementById('examen-date').value,
+    salle:document.getElementById('examen-salle').value.trim(),
+    surveillants:document.getElementById('examen-surveillants').value.trim(),
+    statut:document.getElementById('examen-statut').value
+  };
+  DB.examens.push(e);
+  saveToFirebase('examens',e);
+  closeModal('modal-add-examen');
+  renderExamens();
+  showToast('success','Examen planifié : '+nom);
+}
+
+function saveSoin(){
+  const eleveId=document.getElementById('soin-eleve').value;
+  const motif=document.getElementById('soin-motif').value.trim();
+  if(eleveId.includes('--')||!motif){showToast('error','Choisissez un élève et un motif');return;}
+  const el=DB.eleves.find(x=>x.id===eleveId);
+  if(!el)return;
+  const s={
+    id:'S'+Math.random().toString(36).substr(2,4),
+    eleveNom:el.nom+' '+el.prenom,
+    date:document.getElementById('soin-date').value,
+    motif,
+    traitement:document.getElementById('soin-traitement').value.trim(),
+    parentNotifie:true,
+    refere:false
+  };
+  DB.sante.push(s);
+  saveToFirebase('sante',s);
+  closeModal('modal-add-soin');
+  renderSante();
+  showToast('success','Visite enregistrée pour '+s.eleveNom);
+}
+
+function saveStock(){
+  const article=document.getElementById('stock-article').value.trim();
+  if(!article){showToast('error','Nom de l\'article obligatoire');return;}
+  const s={
+    id:'S'+Math.random().toString(36).substr(2,4),
+    article,
+    categorie:document.getElementById('stock-categorie').value,
+    stock:parseInt(document.getElementById('stock-qte').value)||0,
+    stockMin:parseInt(document.getElementById('stock-min').value)||1,
+    unite:document.getElementById('stock-unite').value.trim()||'pcs'
+  };
+  DB.stocks.push(s);
+  saveToFirebase('stocks',s);
+  closeModal('modal-add-stock');
+  renderStocks();
+  showToast('success','Article ajouté : '+article);
+}
+
+function saveSortieStock(){
+  const id=document.getElementById('sortie-stock-article').value;
+  const qty=parseInt(document.getElementById('sortie-stock-qte').value);
+  if(id.includes('--')){showToast('error','Choisissez un article');return;}
+  const s=DB.stocks.find(x=>x.id===id);
+  if(!s)return;
+  if(!qty||qty<=0){showToast('error','Quantité invalide');return;}
+  if(s.stock<qty){showToast('error','Stock insuffisant (disponible: '+s.stock+' '+s.unite+')');return;}
+  s.stock-=qty;
+  saveToFirebase('stocks',s);
+  closeModal('modal-sortie-stock');
+  renderStocks();
+  showToast('success',qty+' unité(s) sortie(s) de '+s.article);
+}
+
+function savePersonnel(){
+  const nom=document.getElementById('personnel-nom').value.trim();
+  if(!nom){showToast('error','Nom obligatoire');return;}
+  const p={
+    id:'P'+Math.random().toString(36).substr(2,4),
+    nom,
+    poste:document.getElementById('personnel-poste').value,
+    contact:document.getElementById('personnel-contact').value.trim(),
+    contrat:document.getElementById('personnel-contrat').value,
+    statut:document.getElementById('personnel-statut').value
+  };
+  DB.personnel.push(p);
+  saveToFirebase('personnel',p);
+  closeModal('modal-add-personnel');
+  renderPersonnel();
+  showToast('success','Personnel ajouté : '+nom);
+}
+
+function saveFrais(){
+  const niveau=document.getElementById('frais-niveau').value.trim();
+  if(!niveau){showToast('error','Le niveau est obligatoire');return;}
+  const f={
+    niveau,
+    inscription:parseInt(document.getElementById('frais-inscription').value)||0,
+    scolarite:parseInt(document.getElementById('frais-scolarite').value)||0,
+    cantine:parseInt(document.getElementById('frais-cantine').value)||0,
+    transport:parseInt(document.getElementById('frais-transport').value)||0
+  };
+  DB.frais.push(f);
+  saveToFirebase('frais',f);
+  closeModal('modal-add-frais');
+  renderFrais();
+  showToast('success','Barème ajouté pour le niveau '+niveau);
+}
+
+function sendNewMessage(){
+  const dest=document.getElementById('msg-dest').value;
+  const txt=document.getElementById('msg-content').value.trim();
+  if(dest.includes('--')){showToast('error','Choisissez un destinataire');return;}
+  if(!txt){showToast('error','Le message est vide');return;}
+  const m={
+    id:'M'+Date.now(),
+    from:dest,
+    avatar:dest.charAt(0).toUpperCase(),
+    msg:txt,
+    time:'Maintenant',
+    read:false
+  };
+  DB.messages.unshift(m);
+  saveToFirebase('messages',m);
+  closeModal('modal-send-message');
+  renderMessages();
+  showToast('success','Message envoyé à '+dest);
+}
+
+function genDocModal(){
+  const eleveId=document.getElementById('gen-doc-eleve').value;
+  const type=document.getElementById('gen-doc-type').value;
+  if(eleveId.includes('--')){showToast('error','Choisissez un élève');return;}
+  const el=DB.eleves.find(x=>x.id===eleveId);
+  if(!el)return;
+  const d={
+    id:'D'+Date.now(),
+    type,
+    eleve:el.nom+' '+el.prenom,
+    date:new Date().toISOString().split('T')[0],
+    par:'Direction',
+    qr:'QR-'+Math.floor(1000+Math.random()*9000)
+  };
+  DB.documents.push(d);
+  saveToFirebase('documents',d);
+  closeModal('modal-gen-doc');
+  renderDocuments();
+  showToast('success',type+' généré pour '+d.eleve+' — '+d.qr);
+}
+
+// ============================================================
+// CANTINE (page qui était restée vide)
+// ============================================================
+function renderCantine(){
+  document.getElementById('cantine-menu').innerHTML=DB.cantine.length===0
+    ?'<div class="empty-state"><div class="empty-icon">🍽</div><div class="empty-title">Aucun menu saisi pour le moment</div></div>'
+    :DB.cantine.map(m=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-weight:700;font-size:13px">${m.jour}</div>
+          <div style="font-size:12px;color:var(--text2)">${m.plat} · ${m.taille}</div>
+        </div>
+        <span class="badge badge-teal">${m.prix?m.prix.toLocaleString()+' FCFA':'Gratuit'}</span>
+      </div>`).join('');
+  document.getElementById('cantine-presences').innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--text2)">Élèves inscrits à la cantine</span><strong>${DB.eleves.length}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--text2)">Prix du repas (FCFA)</span><strong>${DB.frais.length?DB.frais[0].cantine.toLocaleString():'—'}</strong></div>
+      <div class="empty-state"><div class="empty-icon">🍽️</div><div class="empty-title">Présences cantine à saisir à l'heure du repas</div></div>
+    </div>`;
+}
+
+// ============================================================
 // FIREBASE INTEGRATION (SDK Modular — LOUX Project)
 // ============================================================
 function saveToFirebase(collection, data){
@@ -2763,7 +3510,7 @@ function loadFromFirebase(){
     console.log('Firebase SDK pas encore prêt — données locales utilisées');
     return;
   }
-  const collections = ['eleves','enseignants','notes','paiements','annonces','livres','stocks','creneaux'];
+  const collections = ['eleves','enseignants','notes','paiements','annonces','livres','stocks','creneaux','examens','sante','personnel','documents','frais','transport','messages','cantine','parents'];
   let loaded = 0;
   collections.forEach(col=>{
     try{
@@ -2829,10 +3576,11 @@ function quickAdd(){
 }
 
 function globalSearch(q){
-  if(!q)return;
-  if(q.length<2)return;
+  // On remet la liste complète dès que la recherche est vidée
+  if(!q||q.length<2){renderEleves();return;}
   const results=DB.eleves.filter(e=>(e.nom+' '+e.prenom).toLowerCase().includes(q.toLowerCase()));
   if(results.length>0){showPage('eleves');renderEleves(results);}
+  else{showToast('info','Aucun élève trouvé pour "'+q+'"');}
 }
 
 // ============================================================
@@ -2855,6 +3603,7 @@ function editEleve(id){
   document.getElementById('eleve-nom').value = el.nom;
   document.getElementById('eleve-prenom').value = el.prenom;
   document.getElementById('eleve-ddn').value = el.ddn || '';
+  document.getElementById('eleve-lieu-naissance').value = el.lieuNaissance || '';
   document.getElementById('eleve-sexe').value = el.sexe;
   document.getElementById('eleve-nationalite').value = el.nationalite || 'Congolaise';
   document.getElementById('eleve-adresse').value = el.adresse || '';
@@ -2901,7 +3650,7 @@ function deleteNote(id){
     DB.notes=DB.notes.filter(n=>n.id!==id);
     if(window.FIREBASE_READY) {
       try {
-        const dbRef = window.FB_REF(window.FB_DB, `notes/${id}`);
+        const dbRef = window.FB_REF(window.FB_DB, `${CURRENT_SCHOOL_ID}/notes/${id}`);
         window.FB_REMOVE(dbRef);
       } catch(e) { console.warn(e); }
     }
@@ -3025,7 +3774,11 @@ function removeStock(id){
 function genReport(){showToast('success','Rapport PDF généré');}
 function showAIInsights(){showToast('info','Analyse IA: Jean NZINGA, Marie MOUKALA, Paul MAKOSSO — Moyennes en baisse depuis 3 semaines');}
 function updatePresence(id,val){showToast('success',`Présence mise à jour: ${val}`);}
-function genDoc(type){openModal('modal-gen-doc');showToast('info','Sélectionnez un élève pour générer le document');}
+function genDoc(type){
+  openModal('modal-gen-doc');
+  const t=document.getElementById('gen-doc-type');
+  if(t && type) t.value=type;
+}
 function changeSchool(v){
   if(!v) return;
   setCurrentSchoolId(v);
