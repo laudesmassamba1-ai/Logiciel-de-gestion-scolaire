@@ -1,15 +1,22 @@
 from fastapi import FastAPI, Path, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-import sqlite3
+import mysql.connector
 
 app = FastAPI()
+def get_connection():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="Josias50",
+        database="ecole"
+    )
 
 #affichage du nombre total d'élèves
 @app.get("/total_eleves")
 def get_total_eleves()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) FROM eleve")
     total_eleves = cursor.fetchone()[0]
     return {"total_eleves": total_eleves}
@@ -17,8 +24,8 @@ def get_total_eleves()-> dict:
 #affichage de la liste des élèves
 @app.get("/eleve")
 def get_all_eleves()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM eleve")
     eleves = cursor.fetchall()
     return {"eleves": eleves}
@@ -27,9 +34,9 @@ def get_all_eleves()-> dict:
 @app.get("/eleve/{id}")
 def get_eleve_par_id(id: int = Path(ge=1))-> dict:
 
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM eleve WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM eleve WHERE id = %s", (id,))
     eleve = cursor.fetchone()
     if eleve is None:
         raise HTTPException(status_code=404, detail="Élève non trouvé")
@@ -54,15 +61,15 @@ class Eleveajouter(BaseModel):
 # 2. Route POST pour ajouter l'élève
 @app.post("/eleve")
 def ajouter_eleve(eleve: Eleveajouter):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
         INSERT INTO eleve (
             matricule, nom, prenom, sexe, date_naissance,
             lieu_naissance, adresse, nom_parent,
             redoublant, statut, classe_id, numero_parent
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
@@ -109,11 +116,11 @@ class EleveModifier(BaseModel):
 #route pour modifier un eleve a partir de son id
 @app.put("/modifierEleve/{eleve_id}")
 def put_un_eleve(eleve_id: int, eleve: EleveModifier):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Récupérer l'élève existant
-    cursor.execute("SELECT * FROM eleve WHERE id=?", (eleve_id,))
+    cursor.execute("SELECT * FROM eleve WHERE id=%s", (eleve_id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -129,8 +136,8 @@ def put_un_eleve(eleve_id: int, eleve: EleveModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE eleve
-        SET nom=?, prenom=?, sexe=?, date_naissance=?, lieu_naissance=?, adresse=?, nom_parent=?, redoublant=?, statut=?, classe_id=?, numero_parent=?
-        WHERE id=?
+        SET nom=%s, prenom=%s, sexe=%s, date_naissance=%s, lieu_naissance=%s, adresse=%s, nom_parent=%s, redoublant=%s, statut=%s, classe_id=%s, numero_parent=%s
+        WHERE id=%s
     """
     valeurs = (
         donnees_actuelles["nom"],
@@ -155,9 +162,9 @@ def put_un_eleve(eleve_id: int, eleve: EleveModifier):
 #route pour supprimer un eleve 
 @app.delete("/supprimerEleve/{id}")
 def delete_un_eleve(id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM eleve WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("DELETE FROM eleve WHERE id = %s", (id,))
 
     if cursor.rowcount == 0:
         conn.close()
@@ -171,8 +178,8 @@ def delete_un_eleve(id: int = Path(ge=1)):
 #route pour afficher le total des classes
 @app.get("/total_classe")
 def get_total_classe()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) FROM classe")
     total_classe = cursor.fetchone()[0]
     return {"total_classe": total_classe}
@@ -180,8 +187,8 @@ def get_total_classe()-> dict:
 #affichage de la liste des classes
 @app.get("/classe")
 def get_all_classe()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM classe")
     classes = cursor.fetchall()
     return {"classes": classes}
@@ -190,9 +197,9 @@ def get_all_classe()-> dict:
 @app.get("/classe/{id}")
 def get_classe_par_id(id: int = Path(ge=1))-> dict:
 
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM classe WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM classe WHERE id = %s", (id,))
     classe = cursor.fetchone()
     if classe is None:
         raise HTTPException(status_code=404, detail="classe non trouvée")
@@ -206,13 +213,13 @@ class classeAjouter(BaseModel):
 # 2. Route POST pour ajouter une classe
 @app.post("/classe")
 def ajouter_classe(classe: classeAjouter):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
         INSERT INTO classe (
            classe, cycle_id
-        ) VALUES (?, ?)
+        ) VALUES (%s, %s)
     """
 
     valeurs = (
@@ -240,11 +247,11 @@ class classeModifier(BaseModel):
 #route pour modifier une classe a partir de son id
 @app.put("/modifierClasse/{id}")
 def put_une_classe(id: int, classe: classeModifier):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Récupérer une classe existante
-    cursor.execute("SELECT * FROM classe WHERE id=?", (id,))
+    cursor.execute("SELECT * FROM classe WHERE id=%s", (id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -260,8 +267,8 @@ def put_une_classe(id: int, classe: classeModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE classe
-        SET  classe=?, cycle_id=?
-        WHERE id=?
+        SET  classe=%s, cycle_id=%s
+        WHERE id=%s
     """
     valeurs = (
         donnees_actuelles["classe"],
@@ -277,9 +284,9 @@ def put_une_classe(id: int, classe: classeModifier):
 #route pour supprimer une classe
 @app.delete("/supprimerClasse/{id}")
 def delete_un_classe(id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM classe WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("DELETE FROM classe WHERE id = %s", (id,))
 
     if cursor.rowcount == 0:
         conn.close()
@@ -293,8 +300,8 @@ def delete_un_classe(id: int = Path(ge=1)):
 #route pour afficher le total des cycles
 @app.get("/total_cycle")
 def get_total_cycle()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) FROM cycle")
     total_cycle = cursor.fetchone()[0]
     return {"total_cycle": total_cycle}
@@ -302,8 +309,8 @@ def get_total_cycle()-> dict:
 #affichage de la liste des cycles
 @app.get("/cycle")
 def get_all_cycle()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM cycle")
     cycle = cursor.fetchall()
     return {"cycle": cycle}
@@ -312,9 +319,9 @@ def get_all_cycle()-> dict:
 @app.get("/cycle/{id}")
 def get_cycle_par_id(id: int = Path(ge=1))-> dict:
 
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM cycle WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM cycle WHERE id = %s", (id,))
     cycle = cursor.fetchone()
     if cycle is None:
         raise HTTPException(status_code=404, detail="cycle non trouvé")
@@ -328,13 +335,13 @@ class cycleAjouter(BaseModel):
 # 2. Route POST pour ajouter l'élève
 @app.post("/cycle")
 def ajouter_cycle(cycle: cycleAjouter):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
         INSERT INTO cycle (
            nom
-        ) VALUES (?)
+        ) VALUES (%s)
     """
 
     valeurs = (
@@ -361,11 +368,11 @@ class cycleModifier(BaseModel):
 #route pour modifier un cycle a partir de son id
 @app.put("/modifierCycle/{id}")
 def put_un_cycle(id: int, cycle: cycleModifier):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Récupérer un cycle existant
-    cursor.execute("SELECT * FROM cycle WHERE id=?", (id,))
+    cursor.execute("SELECT * FROM cycle WHERE id=%s", (id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -381,8 +388,8 @@ def put_un_cycle(id: int, cycle: cycleModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE cycle
-        SET  nom=?
-        WHERE id=?
+        SET  nom=%s
+        WHERE id=%s
     """
     valeurs = (
         donnees_actuelles["nom"],
@@ -397,9 +404,9 @@ def put_un_cycle(id: int, cycle: cycleModifier):
 #route pour supprimer un cycle
 @app.delete("/supprimerCycle/{id}")
 def delete_un_cycle(id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM cycle WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("DELETE FROM cycle WHERE id = %s", (id,))
 
     if cursor.rowcount == 0:
         conn.close()
@@ -413,8 +420,8 @@ def delete_un_cycle(id: int = Path(ge=1)):
 #route pour afficher le total d'ensignants
 @app.get("/total_enseignant")
 def get_total_enseignant()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) FROM enseignant")
     total_enseignant = cursor.fetchone()[0]
     return {"total_enseignant": total_enseignant}
@@ -422,8 +429,8 @@ def get_total_enseignant()-> dict:
 #affichage de la liste des enseignants
 @app.get("/enseignant")
 def get_all_enseignant()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM enseignant")
     enseignant = cursor.fetchall()
     return {"enseignant": enseignant}
@@ -432,9 +439,9 @@ def get_all_enseignant()-> dict:
 @app.get("/enseignant/{id}")
 def get_enseignant_par_id(id: int = Path(ge=1))-> dict:
 
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM enseignant WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM enseignant WHERE id = %s", (id,))
     enseignant = cursor.fetchone()
     if enseignant is None:
         raise HTTPException(status_code=404, detail="enseignant non trouvé")
@@ -460,13 +467,13 @@ class enseignantAjouter(BaseModel):
 # 2. Route POST pour ajouter l'élève
 @app.post("/enseignant")
 def ajouter_enseignant(enseignant: enseignantAjouter):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
         INSERT INTO enseignant (
            matricule, nom, prenom, sexe, date_naissance, lieu_naissance, adresse, telephone, email, matiere_principale, diplome, date_embauche, statut
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
@@ -514,11 +521,11 @@ class enseignantModifier(BaseModel):
 #route pour modifier un enseignant a partir de son id
 @app.put("/modifierEnseignant/{id}")
 def put_un_enseignant(id: int, enseignant: enseignantModifier):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Récupérer un enseignant existant
-    cursor.execute("SELECT * FROM enseignant WHERE id=?", (id,))
+    cursor.execute("SELECT * FROM enseignant WHERE id=%s", (id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -534,8 +541,8 @@ def put_un_enseignant(id: int, enseignant: enseignantModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE enseignant
-        SET  nom=?, prenom=?, sexe=?, date_naissance=?, lieu_naissance=?, adresse=?, telephone=?, email=?, matiere_principale=?, diplome=?, date_embauche=?, statut=?
-        WHERE id=?
+        SET  nom=%s, prenom=%s, sexe=%s, date_naissance=%s, lieu_naissance=%s, adresse=%s, telephone=%s, email=%s, matiere_principale=%s, diplome=%s, date_embauche=%s, statut=%s
+        WHERE id=%s
     """
     valeurs = (
         donnees_actuelles["nom"],
@@ -561,9 +568,9 @@ def put_un_enseignant(id: int, enseignant: enseignantModifier):
 #route pour supprimer un enseignant
 @app.delete("/supprimerEnseignant/{id}")
 def delete_un_enseignant(id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM enseignant WHERE id = ?", (id,))
+    conn=get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("DELETE FROM enseignant WHERE id = %s", (id,))
 
     if cursor.rowcount == 0:
         conn.close()
@@ -577,8 +584,8 @@ def delete_un_enseignant(id: int = Path(ge=1)):
 #route pour afficher le total de paiements
 @app.get("/total_paiement")
 def get_total_paiement()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) FROM paiement")
     total_paiement = cursor.fetchone()[0]
     return {"total_paiement": total_paiement}
@@ -586,8 +593,8 @@ def get_total_paiement()-> dict:
 #affichage de la liste des paiements
 @app.get("/paiement")
 def get_all_paiement()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM paiement")
     paiement = cursor.fetchall()
     return {"paiement": paiement}
@@ -596,9 +603,9 @@ def get_all_paiement()-> dict:
 @app.get("/paiement/{id}")
 def get_paiement_par_id(id: int = Path(ge=1))-> dict:
 
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM paiement WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM paiement WHERE id = %s", (id,))
     paiement = cursor.fetchone()
     if paiement is None:
         raise HTTPException(status_code=404, detail="paiement non trouvé")
@@ -618,13 +625,13 @@ class paiementAjouter(BaseModel):
 # 2. Route POST pour ajouter un paiement
 @app.post("/paiement")
 def ajouter_paiement(paiement: paiementAjouter):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
         INSERT INTO paiement (
             eleve_id, type_frais, montant, date_paiement, mode_paiement, reference, annee_scolaire, trimestre
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
@@ -663,11 +670,11 @@ class paiementModifier(BaseModel):
 #route pour modifier un paiement a partir de son id
 @app.put("/modifierPaiement/{id}")
 def put_un_paiement(id: int, paiement: paiementModifier):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Récupérer un paiement existant
-    cursor.execute("SELECT * FROM paiement WHERE id=?", (id,))
+    cursor.execute("SELECT * FROM paiement WHERE id=%s", (id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -683,8 +690,8 @@ def put_un_paiement(id: int, paiement: paiementModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE paiement
-        SET  eleve_id=?, type_frais=?, montant=?, date_paiement=?, mode_paiement=?, reference=?, annee_scolaire=?, trimestre=?
-        WHERE id=?
+        SET  eleve_id=%s, type_frais=%s, montant=%s, date_paiement=%s, mode_paiement=%s, reference=%s, annee_scolaire=%s, trimestre=%s
+        WHERE id=%s
     """
     valeurs = (
         donnees_actuelles["eleve_id"],
@@ -706,9 +713,9 @@ def put_un_paiement(id: int, paiement: paiementModifier):
 #route pour supprimer un paiement
 @app.delete("/supprimerPaiement/{id}")
 def delete_un_paiement(id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM paiement WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("DELETE FROM paiement WHERE id = %s", (id,))
 
     if cursor.rowcount == 0:
         conn.close()
@@ -722,8 +729,8 @@ def delete_un_paiement(id: int = Path(ge=1)):
 #route pour afficher le total des notes
 @app.get("/total_note")
 def get_total_note()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) FROM note")
     total_note = cursor.fetchone()[0]
     return {"total_note": total_note}
@@ -731,8 +738,8 @@ def get_total_note()-> dict:
 #affichage de la liste des notes
 @app.get("/note")
 def get_all_note()-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM note")
     note = cursor.fetchall()
     return {"note": note}
@@ -740,9 +747,9 @@ def get_all_note()-> dict:
 #affichage d'une note par son id
 @app.get("/note/{id}")
 def get_note_par_id(id: int = Path(ge=1))-> dict:
-    conn = sqlite3.connect("ecole.db") 
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM note WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM note WHERE id = %s", (id,))
     note = cursor.fetchone()
     if note is None:
         raise HTTPException(status_code=404, detail="note non trouvée")
@@ -764,13 +771,13 @@ class noteAjouter(BaseModel):
 # 2. Route POST pour ajouter une note
 @app.post("/note")
 def ajouter_note(note: noteAjouter):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
         INSERT INTO note (
             eleve_id, enseignant_id, matiere, type_evaluation, note, note_sur, coefficient, date_evaluation, trimestre, annee_scolaire
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
@@ -813,11 +820,11 @@ class noteModifier(BaseModel):
 #route pour modifier une note a partir de son id
 @app.put("/modifierNote/{id}")
 def put_un_note(id: int, note: noteModifier):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Récupérer une note existante
-    cursor.execute("SELECT * FROM note WHERE id=?", (id,))
+    cursor.execute("SELECT * FROM note WHERE id=%s", (id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -833,8 +840,8 @@ def put_un_note(id: int, note: noteModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE note
-        SET  eleve_id=?, enseignant_id=?, matiere=?, type_evaluation=?, note=?, note_sur=?, coefficient=?, date_evaluation=?, trimestre=?, annee_scolaire=?
-        WHERE id=?
+        SET  eleve_id=%s, enseignant_id=%s, matiere=%s, type_evaluation=%s, note=%s, note_sur=%s, coefficient=%s, date_evaluation=%s, trimestre=%s, annee_scolaire=%s
+        WHERE id=%s
     """
     valeurs = (
         donnees_actuelles["eleve_id"],
@@ -858,9 +865,9 @@ def put_un_note(id: int, note: noteModifier):
 #route pour supprimer une note
 @app.delete("/supprimerNote/{id}")
 def delete_un_note(id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM note WHERE id = ?", (id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("DELETE FROM note WHERE id = %s", (id,))
 
     if cursor.rowcount == 0:
         conn.close()
@@ -874,11 +881,11 @@ def delete_un_note(id: int = Path(ge=1)):
 #route pour calculer la moyenne d'un élève par son id et l'afficher avec les informations de l'élève
 @app.get("/moyenne/{eleve_id}")
 def get_moyenne(eleve_id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     #Vérifier que l'élève existe, et le récupérer proprement
-    cursor.execute("SELECT * FROM eleve WHERE id = ?", (eleve_id,))
+    cursor.execute("SELECT * FROM eleve WHERE id = %s", (eleve_id,))
     ligne = cursor.fetchone()
     if ligne is None:
         conn.close()
@@ -891,7 +898,7 @@ def get_moyenne(eleve_id: int = Path(ge=1)):
     cursor.execute("""
         SELECT SUM(note * coefficient) / SUM(coefficient)
         FROM note
-        WHERE eleve_id = ?
+        WHERE eleve_id = %s
     """, (eleve_id,))
     moyenne = cursor.fetchone()[0]
 
@@ -905,11 +912,11 @@ def get_moyenne(eleve_id: int = Path(ge=1)):
 #route pour afficher le total des presences par classe
 @app.get("/total_presence/{classe_id}")
 def get_total_presence(classe_id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     #Vérifier que la classe existe
-    cursor.execute("SELECT * FROM classe WHERE id = ?", (classe_id,))
+    cursor.execute("SELECT * FROM classe WHERE id = %s", (classe_id,))
     ligne = cursor.fetchone()
     if ligne is None:
         conn.close()
@@ -919,7 +926,7 @@ def get_total_presence(classe_id: int = Path(ge=1)):
     cursor.execute("""
         SELECT COUNT(*)
         FROM presences
-        WHERE classe_id = ?
+        WHERE classe_id = %s
     """, (classe_id,))
     total_presence = cursor.fetchone()[0]
 
@@ -933,11 +940,11 @@ def get_total_presence(classe_id: int = Path(ge=1)):
 #route pour afficher la liste des presences par classe
 @app.get("/presence/{classe_id}")
 def get_presence_par_classe(classe_id: int = Path(ge=1)):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     #Vérifier que la classe existe
-    cursor.execute("SELECT * FROM classe WHERE id = ?", (classe_id,))
+    cursor.execute("SELECT * FROM classe WHERE id = %s", (classe_id,))
     ligne = cursor.fetchone()
     if ligne is None:
         conn.close()
@@ -947,7 +954,7 @@ def get_presence_par_classe(classe_id: int = Path(ge=1)):
     cursor.execute("""
         SELECT *
         FROM presences
-        WHERE classe_id = ?
+        WHERE classe_id = %s
     """, (classe_id,))
     presence = cursor.fetchall()
 
@@ -969,18 +976,18 @@ class PresenceAjouter(BaseModel):
 
 @app.post("/presence")
 def ajouter_presence(presence: PresenceAjouter):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Vérifier que l'élève existe
-    cursor.execute("SELECT * FROM eleve WHERE id = ?", (presence.eleve_id,))
+    cursor.execute("SELECT * FROM eleve WHERE id = %s", (presence.eleve_id,))
     if cursor.fetchone() is None:
         conn.close()
         raise HTTPException(status_code=404, detail="Élève non trouvé")
 
     sql = """
         INSERT INTO presences (eleve_id, date_presence, statut, justifie, commentaire, classe_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
     """
     valeurs = (
         presence.eleve_id,
@@ -1013,11 +1020,11 @@ class PresenceModifier(BaseModel):
 #route pour modifier une présence pour un élève dans une classe
 @app.put("/modifierPresence/{presence_id}")
 def modifier_presence(presence_id: int, presence: PresenceModifier):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
 
     # Récupérer la présence existante
-    cursor.execute("SELECT * FROM presences WHERE id=?", (presence_id,))
+    cursor.execute("SELECT * FROM presences WHERE id=%s", (presence_id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -1033,8 +1040,8 @@ def modifier_presence(presence_id: int, presence: PresenceModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE presences
-        SET eleve_id=?, date_presence=?, statut=?, justifie=?, commentaire=?, classe_id=?
-        WHERE id=?
+        SET eleve_id=%s, date_presence=%s, statut=%s, justifie=%s, commentaire=%s, classe_id=%s
+        WHERE id=%s
     """
     valeurs = (
         donnees_actuelles["eleve_id"],
@@ -1054,9 +1061,9 @@ def modifier_presence(presence_id: int, presence: PresenceModifier):
 #route pour supprimer une présence pour un élève dans une classe
 @app.delete("/supprimerPresence/{presence_id}")
 def supprimer_presence(presence_id: int):
-    conn = sqlite3.connect("ecole.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM presences WHERE id = ?", (presence_id,))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("DELETE FROM presences WHERE id = %s", (presence_id,))
 
     if cursor.rowcount == 0:
         conn.close()
