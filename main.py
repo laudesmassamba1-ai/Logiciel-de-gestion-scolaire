@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Path, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+from typing import Optional
 import mysql.connector
 
 app = FastAPI()
@@ -16,30 +17,68 @@ def get_connection():
 @app.get("/total_eleves")
 def get_total_eleves()-> dict:
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM eleve")
     total_eleves = cursor.fetchone()[0]
     return {"total_eleves": total_eleves}
 
-#affichage de la liste des élèves
-@app.get("/eleve")
-def get_all_eleves()-> dict:
+#affichage du nombre total d'élèves par classe
+@app.get("/total_eleves_par_classe")
+def get_total_eleves_par_classe(recherche: Optional[str]=None)-> dict:
+    conn = get_connection()
+    cursor = conn.cursor()
+    if recherche:
+        sql="""SELECT COUNT(*) FROM eleve, classe WHERE eleve.classe_id=classe.id AND classe like %s"""
+        motif=f"%{recherche}%"
+        cursor.execute(sql, (motif,))
+        total_eleves = cursor.fetchone()[0]
+        cursor.execute("SELECT classe FROM classe where classe like %s", (motif,))
+    classe = cursor.fetchone()[0]
+    return {"nombre total d'élèves": {classe: total_eleves}}
+
+#affichage de la liste des élèves par classe
+@app.get("/eleve/{classe_id}")
+def get_all_eleves_par_classe(classe_id: int = Path(ge=1))-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM eleve")
+    cursor.execute("SELECT eleve.id, nom, prenom, sexe, classe FROM eleve, classe where eleve.classe_id=classe.id and classe.id = %s",(classe_id, ))
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
-#affichage d'un élève par son id
-@app.get("/eleve/{id}")
-def get_eleve_par_id(id: int = Path(ge=1))-> dict:
+#afficher la liste des eleves par classe
+@app.get("/eleve/{classe_id}")
+def get_eleve_par_classe(classe_id: int = Path(ge=1))-> dict:
+    conn = get_connection()
+    cursor=conn.cursor(dictionary=True)
+    cursor.execute("select nom, prenom, sexe, classe from eleve, classe where eleve.classe_id =classe.id and eleve.classe_id= %s", (classe_id,))
+    classe= cursor.fetchall()
+    if classe is None:
+        raise HTTPException(status_code=404, detail="classe non trouvee")
+    return{"liste eleve par classe": classe}
+
+#affichage d'un élève par son nom
+@app.get("/eleve_recherche")
+def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[str]=None)-> dict:
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM eleve WHERE id = %s", (id,))
-    eleve = cursor.fetchone()
+    if recherche:
+        sql="""select eleve.id, nom, prenom, sexe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, statut, numero_parent, classe from eleve, classe where eleve.classe_id=classe.id and nom like  %s and prenom like %s"""
+        motif=f"%{recherche}%"
+        motif1=f"%{recherche1}%"
+        cursor.execute(sql, (motif, motif1))
+
+    else:
+        sql="""select eleve.id, nom, prenom, sexe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, statut, numero_parent, classe from eleve, classe where eleve.classe_id=classe.id"""
+        cursor.execute(sql)
+
+    eleve = cursor.fetchall()
+
     if eleve is None:
         raise HTTPException(status_code=404, detail="Élève non trouvé")
+
+    cursor.close()
+    conn.close()
     return {"eleve": eleve}
 
 # Modèle des données attendues dans le corps de la requête (JSON)
@@ -57,47 +96,74 @@ class Eleveajouter(BaseModel):
     classe_id: int
     telephone_parent: str
 
+# Modèle des données attendues dans le corps de la requête (JSON)
+#pour gerer les inscriptions en debut d'annee
+class paiementAjouter(BaseModel):
+    eleve_id: Optional[int]= None
+    type_frais: str
+    montant: float
+    date_paiement: str
+    mode_paiement: str
+    annee_scolaire: str
+    trimestre: str
 
 # 2. Route POST pour ajouter l'élève
 @app.post("/eleve")
-def ajouter_eleve(eleve: Eleveajouter):
+def ajouter_eleve(eleve: Eleveajouter, paiement: paiementAjouter):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+    try:
 
-    sql = """
-        INSERT INTO eleve (
+        sql = """
+            INSERT INTO eleve (
             matricule, nom, prenom, sexe, date_naissance,
             lieu_naissance, adresse, nom_parent,
-            redoublant, statut, classe_id, numero_parent
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
+            redoublant, statut, classe_id, numero_parent) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) """
 
-    valeurs = (
-        eleve.matricule,
-        eleve.nom,
-        eleve.prenom,
-        eleve.sexe,
-        eleve.date_naissance,
-        eleve.lieu_naissance,
-        eleve.adresse,
-        eleve.nom_parent,
-        eleve.redoublant,
-        eleve.statut,
-        eleve.classe_id,
-        eleve.telephone_parent,
-    )
+        valeurs = (
+            eleve.matricule,
+            eleve.nom,
+            eleve.prenom,
+            eleve.sexe,
+            eleve.date_naissance,
+            eleve.lieu_naissance,
+            eleve.adresse,
+            eleve.nom_parent,
+            eleve.redoublant,
+            eleve.statut,
+            eleve.classe_id,
+            eleve.telephone_parent,
+      )
 
-    cursor.execute(sql, valeurs)
-    conn.commit()
+        cursor.execute(sql, valeurs)
 
-    nouvel_id = cursor.lastrowid
-    conn.close()
+        nouvel_id = cursor.lastrowid
+
+        sql_paiement = """insert into paiement (eleve_id, type_frais, montant, date_paiement, mode_paiement, annee_scolaire, trimestre) values ( %s, %s, %s, %s, %s, %s, %s)"""
+
+        valeurs_paiement = (
+            nouvel_id,
+            paiement.type_frais,
+            paiement.montant,
+            paiement.date_paiement,
+            paiement.mode_paiement,
+            paiement.annee_scolaire,
+            paiement.trimestre
+        )
+        cursor.execute(sql_paiement, valeurs_paiement)
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de l'élève et du paiement: {str(e)}")
+    finally:
+        conn.close()
 
     return {
-        "message": "Élève ajouté avec succès",
-        "id": nouvel_id,
-        "eleve": eleve.dict()
-    }
+            "message": "Élève ajouté avec succès",
+            "id": nouvel_id,
+            "eleve": eleve.dict()
+        }
 
 class EleveModifier(BaseModel):
     matricule: Optional[str] = None
@@ -114,13 +180,13 @@ class EleveModifier(BaseModel):
     numero_parent: Optional[str] = None
 
 #route pour modifier un eleve a partir de son id
-@app.put("/modifierEleve/{eleve_id}")
-def put_un_eleve(eleve_id: int, eleve: EleveModifier):
+@app.put("/modifierEleve/{id}")
+def put_un_eleve(id: int, eleve: EleveModifier):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
     # Récupérer l'élève existant
-    cursor.execute("SELECT * FROM eleve WHERE id=%s", (eleve_id,))
+    cursor.execute("SELECT * FROM eleve WHERE id=%s", (id,))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -136,7 +202,7 @@ def put_un_eleve(eleve_id: int, eleve: EleveModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE eleve
-        SET nom=%s, prenom=%s, sexe=%s, date_naissance=%s, lieu_naissance=%s, adresse=%s, nom_parent=%s, redoublant=%s, statut=%s, classe_id=%s, numero_parent=%s
+        SET nom=%s, prenom=%s, sexe=%s, date_naissance=%s, lieu_naissance=%s, adresse=%s, nom_parent=%s, redoublant=%s, statut=%s, classe_id=COALESCE(%s, classe_id), numero_parent=%s
         WHERE id=%s
     """
     valeurs = (
@@ -151,7 +217,7 @@ def put_un_eleve(eleve_id: int, eleve: EleveModifier):
         donnees_actuelles["statut"],
         donnees_actuelles["classe_id"],
         donnees_actuelles["numero_parent"],
-        eleve_id,
+        id,
     )
     cursor.execute(sql, valeurs)
     conn.commit()
@@ -611,16 +677,6 @@ def get_paiement_par_id(id: int = Path(ge=1))-> dict:
         raise HTTPException(status_code=404, detail="paiement non trouvé")
     return {"paiement": paiement}
 
-# Modèle des données attendues dans le corps de la requête (JSON)
-class paiementAjouter(BaseModel):
-    eleve_id: int
-    type_frais: str
-    montant: float
-    date_paiement: str
-    mode_paiement: str
-    reference: str
-    annee_scolaire: str
-    trimestre: str
 
 # 2. Route POST pour ajouter un paiement
 @app.post("/paiement")
@@ -630,8 +686,8 @@ def ajouter_paiement(paiement: paiementAjouter):
 
     sql = """
         INSERT INTO paiement (
-            eleve_id, type_frais, montant, date_paiement, mode_paiement, reference, annee_scolaire, trimestre
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            eleve_id, type_frais, montant, date_paiement, mode_paiement, annee_scolaire, trimestre
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
@@ -640,7 +696,6 @@ def ajouter_paiement(paiement: paiementAjouter):
         paiement.montant,
         paiement.date_paiement,
         paiement.mode_paiement,
-        paiement.reference,
         paiement.annee_scolaire,
         paiement.trimestre
     )
@@ -663,7 +718,6 @@ class paiementModifier(BaseModel):
     montant: Optional[float] = None
     date_paiement: Optional[str] = None
     mode_paiement: Optional[str] = None
-    reference: Optional[str] = None
     annee_scolaire: Optional[str] = None
     trimestre: Optional[str] = None
 
@@ -690,7 +744,7 @@ def put_un_paiement(id: int, paiement: paiementModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE paiement
-        SET  eleve_id=%s, type_frais=%s, montant=%s, date_paiement=%s, mode_paiement=%s, reference=%s, annee_scolaire=%s, trimestre=%s
+        SET  eleve_id=%s, type_frais=%s, montant=%s, date_paiement=%s, mode_paiement=%s, annee_scolaire=%s, trimestre=%s
         WHERE id=%s
     """
     valeurs = (
@@ -699,7 +753,6 @@ def put_un_paiement(id: int, paiement: paiementModifier):
         donnees_actuelles["montant"],
         donnees_actuelles["date_paiement"],
         donnees_actuelles["mode_paiement"],
-        donnees_actuelles["reference"],
         donnees_actuelles["annee_scolaire"],
         donnees_actuelles["trimestre"],
         id,
@@ -882,7 +935,7 @@ def delete_un_note(id: int = Path(ge=1)):
 @app.get("/moyenne/{eleve_id}")
 def get_moyenne(eleve_id: int = Path(ge=1)):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     #Vérifier que l'élève existe, et le récupérer proprement
     cursor.execute("SELECT * FROM eleve WHERE id = %s", (eleve_id,))
@@ -900,7 +953,8 @@ def get_moyenne(eleve_id: int = Path(ge=1)):
         FROM note
         WHERE eleve_id = %s
     """, (eleve_id,))
-    moyenne = cursor.fetchone()[0]
+    resultat = cursor.fetchone()
+    moyenne = resultat[0] if resultat else None
 
     conn.close()
 
