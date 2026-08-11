@@ -83,7 +83,6 @@ def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[st
 
 # Modèle des données attendues dans le corps de la requête (JSON)
 class Eleveajouter(BaseModel):
-    matricule: str
     nom: str
     prenom: str
     sexe: str
@@ -116,12 +115,11 @@ def ajouter_eleve(eleve: Eleveajouter, paiement: paiementAjouter):
 
         sql = """
             INSERT INTO eleve (
-            matricule, nom, prenom, sexe, date_naissance,
+            nom, prenom, sexe, date_naissance,
             lieu_naissance, adresse, nom_parent,
-            redoublant, statut, classe_id, numero_parent) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) """
+            redoublant, statut, classe_id, numero_parent) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) """
 
         valeurs = (
-            eleve.matricule,
             eleve.nom,
             eleve.prenom,
             eleve.sexe,
@@ -166,7 +164,6 @@ def ajouter_eleve(eleve: Eleveajouter, paiement: paiementAjouter):
         }
 
 class EleveModifier(BaseModel):
-    matricule: Optional[str] = None
     nom: Optional[str] = None
     prenom: Optional[str] = None
     sexe: Optional[str] = None
@@ -179,67 +176,97 @@ class EleveModifier(BaseModel):
     classe_id: Optional[int] = None
     numero_parent: Optional[str] = None
 
-#route pour modifier un eleve a partir de son id
+## Route pour modifier un élève à partir de son id
 @app.put("/modifierEleve/{id}")
 def put_un_eleve(id: int, eleve: EleveModifier):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-
-    # Récupérer l'élève existant
-    cursor.execute("SELECT * FROM eleve WHERE id=%s", (id,))
-    existant = cursor.fetchone()
-    if existant is None:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Élève non trouvé")
-
-    colonnes = [d[0] for d in cursor.description]
-    donnees_actuelles = dict(zip(colonnes, existant))
-
-    # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
+    #Extraire uniquement les champs envoyés
     nouvelles_donnees = eleve.dict(exclude_unset=True)
-    donnees_actuelles.update(nouvelles_donnees)
 
-    # Mettre à jour avec les valeurs fusionnées
-    sql = """
-        UPDATE eleve
-        SET nom=%s, prenom=%s, sexe=%s, date_naissance=%s, lieu_naissance=%s, adresse=%s, nom_parent=%s, redoublant=%s, statut=%s, classe_id=COALESCE(%s, classe_id), numero_parent=%s
-        WHERE id=%s
-    """
-    valeurs = (
-        donnees_actuelles["nom"],
-        donnees_actuelles["prenom"],
-        donnees_actuelles["sexe"],
-        donnees_actuelles["date_naissance"],
-        donnees_actuelles["lieu_naissance"],
-        donnees_actuelles["adresse"],
-        donnees_actuelles["nom_parent"],
-        donnees_actuelles["redoublant"],
-        donnees_actuelles["statut"],
-        donnees_actuelles["classe_id"],
-        donnees_actuelles["numero_parent"],
-        id,
-    )
-    cursor.execute(sql, valeurs)
-    conn.commit()
-    conn.close()
+    if not nouvelles_donnees:
+        raise HTTPException(status_code=400, detail="Aucun champ à modifier n'a été fourni")
 
-    return {"message": "Élève modifié avec succès", "eleve": donnees_actuelles}
-
-#route pour supprimer un eleve 
-@app.delete("/supprimerEleve/{id}")
-def delete_un_eleve(id: int = Path(ge=1)):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("DELETE FROM eleve WHERE id = %s", (id,))
 
-    if cursor.rowcount == 0:
+    # Vérifier si l'élève existe
+    cursor.execute("SELECT id FROM eleve WHERE id=%s", (id,))
+    if cursor.fetchone() is None:
+        cursor.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Élève non trouvé")
 
+    #Construire et exécuter la mise à jour dynamique
+    clauses_set = [f"{cle}=%s" for cle in nouvelles_donnees.keys()]
+    sql = f"UPDATE eleve SET {', '.join(clauses_set)} WHERE id=%s"
+
+    valeurs = list(nouvelles_donnees.values())
+    valeurs.append(id)
+
+    cursor.execute(sql, tuple(valeurs))
     conn.commit()
+
+    #Récupérer la fiche COMPLÈTE et À JOUR de l'élève
+    cursor.execute("SELECT * FROM eleve WHERE id=%s", (id,))
+    eleve_mis_a_jour = cursor.fetchone()
+
+    cursor.close()
     conn.close()
 
-    return {"message": "Élève supprimé avec succès"}
+    return {
+        "message": "Élève modifié avec succès",
+        "eleve": eleve_mis_a_jour
+    }
+
+#route pour supprimer un élève
+@app.delete("/eleve/{id}")
+def supprimer_eleve(id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # On marque l'élève comme archivé/supprimé
+    cursor.execute("UPDATE eleve SET est_supprime = TRUE WHERE id = %s", (id,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return {"message": "Élève archivé avec succès"}
+
+#route pour afficher les eleves supprimés/archivés
+@app.get("/eleve_supprime")
+def get_eleves_supprimes():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM eleve WHERE est_supprime = TRUE")
+    eleves_supprimes = cursor.fetchall()
+    return {"eleves_supprimes": eleves_supprimes}
+
+#route pour restaurer un élève supprimé/archivé
+@app.put("/restaurer_eleve/{nom}")
+def restaurer_eleve(nom: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # On restaure l'élève en le démarquant comme non-supprimé
+    cursor.execute("UPDATE eleve SET est_supprime = FALSE WHERE nom = %s", (nom,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return {"message": "Élève restauré avec succès"}
+
+#route pour afficher la liste des parents par classe
+@app.get("/parents_par_classe/{classe_name}")
+def get_parents_par_classe(classe_name: str):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT nom, prenom, nom_parent, numero_parent, classe FROM eleve, classe 
+        WHERE eleve.classe_id = classe.id AND classe.classe LIKE %s
+    """, (f"{classe_name}",))
+    parents = cursor.fetchall()
+    return {"parents": parents}
 
 #route pour afficher le total des classes
 @app.get("/total_classe")
@@ -515,7 +542,6 @@ def get_enseignant_par_id(id: int = Path(ge=1))-> dict:
 
 # Modèle des données attendues dans le corps de la requête (JSON)
 class enseignantAjouter(BaseModel):
-    matricule: str
     nom: str
     prenom: str
     sexe: str
@@ -538,12 +564,11 @@ def ajouter_enseignant(enseignant: enseignantAjouter):
 
     sql = """
         INSERT INTO enseignant (
-           matricule, nom, prenom, sexe, date_naissance, lieu_naissance, adresse, telephone, email, matiere_principale, diplome, date_embauche, statut
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+         nom, prenom, sexe, date_naissance, lieu_naissance, adresse, telephone, email, matiere_principale, diplome, date_embauche, statut
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
-      enseignant.matricule,
       enseignant.nom,
       enseignant.prenom,
       enseignant.sexe,
@@ -587,49 +612,40 @@ class enseignantModifier(BaseModel):
 #route pour modifier un enseignant a partir de son id
 @app.put("/modifierEnseignant/{id}")
 def put_un_enseignant(id: int, enseignant: enseignantModifier):
+    #Extraire uniquement les champs envoyés
+    nouvelles_donnees = enseignant.dict(exclude_unset=True)
+
+    if not nouvelles_donnees:
+        raise HTTPException(status_code=400, detail="Aucun champ à modifier n'a été fourni")
+
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Récupérer un enseignant existant
-    cursor.execute("SELECT * FROM enseignant WHERE id=%s", (id,))
-    existant = cursor.fetchone()
-    if existant is None:
+    # Vérifier si l'enseignant existe
+    cursor.execute("SELECT id FROM enseignant WHERE id=%s", (id,))
+    if cursor.fetchone() is None:
+        cursor.close()
         conn.close()
-        raise HTTPException(status_code=404, detail="enseignant non trouvé")
+        raise HTTPException(status_code=404, detail="Enseignant non trouvé")
 
-    colonnes = [d[0] for d in cursor.description]
-    donnees_actuelles = dict(zip(colonnes, existant))
+    #Construire et exécuter la mise à jour dynamique
+    clauses_set = [f"{cle}=%s" for cle in nouvelles_donnees.keys()]
+    sql = f"UPDATE enseignant SET {', '.join(clauses_set)} WHERE id=%s"
 
-    # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
-    nouvelles_donnees = enseignant.dict(exclude_unset=True)
-    donnees_actuelles.update(nouvelles_donnees)
+    valeurs = list(nouvelles_donnees.values())
+    valeurs.append(id)
 
-    # Mettre à jour avec les valeurs fusionnées
-    sql = """
-        UPDATE enseignant
-        SET  nom=%s, prenom=%s, sexe=%s, date_naissance=%s, lieu_naissance=%s, adresse=%s, telephone=%s, email=%s, matiere_principale=%s, diplome=%s, date_embauche=%s, statut=%s
-        WHERE id=%s
-    """
-    valeurs = (
-        donnees_actuelles["nom"],
-        donnees_actuelles["prenom"],
-        donnees_actuelles["sexe"],
-        donnees_actuelles["date_naissance"],
-        donnees_actuelles["lieu_naissance"],
-        donnees_actuelles["adresse"],
-        donnees_actuelles["telephone"],
-        donnees_actuelles["email"],
-        donnees_actuelles["matiere_principale"],
-        donnees_actuelles["diplome"],
-        donnees_actuelles["date_embauche"],
-        donnees_actuelles["statut"],
-        id,
-    )
-    cursor.execute(sql, valeurs)
+    cursor.execute(sql, tuple(valeurs))
     conn.commit()
+
+    #Récupérer la fiche COMPLÈTE et À JOUR de l'enseignant
+    cursor.execute("SELECT * FROM enseignant WHERE id=%s", (id,))
+    enseignant_mis_a_jour = cursor.fetchone()
+
+    cursor.close()
     conn.close()
 
-    return {"message": "enseignant modifié avec succès", "enseignant": donnees_actuelles}
+    return {"message": "enseignant modifié avec succès", "enseignant": enseignant_mis_a_jour}
 
 #route pour supprimer un enseignant
 @app.delete("/supprimerEnseignant/{id}")
