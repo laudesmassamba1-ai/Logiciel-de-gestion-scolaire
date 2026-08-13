@@ -37,11 +37,11 @@ def get_total_eleves_par_classe(recherche: Optional[str]=None)-> dict:
     return {"nombre total d'élèves": {classe: total_eleves}}
 
 #affichage de la liste des élèves par classe
-@app.get("/eleve/{classe_id}")
-def get_all_eleves_par_classe(classe_id: int = Path(ge=1))-> dict:
+@app.get("/eleve/{classe}")
+def get_all_eleves_par_classe(classe: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT eleve.id, nom, prenom, sexe, classe FROM eleve, classe where eleve.classe_id=classe.id and classe.id = %s and est_supprime = 0",(classe_id, ))
+    cursor.execute("SELECT nom, prenom, sexe FROM eleve, classe where eleve.classe_id=classe.id and classe.classe = %s and est_supprime = 0",(classe, ))
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -53,17 +53,6 @@ def get_all_eleves()-> dict:
     cursor.execute("SELECT eleve.id, nom, prenom, sexe, classe FROM eleve, classe where eleve.classe_id=classe.id and est_supprime = false")
     eleves = cursor.fetchall()
     return {"eleves": eleves}
-
-#afficher la liste des eleves par classe
-@app.get("/eleve/{classe_id}")
-def get_eleve_par_classe(classe_id: int = Path(ge=1))-> dict:
-    conn = get_connection()
-    cursor=conn.cursor(dictionary=True)
-    cursor.execute("select nom, prenom, sexe, classe from eleve, classe where eleve.classe_id =classe.id and eleve.classe_id= %s", (classe_id,))
-    classe= cursor.fetchall()
-    if classe is None:
-        raise HTTPException(status_code=404, detail="classe non trouvee")
-    return{"liste eleve par classe": classe}
 
 #affichage d'un élève par son nom
 @app.get("/eleve_recherche")
@@ -89,6 +78,17 @@ def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[st
     cursor.close()
     conn.close()
     return {"eleve": eleve}
+
+#affichage du nombre total d'eleve par classe
+@app.get("/eleve_total_classe")
+def get_eleve_total_classe():
+    conn= get_connection()
+    cursor= conn.cursor(dictionary=True)
+    cursor.execute("select count(*) as 'nombre_eleve', classe from eleve, classe where eleve.classe_id=classe.id and est_supprime=0 group by classe.classe ")
+    eleve_total_classe=cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return {"eleve_total_classe": eleve_total_classe}
 
 # Modèle des données attendues dans le corps de la requête (JSON)
 class Eleveajouter(BaseModel):
@@ -247,18 +247,18 @@ def supprimer_eleve(id: int):
 def get_eleves_supprimes():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM eleve WHERE est_supprime = TRUE")
+    cursor.execute("SELECT nom, prenom, sexe, classe.classe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, numero_parent FROM eleve, classe  WHERE eleve.classe_id=classe.id and est_supprime = TRUE")
     eleves_supprimes = cursor.fetchall()
     return {"eleves_supprimes": eleves_supprimes}
 
 #route pour restaurer un élève supprimé/archivé
-@app.put("/restaurer_eleve/{nom}")
-def restaurer_eleve(nom: str):
+@app.put("/restaurer_eleve/{nom}/{prenom}")
+def restaurer_eleve(nom: str, prenom: str):
     conn = get_connection()
     cursor = conn.cursor()
 
     # On restaure l'élève en le démarquant comme non-supprimé
-    cursor.execute("UPDATE eleve SET est_supprime = FALSE WHERE nom = %s", (nom,))
+    cursor.execute("UPDATE eleve SET est_supprime = FALSE WHERE nom = %s and prenom=%s", (nom, prenom))
     conn.commit()
 
     cursor.close()
@@ -282,7 +282,7 @@ def get_parents_par_classe(classe_name: str):
 @app.get("/total_classe")
 def get_total_classe()-> dict:
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM classe")
     total_classe = cursor.fetchone()[0]
     return {"total_classe": total_classe}
@@ -292,7 +292,7 @@ def get_total_classe()-> dict:
 def get_all_classe()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM classe")
+    cursor.execute("SELECT classe, cycle.nom FROM classe, cycle where classe.cycle_id=cycle.id")
     classes = cursor.fetchall()
     return {"classes": classes}
 
@@ -1187,13 +1187,13 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
     }
 
 #route pour afficher le total des presences par classe
-@app.get("/total_presence/{classe_id}")
-def get_total_presence(classe_id: int = Path(ge=1)):
+@app.get("/total_presence/{classe}")
+def get_total_presence(classe: str):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     #Vérifier que la classe existe
-    cursor.execute("SELECT * FROM classe WHERE id = %s", (classe_id,))
+    cursor.execute("SELECT * FROM classe WHERE classe = %s", (classe,))
     ligne = cursor.fetchone()
     if ligne is None:
         conn.close()
@@ -1202,26 +1202,26 @@ def get_total_presence(classe_id: int = Path(ge=1)):
     #Compter le nombre de présences pour cette classe
     cursor.execute("""
         SELECT COUNT(*)
-        FROM presences
-        WHERE classe_id = %s
-    """, (classe_id,))
+        FROM presences, classe
+        WHERE presences.classe_id = classe.id and classe= %s
+    """, (classe,))
     total_presence = cursor.fetchone()[0]
 
     conn.close()
 
     return {
-        "classe_id": classe_id,
+        "classe": classe,
         "total_presence": total_presence
     }
 
 #route pour afficher la liste des presences par classe
-@app.get("/presence/{classe_id}")
-def get_presence_par_classe(classe_id: int = Path(ge=1)):
+@app.get("/presence/{classe}")
+def get_presence_par_classe(classe: str):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
     #Vérifier que la classe existe
-    cursor.execute("SELECT * FROM classe WHERE id = %s", (classe_id,))
+    cursor.execute("SELECT * FROM classe WHERE classe = %s", (classe,))
     ligne = cursor.fetchone()
     if ligne is None:
         conn.close()
@@ -1230,25 +1230,42 @@ def get_presence_par_classe(classe_id: int = Path(ge=1)):
     #Récupérer la liste des présences pour cette classe
     cursor.execute("""
         SELECT *
-        FROM presences
-        WHERE classe_id = %s
-    """, (classe_id,))
+        FROM presences, classe
+        WHERE presences.classe_id = classe.id and classe=%s
+    """, (classe,))
     presence = cursor.fetchall()
 
     conn.close()
 
     return {
-        "classe_id": classe_id,
+        "classe": classe,
         "presence": presence
     }
 
+#afficher la liste des eleves d'une classe pour remplir les presences
+@app.get("/liste_de_presence_par_classe/{classe}")
+def get_liste_de_presence_par_classe(classe: str):
+    conn=get_connection()
+    cursor=conn.cursor(dictionary=True)
+
+    #verifie si la classe existe
+    cursor.execute("SELECT * FROM classe WHERE classe = %s", (classe,))
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="classe non trouvée")
+
+    #afficher la liste des eleves par classe 
+    cursor.execute("select nom, prenom, sexe, classe, presences.statut from eleve, presences, classe where eleve.id=presences.eleve_id and presences.classe_id=classe.id and classe= %s", (classe, ))
+    liste_eleve= cursor.fetchall()
+    conn.close()
+    return{"liste de presence par classe": liste_eleve}
+
+
 #route pour ajouter une présence pour un élève dans une classe
 class PresenceAjouter(BaseModel):
-    eleve_id: int
-    date_presence: str
+    eleve_id: Optional[int]=None
     statut: str  
     justifie: Optional[str] = None
-    commentaire: Optional[str] = None
     classe_id: int
 
 @app.post("/presence")
@@ -1263,16 +1280,14 @@ def ajouter_presence(presence: PresenceAjouter):
         raise HTTPException(status_code=404, detail="Élève non trouvé")
 
     sql = """
-        INSERT INTO presences (eleve_id, date_presence, statut, justifie, commentaire, classe_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO presences (eleve_id, statut, justifie, classe_id)
+        VALUES (%s, %s, %s, %s)
     """
     valeurs = (
         presence.eleve_id,
-        presence.date_presence,
         presence.statut,
         presence.justifie,
-        presence.commentaire,
-         presence.classe_id,
+        presence.classe_id,
     )
     cursor.execute(sql, valeurs)
     conn.commit()
@@ -1288,20 +1303,17 @@ def ajouter_presence(presence: PresenceAjouter):
 #modèle des données attendues dans le corps de la requête (JSON) pour modifier une présence
 class PresenceModifier(BaseModel):
     eleve_id: Optional[int] = None
-    date_presence: Optional[str] = None
     statut: Optional[str] = None  
     justifie: Optional[str] = None
-    commentaire: Optional[str] = None
     classe_id: Optional[int] = None
 
 #route pour modifier une présence pour un élève dans une classe
-@app.put("/modifierPresence/{presence_id}")
-def modifier_presence(presence_id: int, presence: PresenceModifier):
+@app.put("/modifierPresence/{id}")
+def modifier_presence(id: int, presence: PresenceModifier):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-
+    cursor = conn.cursor(buffered=True)
     # Récupérer la présence existante
-    cursor.execute("SELECT * FROM presences WHERE id=%s", (presence_id,))
+    cursor.execute("SELECT presences.*, eleve.nom, eleve.prenom, eleve.sexe, classe.classe FROM presences, classe, eleve WHERE presences.eleve_id=eleve.id and presences.classe_id=classe.id and presences.id=%s", (id, ))
     existant = cursor.fetchone()
     if existant is None:
         conn.close()
@@ -1317,17 +1329,15 @@ def modifier_presence(presence_id: int, presence: PresenceModifier):
     # Mettre à jour avec les valeurs fusionnées
     sql = """
         UPDATE presences
-        SET eleve_id=%s, date_presence=%s, statut=%s, justifie=%s, commentaire=%s, classe_id=%s
-        WHERE id=%s
+        SET eleve_id=%s, statut=%s, justifie=%s, classe_id=%s
+        WHERE id =%s
     """
     valeurs = (
         donnees_actuelles["eleve_id"],
-        donnees_actuelles["date_presence"],
         donnees_actuelles["statut"],
         donnees_actuelles["justifie"],
-        donnees_actuelles["commentaire"],
         donnees_actuelles["classe_id"],
-        presence_id,
+        id
     )
     cursor.execute(sql, valeurs)
     conn.commit()
@@ -1336,11 +1346,12 @@ def modifier_presence(presence_id: int, presence: PresenceModifier):
     return {"message": "Présence modifiée avec succès", "presence": donnees_actuelles}
 
 #route pour supprimer une présence pour un élève dans une classe
-@app.delete("/supprimerPresence/{presence_id}")
-def supprimer_presence(presence_id: int):
+@app.delete("/supprimerPresence/{id}")
+def supprimer_presence(id: int = Path(ge=1)):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("DELETE FROM presences WHERE id = %s", (presence_id,))
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM presences WHERE id = %s", (id,))
 
     if cursor.rowcount == 0:
         conn.close()
