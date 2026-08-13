@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Path, HTTPException
+from datetime import date
 from pydantic import BaseModel
 from typing import Optional
 from typing import Optional
@@ -1083,7 +1084,7 @@ def delete_un_note(id: int = Path(ge=1)):
 
     return {"message": "note supprimée avec succès"}
 
-#route pour calculer la moyenne de classe d'un élève par son nom et l'afficher avec les informations de l'élève
+#route pour calculer la moyenne de classe d'un élève par son nom et l'afficher avec les informations de l'élève grace a la table programme
 @app.get("/moyenne/{nom}/{prenom}/{type_evaluation}")
 def get_moyenne_par_type_evaluation(nom: str, prenom: str, type_evaluation: str):
     conn = get_connection()
@@ -1101,9 +1102,9 @@ def get_moyenne_par_type_evaluation(nom: str, prenom: str, type_evaluation: str)
 
     #Moyenne pondérée par les coefficients
     cursor.execute("""
-        SELECT SUM(note * coefficient) / SUM(coefficient)
-        FROM note, eleve
-        WHERE note.eleve_id = eleve.id AND eleve.nom = %s AND eleve.prenom = %s AND note.type_evaluation = %s
+        SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient)
+        FROM note, eleve, programme
+        WHERE note.eleve_id = eleve.id AND programme.id = note.programme_id AND eleve.nom = %s AND eleve.prenom = %s AND note.type_evaluation = %s
     """, (nom, prenom, type_evaluation))
     resultat = cursor.fetchone()
     moyenne = resultat[0] if resultat else None
@@ -1115,7 +1116,7 @@ def get_moyenne_par_type_evaluation(nom: str, prenom: str, type_evaluation: str)
         "moyenne": round(moyenne, 2) if moyenne is not None else None
     }
 
-#route pour afficher le bulletin d'un élève par son nom, prénom et trimestre
+#route pour afficher le bulletin d'un élève par son nom, prénom et trimestre grace a la table programme et note, avec la moyenne de devoirs de classe et la moyenne de composition
 @app.get("/bulletin/{nom}/{prenom}/{trimestre}")
 def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
     conn = get_connection()
@@ -1139,22 +1140,25 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
     cursor.execute("""
         SELECT matiere, type_evaluation, note, note_sur, coefficient
         FROM note
+        JOIN programme ON note.programme_id = programme.id
         WHERE eleve_id = %s AND trimestre = %s
     """, (eleve_id, trimestre))
     notes = cursor.fetchall()
 
     # Moyenne des devoirs de classe
     cursor.execute("""
-        SELECT SUM(note * coefficient) / SUM(coefficient) AS moyenne
+        SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient) AS moyenne
         FROM note
+        JOIN programme ON note.programme_id = programme.id
         WHERE eleve_id = %s AND trimestre = %s AND type_evaluation = 'devoir de classe'
     """, (eleve_id, trimestre))
     moyenne_devoirs = cursor.fetchone()["moyenne"]
 
     # Moyenne de composition
     cursor.execute("""
-        SELECT SUM(note * coefficient) / SUM(coefficient) AS moyenne
+        SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient) AS moyenne
         FROM note
+        JOIN programme ON note.programme_id = programme.id
         WHERE eleve_id = %s AND trimestre = %s AND type_evaluation = 'composition'
     """, (eleve_id, trimestre))
     moyenne_composition = cursor.fetchone()["moyenne"]
@@ -1585,3 +1589,60 @@ def supprimer_programme(id: int):
     conn.commit()
     conn.close()
     return {"message": "Programme supprimé avec succès"}
+
+#route pour creer une annee scolaire
+class AnneeScolaireAjouter(BaseModel):
+    libelle: str
+    date_debut: date
+    date_fin: date
+    est_active: bool = False
+
+@app.post("/ajouter_annee_scolaire")
+def ajouter_annee_scolaire(annee_scolaire: AnneeScolaireAjouter):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Si est_active est True, désactiver les autres années scolaires
+    if annee_scolaire.est_active:
+        cursor.execute("UPDATE annee_scolaire SET est_active = FALSE")
+
+    sql = """
+        INSERT INTO annee_scolaire (libelle, date_debut, date_fin, est_active)
+        VALUES (%s, %s, %s, %s)
+    """
+    valeurs = (
+        annee_scolaire.libelle,
+        annee_scolaire.date_debut,
+        annee_scolaire.date_fin,
+        annee_scolaire.est_active,
+    )
+    cursor.execute(sql, valeurs)
+    conn.commit()
+    nouvel_id = cursor.lastrowid
+    conn.close()
+
+    return {
+        "message": "Année scolaire ajoutée avec succès",
+        "id": nouvel_id,
+        "annee_scolaire": annee_scolaire.dict(),
+    }
+
+#lister toutes les années scolaires
+@app.get("/lister_annees_scolaires")
+def lister_annees_scolaires():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM annee_scolaire")
+    annees_scolaires = cursor.fetchall()
+    conn.close()
+    return {"annees_scolaires": annees_scolaires}
+
+#route pour recuperer l'année scolaire active
+@app.get("/annee_scolaire_active")
+def recuperer_annee_scolaire_active():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM annee_scolaire WHERE est_active = TRUE")
+    annee_scolaire_active = cursor.fetchone()
+    conn.close()
+    return {"annee_scolaire_active": annee_scolaire_active}
