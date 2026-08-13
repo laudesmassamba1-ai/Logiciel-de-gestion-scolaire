@@ -560,7 +560,6 @@ class enseignantAjouter(BaseModel):
     adresse: str
     telephone: str
     email: str
-    matiere_principale: str
     diplome: str
     date_embauche: str
     statut: str
@@ -574,8 +573,8 @@ def ajouter_enseignant(enseignant: enseignantAjouter):
 
     sql = """
         INSERT INTO enseignant (
-         nom, prenom, sexe, date_naissance, lieu_naissance, adresse, telephone, email, matiere_principale, diplome, date_embauche, statut
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+         nom, prenom, sexe, date_naissance, lieu_naissance, adresse, telephone, email, diplome, date_embauche, statut
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
@@ -587,7 +586,6 @@ def ajouter_enseignant(enseignant: enseignantAjouter):
       enseignant.adresse,
       enseignant.telephone,
       enseignant.email,
-      enseignant.matiere_principale,
       enseignant.diplome,
       enseignant.date_embauche,
       enseignant.statut
@@ -614,7 +612,6 @@ class enseignantModifier(BaseModel):
     adresse: Optional[str] = None
     telephone: Optional[str] = None
     email: Optional[str] = None
-    matiere_principale: Optional[str] = None
     diplome: Optional[str] = None
     date_embauche: Optional[str] = None
     statut: Optional[str] = None
@@ -973,15 +970,13 @@ def get_note_par_eleve(nom: str, prenom: str)-> dict:
 # Modèle des données attendues dans le corps de la requête (JSON)
 class noteAjouter(BaseModel):
     eleve_id: int
-    enseignant_id: int
-    matiere: str
     type_evaluation: str
     note: float
     note_sur: int
-    coefficient: int
     date_evaluation: str
     trimestre: str
     annee_scolaire: str
+    matiere_id: int
 
 # 2. Route POST pour ajouter une note
 @app.post("/note")
@@ -991,21 +986,19 @@ def ajouter_note(note: noteAjouter):
 
     sql = """
         INSERT INTO note (
-            eleve_id, enseignant_id, matiere, type_evaluation, note, note_sur, coefficient, date_evaluation, trimestre, annee_scolaire
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            eleve_id, type_evaluation, note, note_sur, date_evaluation, trimestre, annee_scolaire, matiere_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
-        note.eleve_id,
-        note.enseignant_id,
-        note.matiere,
+        note.eleve_id,        
         note.type_evaluation,
         note.note,
         note.note_sur,
-        note.coefficient,
         note.date_evaluation,
         note.trimestre,
-        note.annee_scolaire
+        note.annee_scolaire,
+        note.matiere_id
     )
 
     cursor.execute(sql, valeurs)
@@ -1022,49 +1015,43 @@ def ajouter_note(note: noteAjouter):
 
 class noteModifier(BaseModel):
     eleve_id: Optional[int] = None
-    enseignant_id: Optional[int] = None
-    matiere: Optional[str] = None
     type_evaluation: Optional[str] = None
     note: Optional[float] = None
     note_sur: Optional[int] = None
-    coefficient: Optional[int] = None
     date_evaluation: Optional[str] = None
     trimestre: Optional[str] = None
     annee_scolaire: Optional[str] = None
+    matiere_id: Optional[int] = None
 
 
 # route pour modifier une note a partir de sa matiere 
-@app.put("/modifierNote/{matiere}")
-def put_un_note(matiere: str, note: noteModifier):
+@app.put("/modifierNote/{id}")
+def put_un_note(id: int, note: noteModifier):
     conn = get_connection()
     cursor = conn.cursor()
 
     sql = """
         UPDATE note
         SET eleve_id = COALESCE(%s, eleve_id),
-            enseignant_id = COALESCE(%s, enseignant_id),
-            matiere = COALESCE(%s, matiere),
             type_evaluation = COALESCE(%s, type_evaluation),
             note = COALESCE(%s, note),
             note_sur = COALESCE(%s, note_sur),
-            coefficient = COALESCE(%s, coefficient),
             date_evaluation = COALESCE(%s, date_evaluation),
             trimestre = COALESCE(%s, trimestre),
             annee_scolaire = COALESCE(%s, annee_scolaire)
-        WHERE  matiere = %s
+            matiere_id = COALESCE(%s, matiere_id)
+        WHERE  id = %s
     """
     valeurs = (
         note.eleve_id,
-        note.enseignant_id,
-        note.matiere,
         note.type_evaluation,
         note.note,
         note.note_sur,
-        note.coefficient,
         note.date_evaluation,
         note.trimestre,
         note.annee_scolaire,
-        matiere
+        note.matiere_id,
+        id
     )
 
     cursor.execute(sql, valeurs)
@@ -1361,3 +1348,240 @@ def supprimer_presence(id: int = Path(ge=1)):
     conn.close()
 
     return {"message": "Présence supprimée avec succès"}
+
+#route ajouter une matiere
+class matiereAjouter(BaseModel):
+    nom: str
+
+@app.post("/matiere")
+def ajouter_matiere(matiere: matiereAjouter):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    sql = """
+        INSERT INTO matiere (nom)
+        VALUES (%s)
+    """
+    valeurs = (matiere.nom,)
+    cursor.execute(sql, valeurs)
+    conn.commit()
+    nouvel_id = cursor.lastrowid
+    conn.close()
+
+    return {
+        "message": "Matière ajoutée avec succès",
+        "id": nouvel_id,
+        "matiere": matiere.dict(),
+    }
+
+#route pour modifier une matiere
+class matiereModifier(BaseModel):
+    nom: Optional[str] = None
+
+@app.put("/modifierMatiere/{id}")
+def modifier_matiere(id: int, matiere: matiereModifier):
+    conn = get_connection()
+    cursor = conn.cursor(buffered=True)
+
+    # Récupérer la matière existante
+    cursor.execute("SELECT * FROM matiere WHERE id=%s", (id,))
+    existant = cursor.fetchone()
+    if existant is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Matière non trouvée")
+
+    colonnes = [d[0] for d in cursor.description]
+    donnees_actuelles = dict(zip(colonnes, existant))
+
+    # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
+    nouvelles_donnees = matiere.dict(exclude_unset=True)
+    donnees_actuelles.update(nouvelles_donnees)
+
+    # Mettre à jour avec les valeurs fusionnées
+    sql = """
+        UPDATE matiere
+        SET nom=%s
+        WHERE id=%s
+    """
+    valeurs = (
+        donnees_actuelles["nom"],
+        id
+    )
+    cursor.execute(sql, valeurs)
+    conn.commit()
+    conn.close()
+
+    return {"message": "Matière modifiée avec succès", "matiere": donnees_actuelles}
+
+#route pour supprimer une matiere
+@app.delete("/supprimerMatiere/{id}")
+def supprimer_matiere(id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM matiere WHERE id = %s", (id,))
+
+    if cursor.rowcount == 0:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Matière non trouvée")
+
+    conn.commit()
+    conn.close()
+
+    return {"message": "Matière supprimée avec succès"}
+
+#route pour afficher la liste des matieres
+@app.get("/matiere")
+def lister_matieres():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT * FROM matiere")
+    matieres = cursor.fetchall()
+
+    conn.close()
+
+    return {"matieres": matieres}
+
+#route pour afficher une matiere par son id
+@app.get("/matiere/{id}")
+def afficher_matiere(id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT * FROM matiere WHERE id = %s", (id,))
+    matiere = cursor.fetchone()
+
+    conn.close()
+
+    if matiere is None:
+        raise HTTPException(status_code=404, detail="Matière non trouvée")
+
+    return {"matiere": matiere}
+
+#route pour associer une matiere a une classe et a un enseignant
+class MatiereClasseEnseignant(BaseModel):
+    classe_id: int
+    matiere_id: int
+    enseignant_id: int
+    coefficient: Optional[int] = 1  # Valeur par défaut si non fournie
+
+@app.post("/associerMatiereClasseEnseignant")
+def associer_matiere_classe_enseignant(association: MatiereClasseEnseignant):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Vérifier que la classe existe
+    cursor.execute("SELECT * FROM classe WHERE id = %s", (association.classe_id,))
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Classe non trouvée")
+
+    # Vérifier que la matière existe
+    cursor.execute("SELECT * FROM matiere WHERE id = %s", (association.matiere_id,))
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Matière non trouvée")
+
+    # Vérifier que l'enseignant existe
+    cursor.execute("SELECT * FROM enseignant WHERE id = %s", (association.enseignant_id,))
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Enseignant non trouvé")
+
+    # Insérer l'association dans la table correspondante
+    sql = """
+        INSERT INTO programme (classe_id, matiere_id, enseignant_id, coefficient)
+        VALUES (%s, %s, %s, %s)
+    """
+    valeurs = (
+        association.classe_id,
+        association.matiere_id,
+        association.enseignant_id,
+        association.coefficient,
+    )
+    cursor.execute(sql, valeurs)
+    conn.commit()
+    nouvel_id = cursor.lastrowid
+    conn.close()
+
+    return {
+        "message": "Association ajoutée avec succès",
+        "id": nouvel_id,
+        "association": association.dict(),
+    }
+
+#route pour lister le programme d'une classe avec les matieres et les enseignants
+@app.get("/programme/{classe}")
+def lister_programme(classe: str):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT p.id, classe.classe AS classe, m.nom AS matiere, e.nom AS enseignant_nom, p.coefficient
+        FROM programme p
+        JOIN matiere m ON p.matiere_id = m.id
+        JOIN enseignant e ON p.enseignant_id = e.id
+        join classe ON p.classe_id = classe.id
+        WHERE classe.classe = %s
+    """, (classe,))
+    programme = cursor.fetchall()
+
+    conn.close()
+
+    return {"programme": programme}
+
+#modifier coefficient ou nom enseignant ou matiere d'une classe dans le programme
+class ProgrammeModifier(BaseModel):
+    classe_id: Optional[int] = None
+    matiere_id: Optional[int] = None
+    enseignant_id: Optional[int] = None
+    coefficient: Optional[int] = None
+
+@app.put("/modifierProgramme/{id}")
+def modifier_programme(id: int, programme: ProgrammeModifier):
+    conn = get_connection()
+    cursor = conn.cursor(buffered=True)
+
+    # Récupérer l'association existante
+    cursor.execute("SELECT * FROM programme WHERE id=%s", (id,))
+    existant = cursor.fetchone()
+    if existant is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Association non trouvée")
+
+    colonnes = [d[0] for d in cursor.description]
+    donnees_actuelles = dict(zip(colonnes, existant))
+
+    # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
+    nouvelles_donnees = programme.dict(exclude_unset=True)
+    donnees_actuelles.update(nouvelles_donnees)
+
+    # Mettre à jour avec les valeurs fusionnées
+    sql = """
+        UPDATE programme
+        SET classe_id=%s, matiere_id=%s, enseignant_id=%s, coefficient=%s
+        WHERE id=%s
+    """
+    valeurs = (
+        donnees_actuelles["classe_id"],
+        donnees_actuelles["matiere_id"],
+        donnees_actuelles["enseignant_id"],
+        donnees_actuelles["coefficient"],
+        id
+    )
+    cursor.execute(sql, valeurs)
+    conn.commit()
+    conn.close()
+
+    return {"message": "Programme modifié avec succès", "programme": donnees_actuelles}
+
+#route pour supprimer une association matiere-classe-enseignant
+@app.delete("/supprimerProgramme/{id}")
+def supprimer_programme(id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM programme WHERE id=%s", (id,))
+    conn.commit()
+    conn.close()
+    return {"message": "Programme supprimé avec succès"}
