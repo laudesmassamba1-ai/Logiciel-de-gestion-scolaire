@@ -1,10 +1,10 @@
 import datetime
 from pathlib import Path
 
-from config import DOCS_DIR
+from core.config import DOCS_DIR
 from database import db
-from models import repos
-from views.widgets import fmt_money
+from repositories import repos
+from ui.widgets import fmt_money
 
 STYLE = """
 body { font-family: 'Segoe UI', sans-serif; margin: 40px; color: #0f172a; }

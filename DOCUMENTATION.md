@@ -15,11 +15,11 @@ code source actuel (branche `exe`).
 2. [Arborescence complete du projet](#2-arborescence-complete-du-projet)
 3. [Architecture et demarrage](#3-architecture-et-demarrage)
 4. [Point d'entree : main.py](#4-point-dentree--mainpy)
-5. [Configuration : config.py](#5-configuration--configpy)
+5. [Configuration : core/config.py](#5-configuration--coreconfigpy)
 6. [Couche donnees : database/db.py](#6-couche-donnees--databasedbpy)
-7. [Depots : models/repositories.py](#7-depots--modelsrepositoriespy)
-8. [Services : services/](#8-services--services)
-9. [Couche presentation : le dossier views/](#9-couche-presentation--le-dossier-views)
+7. [Depots : repositories/](#7-depots--repositories)
+8. [Services et API : services/ + api/](#8-services-et-api--services--api)
+9. [Couche presentation : le dossier ui/](#9-couche-presentation--le-dossier-ui)
 10. [Fichiers .ui](#10-fichiers-ui)
 11. [Base de donnees SQLite : schema complet](#11-base-de-donnees-sqlite--schema-complet)
 12. [Roles et permissions](#12-roles-et-permissions)
@@ -55,10 +55,11 @@ etablissement scolaire congolais. Elle couvre :
 | Langage | Python 3 |
 | Interface graphique | PyQt5 (5.15.11) |
 | Base de donnees | SQLite (fichier `ecole.db`) |
-| Backend optionnel | API REST FastAPI (`http://127.0.0.1:8000`) pour enrichir les indicateurs (voir section 8.2) |
+| Backend optionnel | API REST FastAPI (`http://127.0.0.1:8000`) pour la synchronisation serveur (voir section 8.2) |
 | Mode hors ligne | L'app fonctionne completement sans l'API : bascule sur la base locale |
+| Mode Offline-First | En cas de serveur deployee, les ecritures passent par une file d'attente (`file_attente_synchro`) avant synchronisation |
 | Empaquetage | PyInstaller **one-file** sur Linux et Windows |
-| Dependances | `PyQt5==5.15.11` et `requests==2.32.3` (voir `requirements.txt`) |
+| Dependances | `PyQt5==5.15.11` et `httpx==0.28.1` (voir `requirements.txt`) |
 
 ### Ou sont stockees les donnees ?
 
@@ -73,36 +74,55 @@ etablissement scolaire congolais. Elle couvre :
 ```
 Logiciel-de-gestion-scolaire/
 │
-├── main.py                      # Point d'entree : HighDPI + demarrage (66 lignes)
-├── config.py                    # Constantes + feuille de style (118 lignes)
-├── requirements.txt             # PyQt5==5.15.11 + requests==2.32.3
+├── main.py                      # Point d'entree : HighDPI + demarrage (65 lignes)
+├── requirements.txt             # PyQt5==5.15.11 + httpx==0.28.1
 ├── .gitignore                   # venv/, .venv/, __pycache__/, *.db, build/, dist/, dist_win/, exe-win/, data/, GestionScolaire.spec
 │
+├── build.spec                   # Spec PyInstaller LINUX (one-file, sans console)
 ├── build_win.spec               # Spec PyInstaller WINDOWS (one-file + manifeste DPI)
 ├── win_dpi_manifest.xml         # Manifeste <dpiAware>true</dpiAware> pour Windows
 │
 ├── .github/workflows/
 │   └── build_windows.yml        # Workflow GitHub Actions : build de l'exe Windows
 │
+├── core/                        # Configuration generale + etat du reseau
+│   ├── __init__.py
+│   ├── config.py                # Constantes + feuille de style (121 lignes)
+│   └── network.py               # Etat reseau (online/offline) + synchronisation active
+│
 ├── database/
 │   ├── __init__.py              # Importe l'instance partagee de la base
-│   └── db.py                    # Connexion SQLite, schema, donnees initiales (234 lignes)
+│   └── db.py                    # Connexion SQLite, schema, donnees initiales,
+│                                # file d'attente de synchronisation (266 lignes)
 │
-├── models/
-│   ├── __init__.py              # Importe l'instance partagee des depots
-│   └── repositories.py          # Toutes les requetes metier (300 lignes)
+├── repositories/                # Couche d'abstraction des donnees (aiguillage reseau)
+│   ├── __init__.py              # Facade `repos` regroupant tous les depots (39 lignes)
+│   ├── base.py                  # RepositoryBase : file d'attente + _route_write (28 lignes)
+│   ├── eleve_repository.py      # EleveRepository (83 lignes)
+│   ├── classe_repository.py     # ClasseRepository (39 lignes)
+│   ├── pedagogie_repository.py  # PedagogieRepository : matieres, enseignants (17 lignes)
+│   ├── finance_repository.py    # FinanceRepository : caisse (66 lignes)
+│   ├── note_repository.py       # NoteRepository (29 lignes)
+│   ├── personnel_repository.py  # PersonnelRepository (43 lignes)
+│   ├── compte_repository.py     # CompteRepository (43 lignes)
+│   ├── planning_repository.py   # PlanningRepository (18 lignes)
+│   └── parametre_repository.py  # ParametreRepository + stats dashboard (39 lignes)
 │
-├── services/
-│   ├── __init__.py              # Vide
-│   ├── api.py                   # Client de l'API FastAPI + repli local (386 lignes)
+├── services/                    # Logique metier pure (pas de PyQt)
+│   ├── __init__.py              # Importe l'instance partagee AuthService
 │   ├── auth.py                  # Connexion, mots de passe, permissions (69 lignes)
 │   └── reports.py               # Documents HTML (bulletins, certificats, paie) (193 lignes)
 │
-├── views/
-│   ├── __init__.py              # Vide
+├── api/                         # Client HTTP + filet de synchronisation
+│   ├── __init__.py              # Re-exporte le client partage et api_disponible
+│   ├── client.py                # Client httpx de l'API FastAPI + stubs (442 lignes)
+│   └── sync_worker.py           # Squelette QThread : healthcheck + vidage de la file (39 lignes)
+│
+├── ui/                          # Couche presentation PyQt5
+│   ├── __init__.py              # Importe load_ui
 │   ├── loader.py                # Chargement des .ui + responsivite (26 lignes)
 │   ├── login_view.py            # Fenetre de connexion (125 lignes)
-│   ├── main_view.py             # Fenetre principale, sidebar, statut API (191 lignes)
+│   ├── main_view.py             # Fenetre principale, sidebar, statut 🔴/🟢 (191 lignes)
 │   ├── pages.py                 # Toutes les pages et dialogues metier (1455 lignes)
 │   ├── widgets.py               # Graphiques QPainter + formats monetaires (176 lignes)
 │   │
@@ -134,22 +154,23 @@ L'application suit une architecture en **3 couches**, sans framework :
 
 ```
 +------------------------------------------------------------+
-|  COUCHE PRESENTATION  (views/)                             |
+|  COUCHE PRESENTATION  (ui/)                                |
 |  login_view.py -> main_view.py -> pages.py -> widgets.py   |
-|  fichiers .ui (views/ui_files)                             |
+|  fichiers .ui (ui/ui_files)                                |
 +------------------------------+-----------------------------+
                                | importe / appelle
 +------------------------------v-----------------------------+
-|  COUCHE SERVICES  (services/)                              |
+|  COUCHE SERVICES  (services/ + api/)                       |
 |  auth.py (connexion, permissions)                          |
-|  api.py (client API REST + repli local)                    |
 |  reports.py (documents HTML)                               |
+|  api/client.py (client HTTP httpx)                         |
+|  api/sync_worker.py (QThread de synchronisation)           |
 +------------------------------+-----------------------------+
                                | utilise
 +------------------------------v-----------------------------+
-|  COUCHE DONNEES  (models/ + database/)                     |
-|  models/repositories.py (requetes metier)                  |
-|  database/db.py (connexion, schema, seed)                  |
+|  COUCHE DONNEES  (repositories/ + database/)               |
+|  repositories/* (depots par domaine, aiguillage reseau)    |
+|  database/db.py (connexion, schema, seed, file d'attente)  |
 |  SQLite : data/ecole.db                                    |
 +------------------------------------------------------------+
 ```
@@ -157,12 +178,12 @@ L'application suit une architecture en **3 couches**, sans framework :
 ### Demarrage pas a pas
 
 1. `python main.py` est execute.
-2. `main()` (main.py:44) :
-   - configure le **HighDPI** (`_setup_high_dpi`, main.py:16) ;
-   - choisit une police vectorielle (`_pick_base_font`, main.py:24) ;
-   - installe `_excepthook` (main.py:35) : boite de dialogue au lieu d'un
+2. `main()` (main.py:43) :
+   - configure le **HighDPI** (`_setup_high_dpi`, main.py:15) ;
+   - choisit une police vectorielle (`_pick_base_font`, main.py:23) ;
+   - installe `_excepthook` (main.py:34) : boite de dialogue au lieu d'un
      crash silencieux en executable ;
-   - cree l'application Qt et applique `APP_STYLESHEET` (config.py:29) ;
+   - cree l'application Qt et applique `APP_STYLESHEET` (core/config.py:29) ;
    - appelle `db.init_db()` -> creation des tables + donnees initiales ;
    - ouvre la **fenetre de connexion** `LoginDialog` ;
    - si la connexion reussit -> ouvre `MainWindow` en plein ecran ;
@@ -191,23 +212,23 @@ base. Les pages restent en memoire et se rafraichissent a la demande.
 ## 4. Point d'entree : `main.py`
 
 ```
-main.py (66 lignes)
+main.py (65 lignes)
 ```
 
 | Ligne | Element | Role |
 |---|---|---|
-| 16-22 | `_setup_high_dpi()` | Rendu net sur les ecrans Windows 100/125/150/200 % (variables d'environnement Qt posees avant `QApplication`). |
-| 24-33 | `_pick_base_font()` | Police vectorielle presente sur le systeme (`APP_FONT_FAMILY`, puis fallbacks), sinon police generique. |
-| 35-42 | `_excepthook(...)` | En executable, une exception non geree affiche une boite « Erreur inattendue » avec le detail. |
-| 44-63 | `main()` | Orchestration complete du demarrage (voir section 3). |
-| 65-66 | garde | `if __name__ == "__main__": main()` |
+| 15-22 | `_setup_high_dpi()` | Rendu net sur les ecrans Windows 100/125/150/200 % (variables d'environnement Qt posees avant `QApplication`). |
+| 23-33 | `_pick_base_font()` | Police vectorielle presente sur le systeme (`APP_FONT_FAMILY`, puis fallbacks), sinon police generique. |
+| 34-42 | `_excepthook(...)` | En executable, une exception non geree affiche une boite « Erreur inattendue » avec le detail. |
+| 43-62 | `main()` | Orchestration complete du demarrage (voir section 3). |
+| 64-65 | garde | `if __name__ == "__main__": main()` |
 
 ---
 
-## 5. Configuration : `config.py`
+## 5. Configuration : `core/config.py`
 
 ```
-config.py (118 lignes)
+core/config.py (121 lignes)
 ```
 
 Module importe partout : constantes, chemins, feuille de style.
@@ -229,23 +250,24 @@ Module importe partout : constantes, chemins, feuille de style.
 | `PERIODES` | `("1er Trimestre", ...)` | 58 | Periodes de notes |
 | `JOURS` | `("Lundi", ..., "Samedi")` | 60 | Jours du planning |
 | `CRENEAUX` | 8 creneaux | 62 | Horaires des cours |
-| `DEFAULT_ACCOUNTS` | 3 comptes | 94 | Comptes crees au premier lancement (voir section 11) |
-| `DEFAULT_MATIERES` | 8 matieres | 107 | Francais, Maths, Anglais, HG, SVT, PC, Educ. civique, Informatique |
+| `DEFAULT_ACCOUNTS` | 3 comptes | 97 | Comptes crees au premier lancement (voir section 11) |
+| `DEFAULT_MATIERES` | 8 matieres | 110 | Francais, Maths, Anglais, HG, SVT, PC, Educ. civique, Informatique |
 
 ### Fonctions de chemins
 
 | Fonction | Ligne | Role |
 |---|---|---|
-| `resource_path(relative)` | 74 | Chemin vers les donnees **empaquetees** dans l'executable (`_MEIPASS`), sinon racine du projet. |
-| `data_dir()` | 80 | Dossier **ecrivable** ou vit la base : a cote de l'executable, sinon racine du projet. Cree `data/` si besoin. |
+| `PROJECT_ROOT` | 74 | Racine du projet (`Path(__file__).resolve().parent.parent`) : `core/` est un niveau sous la racine. |
+| `resource_path(relative)` | 77 | Chemin vers les donnees **empaquetees** dans l'executable (`_MEIPASS`), sinon `PROJECT_ROOT`. |
+| `data_dir()` | 83 | Dossier **ecrivable** ou vit la base : a cote de l'executable, sinon `PROJECT_ROOT`. Cree `data/` si besoin. |
 
 ### Constantes de chemins
 
 | Constante | Ligne |
 |---|---|
-| `UI_DIR` (dossier des .ui) | 89 |
-| `DB_PATH` (fichier `data/ecole.db`) | 90 |
-| `DOCS_DIR` (dossier `data/documents/`) | 91 |
+| `UI_DIR` (dossier des .ui) | 92 |
+| `DB_PATH` (fichier `data/ecole.db`) | 93 |
+| `DOCS_DIR` (dossier `data/documents/`) | 94 |
 
 En fin de module, `os.makedirs(data_dir(), exist_ok=True)` garantit que le
 dossier `data/` existe des le chargement de `config`.
@@ -255,15 +277,15 @@ dossier `data/` existe des le chargement de `config`.
 ## 6. Couche donnees : `database/db.py`
 
 ```
-database/db.py (234 lignes)
+database/db.py (266 lignes)
 ```
 
 ### Fonctions et schema
 
 | Element | Ligne | Role |
 |---|---|---|
-| `SCHEMA` | 7 | Script SQL de creation des tables (voir section 11). |
-| `hash_password(password)` | 121 | Retourne le hash `sha256` hexadecimal. **Les mots de passe ne sont jamais stockes en clair.** |
+| `SCHEMA` | 7 | Script SQL de creation des tables, dont `file_attente_synchro` (voir section 11). |
+| `hash_password(password)` | 130 | Retourne le hash `sha256` hexadecimal. **Les mots de passe ne sont jamais stockes en clair.** |
 
 ### Classe `Database` (singleton)
 
@@ -271,15 +293,19 @@ Une seule instance partagee par toute l'app.
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `__new__` | 129 | Retourne l'unique instance |
-| `__init__` | 134 | Prepare le dossier des documents, pose `_initialized = False` |
-| `connect()` | 139 | Ouvre une connexion SQLite (`row_factory = Row` -> dictionnaires), active `PRAGMA foreign_keys = ON`. Une connexion par operation. |
-| `init_db()` | 147 | Execute `SCHEMA` puis `_seed`, une seule fois. |
-| `_seed(conn)` | 160 | Comptes par defaut (si aucun utilisateur), matieres, parametres, 3 membres de personnel de base. |
-| `query(sql, params)` | 204 | SELECT -> liste de dictionnaires. |
-| `query_one(sql, params)` | 213 | Premier enregistrement ou `None`. |
-| `execute(sql, params)` | 218 | INSERT/UPDATE/DELETE, commit, retourne `lastrowid`. |
-| `executemany(sql, seq)` | 228 | Execution en lot, commit. |
+| `__new__` | 134 | Retourne l'unique instance |
+| `__init__` | 139 | Prepare le dossier des documents, pose `_initialized = False` |
+| `connect()` | 148 | Ouvre une connexion SQLite (`row_factory = Row` -> dictionnaires), active `PRAGMA foreign_keys = ON`. Une connexion par operation. |
+| `init_db()` | 156 | Execute `SCHEMA` puis `_seed`, une seule fois. |
+| `_seed(conn)` | 169 | Comptes par defaut (si aucun utilisateur), matieres, parametres, 3 membres de personnel de base. |
+| `query(sql, params)` | 213 | SELECT -> liste de dictionnaires. |
+| `query_one(sql, params)` | 222 | Premier enregistrement ou `None`. |
+| `execute(sql, params)` | 227 | INSERT/UPDATE/DELETE, commit, retourne `lastrowid`. |
+| `executemany(sql, seq)` | 237 | Execution en lot, commit. |
+| `enqueue(method, endpoint, payload)` | 246 | Ecrit une operation dans `file_attente_synchro` (statut `PENDING`). |
+| `dequeue_pending(limit=50)` | 253 | Retire les operations en attente (a envoyer au serveur). |
+| `mark_queue_done(queue_id)` | 259 | Supprime une operation envoyee avec succes. |
+| `mark_queue_failed(queue_id)` | 263 | Marque `FAILED` une operation qui a echoue (relancee plus tard). |
 
 > Le `_seed` cree uniquement les donnees de base (comptes, matieres,
 > parametres, personnel). Les eleves, transactions et notes sont saisis par
@@ -287,110 +313,126 @@ Une seule instance partagee par toute l'app.
 
 ---
 
-## 7. Depots : `models/repositories.py`
+## 7. Depots : `repositories/`
 
 ```
-models/repositories.py (300 lignes)
+repositories/ (10 fichiers, 444 lignes)
 ```
 
-La classe `Repositories` regroupe **toutes les requetes metier**. Elle est
-importee partout sous l'alias `repos` (`from models import repos`).
+La couche **repositories** abstrait l'acces aux donnees. Chaque domaine a son
+propre depot, et tous sont regroupes derriere la facade `repos`
+(`from repositories import repos`). Chaque ecriture passe par `_route_write`,
+qui decide selon l'etat du reseau (voir section 8.4) :
 
-### Helper
+- **reseau disponible** -> appel a l'API serveur (TODO, stub) ;
+- **reseau coupe** -> base locale, et operation mise en file d'attente.
 
-| Fonction | Ligne | Role |
+### `repositories/base.py` — `RepositoryBase`
+
+| Element | Ligne | Role |
 |---|---|---|
-| `_gen_reference(prefix)` | 9 | Reference unique de transaction `REC-XXXXXXXX` / `DEP-XXXXXXXX`. |
+| `_gen_reference(prefix)` | 10 | Reference unique de transaction `REC-XXXXXXXX` / `DEP-XXXXXXXX`. |
+| `_enqueue(method, endpoint, payload)` | 16 | Pousse une operation dans `db.enqueue` quand la synchronisation est active. |
+| `_route_write(method, endpoint, payload, fn, ...)` | 21 | Aiguillage reseau : en ligne -> stub API ; hors ligne -> appelle `fn` localement puis `_enqueue`. |
 
-### Methodes par domaine
-
-**Classes & matieres**
+### `repositories/eleve_repository.py` — `EleveRepository`
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `classes()` | 15 | Toutes les classes + effectif reel (COUNT sur `eleves`), triees par nom. |
-| `classe_by_id(id)` | 20 | Une classe. |
-| `add_classe(...)` | 23 | Insere une classe. |
-| `update_classe(...)` | 28 | Modifie une classe. |
-| `delete_classe(id)` | 33 | Supprime d'abord ce qui depend de la classe (eleves, planning), puis la classe. |
-| `matieres()` | 39 | Toutes les matieres triees. |
-| `add_matiere(nom)` | 42 | Ajoute une matiere (IGNORE si doublon). |
+| `eleves(classe_id, statut, recherche)` | 8 | Liste filtree (classe, statut, texte) avec `classe_nom` via LEFT JOIN. |
+| `eleve_by_id(id)` | 26 | Un eleve. |
+| `eleve_by_matricule(m)` | 29 | Un eleve par matricule (reinscription). |
+| `add_eleve(data)` | 32 | Insere un eleve ; genere le matricule si absent. |
+| `update_eleve(id, data)` | 51 | Met a jour le dossier. |
+| `delete_eleve(id)` | 64 | Supprime notes puis eleve. |
+| `next_matricule()` | 69 | Prochain matricule `ELEV{annee}{NNNN}` a partir du dernier existant. |
 
-**Eleves**
-
-| Methode | Ligne | Role |
-|---|---|---|
-| `eleves(classe_id, statut, recherche)` | 45 | Liste filtree (classe, statut, texte) avec `classe_nom` via LEFT JOIN. |
-| `eleve_by_id(id)` | 63 | Un eleve. |
-| `eleve_by_matricule(m)` | 66 | Un eleve par matricule (reinscription). |
-| `add_eleve(data)` | 69 | Insere un eleve ; genere le matricule si absent. |
-| `update_eleve(id, data)` | 87 | Met a jour le dossier. |
-| `delete_eleve(id)` | 98 | Supprime notes puis eleve. |
-| `next_matricule()` | 102 | Prochain matricule `ELEV{annee}{NNNN}` a partir du dernier existant. |
-
-**Notes**
+### `repositories/classe_repository.py` — `ClasseRepository`
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `notes_for(classe_id, matiere_id, periode)` | 118 | Notes d'une classe x matiere x periode (avec matricule et nom). |
-| `save_note(...)` | 127 | Insere ou met a jour (UPSERT) sur `(eleve_id, matiere_id, periode)`. |
+| `classes()` | 8 | Toutes les classes + effectif reel (COUNT sur `eleves`), triees par nom. |
+| `classe_by_id(id)` | 13 | Une classe. |
+| `add_classe(...)` | 16 | Insere une classe. |
+| `update_classe(...)` | 25 | Modifie une classe. |
+| `delete_classe(id)` | 34 | Supprime d'abord ce qui depend de la classe (eleves, planning), puis la classe. |
 
-**Caisse**
-
-| Methode | Ligne | Role |
-|---|---|---|
-| `transactions(type, recherche, dates)` | 137 | Liste filtree, tri date DESC. |
-| `add_transaction(...)` | 158 | Insere avec reference auto `REC-...`/`DEP-...`. |
-| `delete_transaction(id)` | 167 | Supprime. |
-| `caisse_totals()` | 170 | Somme des entrees, des sorties, solde. |
-| `export_transactions_csv(path)` | 180 | CSV separe par `;` avec BOM (`utf-8-sig`) pour Excel. |
-
-**Comptes utilisateurs**
+### `repositories/pedagogie_repository.py` — `PedagogieRepository`
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `utilisateurs(role, recherche)` | 189 | Liste (sans le hash de mot de passe). |
-| `add_compte(...)` | 203 | Cree un compte ; username derive de l'email. |
-| `update_compte(...)` | 210 | Modifie identite/email/telephone/role/actif. |
-| `toggle_compte(id, actif)` | 216 | Active/desactive. |
-| `reset_password(id, hash)` | 219 | Remplace le mot de passe. |
-| `delete_compte(id)` | 222 | Supprime connexions puis compte. |
+| `matieres()` | 8 | Toutes les matieres triees. |
+| `add_matiere(nom)` | 11 | Ajoute une matiere (IGNORE si doublon). |
+| `enseignants()` | 16 | Personnel dont la fonction contient « Enseignant ». |
 
-**Planning**
+### `repositories/note_repository.py` — `NoteRepository`
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `planning_for(classe_id)` | 226 | Dictionnaire `{(jour, creneau): entree}`. |
-| `save_planning(classe_id, entries)` | 232 | Remplace tout le planning d'une classe. |
+| `notes_for(classe_id, matiere_id, periode)` | 8 | Notes d'une classe x matiere x periode (avec matricule et nom). |
+| `save_note(...)` | 17 | Insere ou met a jour (UPSERT) sur `(eleve_id, matiere_id, periode)`. |
 
-**Personnel**
-
-| Methode | Ligne | Role |
-|---|---|---|
-| `personnel(recherche)` | 238 | Liste du personnel. |
-| `add_personnel(...)` | 247 | Ajoute. |
-| `update_personnel(...)` | 253 | Modifie. |
-| `delete_personnel(id)` | 259 | Supprime. |
-| `masse_salariale()` | 262 | Somme des salaires. |
-| `enseignants()` | 266 | Personnel dont la fonction contient « Enseignant ». |
-
-**Parametres**
+### `repositories/finance_repository.py` — `FinanceRepository`
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `parametres()` | 269 | Dictionnaire cle -> valeur. |
-| `set_parametre(cle, valeur)` | 274 | Upsert d'un parametre. |
-| `delete_parametres()` | 279 | Reinitialise signataire, titre, ville. |
+| `transactions(type, recherche, dates)` | 10 | Liste filtree, tri date DESC. |
+| `add_transaction(...)` | 31 | Insere avec reference auto `REC-...`/`DEP-...`. |
+| `delete_transaction(id)` | 45 | Supprime. |
+| `caisse_totals()` | 49 | Somme des entrees, des sorties, solde. |
+| `export_transactions_csv(path)` | 59 | CSV separe par `;` avec BOM (`utf-8-sig`) pour Excel. |
 
-**Statistiques du dashboard**
+### `repositories/personnel_repository.py` — `PersonnelRepository`
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `stats_dashboard()` | 284 | Total eleves, inscriptions du jour, encaissements du jour, dossiers incomplets. |
+| `personnel(recherche)` | 8 | Liste du personnel. |
+| `add_personnel(...)` | 17 | Ajoute. |
+| `update_personnel(...)` | 27 | Modifie. |
+| `delete_personnel(id)` | 37 | Supprime. |
+| `masse_salariale()` | 41 | Somme des salaires. |
+
+### `repositories/compte_repository.py` — `CompteRepository`
+
+| Methode | Ligne | Role |
+|---|---|---|
+| `utilisateurs(role, recherche)` | 8 | Liste (sans le hash de mot de passe). |
+| `add_compte(...)` | 22 | Cree un compte ; username derive de l'email. |
+| `update_compte(...)` | 29 | Modifie identite/email/telephone/role/actif. |
+| `toggle_compte(id, actif)` | 35 | Active/desactive. |
+| `reset_password(id, hash)` | 38 | Remplace le mot de passe. |
+| `delete_compte(id)` | 41 | Supprime connexions puis compte. |
+
+### `repositories/planning_repository.py` — `PlanningRepository`
+
+| Methode | Ligne | Role |
+|---|---|---|
+| `planning_for(classe_id)` | 8 | Dictionnaire `{(jour, creneau): entree}`. |
+| `save_planning(classe_id, entries)` | 14 | Remplace tout le planning d'une classe. |
+
+### `repositories/parametre_repository.py` — `ParametreRepository`
+
+| Methode | Ligne | Role |
+|---|---|---|
+| `parametres()` | 8 | Dictionnaire cle -> valeur. |
+| `set_parametre(cle, valeur)` | 13 | Upsert d'un parametre. |
+| `delete_parametres()` | 18 | Reinitialise signataire, titre, ville. |
+| `stats_dashboard()` | 23 | Total eleves, inscriptions du jour, encaissements du jour, dossiers incomplets. |
+
+### `repositories/__init__.py` — la facade `repos`
+
+| Element | Ligne | Role |
+|---|---|---|
+| `_Repos` | 14 | Classe aplat : chaque attribut `eleves`, `classes`, `notes`, `finance`, `personnel`, `comptes`, `planning`, `parametres` designe le depot du domaine. |
+| `__getattr__(name)` | 32 | Retourne le depot demande (cree a la demande). |
+| `repos = _Repos()` | 39 | Instance partagee importee partout (`from repositories import repos`). |
+
+> Le nom d'attribut `personnel_repo` evite la collision entre le depot
+> `personnel` et la methode `personnel()` qui liste les membres.
 
 ---
 
-## 8. Services : `services/`
+## 8. Services et API : `services/` + `api/`
 
 ### 8.1 `services/auth.py` (69 lignes) — connexion et permissions
 
@@ -415,27 +457,30 @@ importee partout sous l'alias `repos` (`from models import repos`).
 - `can_edit(page)` (64) : qui peut saisir ? `comptes` -> seul admin ;
   sinon -> le gestionnaire oui, les autres non.
 
-### 8.2 `services/api.py` (386 lignes) — client de l'API FastAPI
+### 8.2 `api/client.py` (442 lignes) — client de l'API FastAPI
 
-L'app peut afficher les indicateurs depuis un backend REST FastAPI
+L'app peut communiquer avec un backend REST FastAPI
 (`http://127.0.0.1:8000`). Si l'API est hors ligne, elle **bascule
 automatiquement sur la base locale** : l'utilisateur ne voit aucune erreur.
+Les methodes sont decoupees en stubs de routes (la liste complete est donnee
+dans la section 8.4).
 
 | Element | Ligne | Role |
 |---|---|---|
-| `ApiError` | 11 | Exception interne (jamais exposee a l'interface). |
-| `_request(method, path, **kwargs)` | 16 | Envoie une requete HTTP et normalise `(donnees, erreur)`. Toutes les erreurs reseau sont interceptees. |
-| `_CacheDispo` | 41 | Memorise pendant 5 s si l'API repond (evite de tester a chaque appel). |
-| `api_disponible(force=False)` | 57 | L'API est-elle joignable ? |
-| `ApiClient` | 64 | Un client par domaine : eleves/classes, paiements, enseignants, notes, presences, annees scolaires. Chaque methode renvoie `(donnees, erreur)`. |
-| `client` | 386 | Instance unique utilisee par les dashboards. |
+| `ApiError` | 8 | Exception interne (jamais exposee a l'interface). |
+| `_request(method, path, **kwargs)` | 13 | Envoie une requete HTTP (librairie **httpx**) et normalise `(donnees, erreur)`. Toutes les erreurs reseau sont interceptees. |
+| `_CacheDispo` | 35 | Memorise pendant 5 s si l'API repond (evite de tester a chaque appel). |
+| `api_disponible(force=False)` | 51 | L'API est-elle joignable ? (healthcheck sur `/annee_scolaire_active`). |
+| `ApiClient` | 58 | Un client par domaine : eleves, classes, matieres, paiements, enseignants, notes, presences, annees scolaires. Chaque methode renvoie `(donnees, erreur)`. |
+| `client` | 442 | Instance unique utilisee par les dashboards et les depots. |
 
 Exemples de methodes : `total_eleves()`, `eleve_recherche(...)`,
-`total_montant_paiement()`, `paiements()`, `enseignants()`, `ajouter_eleve(...)`.
+`total_montant_paiement()`, `paiements()`, `enseignants()`, `ajouter_eleve(...)`,
+`cycle_par_id(...)`, `tarifs_scolarite()`, `bilan_eleve(...)`, `ajouter_note(...)`.
 
-La barre d'etat de la fenetre principale affiche l'etat de la connexion :
-**« API : connectee »** ou **« API : hors ligne (mode local) »**
-(main_view.py:113-118).
+> Attention : `api/__init__.py` re-exporte `client = ApiClient()`. En Python,
+> cet attribut masque le sous-module `api.client` ; pour tester en patchant
+> `API_BASE_URL`, passer par `importlib.import_module("api.client")`.
 
 ### 8.3 `services/reports.py` (193 lignes) — documents HTML
 
@@ -457,11 +502,54 @@ dans le navigateur** (`QDesktopServices.openUrl`). Pas de dependance PDF.
 | `planning(classe)` | 165 | Emploi du temps d'une classe. |
 | `_appreciation(moyenne)` | 181 | Mention : >=16 Excellent, >=14 Tres bien, >=12 Bien, >=10 Assez bien, >=8 Passable, sinon Insuffisant. |
 
+### 8.4 Mode Offline-First : routes, reseau et synchronisation
+
+Le projet prepare un **Stack Serveur FastAPI + MySQL** (port 8000). Les
+routes sont definies cote client sous forme de **stubs** dans `ApiClient` :
+elles renvoient `(None, "API hors ligne (ConnectError)")` tant que le serveur
+n'est pas deploye, puis `(404, ...)` quand il repond. Liste des stubs ajoutes :
+
+| Domaine | Methodes |
+|---|---|
+| Cycles | `cycle_par_id(cycle_id)` |
+| Matieres | `matiere_par_id(matiere_id)` |
+| Scolarite | `tarifs_scolarite()`, `tarifs_scolarite_classe(classe_id)`, `ajouter_tarif(...)`, `modifier_tarif(...)`, `supprimer_tarif(...)` |
+| Inscriptions | `solde_inscription(...)`, `suivi_mensuel_inscription(...)`, `bilan_eleve(...)` |
+| Notes | `ajouter_note(...)`, `modifier_note(...)`, `supprimer_note(...)` |
+
+L'aiguillage reseau est assure par **`core/network.py`** :
+
+| Element | Ligne | Role |
+|---|---|---|
+| `SYNC_ACTIVE` | 11 | `False` par defaut (le serveur n'est pas encore deploye). Quand il le sera, le passer a `True`. |
+| `_state` | 12 | Etat courant : `online` ou `offline`. |
+| `sync_active()` | 15 | La synchronisation serveur est-elle activee ? |
+| `is_online()` | 20 | Le reseau est-il disponible ? |
+| `set_online()` / `set_offline()` | 25 / 31 | Bascule l'etat (utilise par le `SyncWorker` et les reponses de l'API). |
+
+**`api/sync_worker.py`** (39 lignes) : squelette de `SyncWorker(QThread)`
+avec les signaux `status_changed`, `sync_done`, `sync_error`. Son `run()`
+teste l'API (`api_disponible(force=True)`), met a jour l'etat reseau, puis
+vide la file d'attente (`_drain_queue` -> `db.dequeue_pending`). Le transfert
+reel des operations est a implementer (TODO dans le code).
+
+**Chaine d'une ecriture en mode Offline-First** :
+
+1. L'interface appelle un depot (`ex. repos.eleves.add_eleve(...)`).
+2. `RepositoryBase._route_write` (base.py:21) regarde `net.is_online()` :
+   - **en ligne** -> appelle le stub API correspondant ;
+   - **hors ligne** -> execute la requete en base locale, puis
+     `_enqueue` (base.py:16) pousse `(method, endpoint, payload)` dans
+     `file_attente_synchro` avec le statut `PENDING`.
+3. Au retour du reseau, `SyncWorker` vide la file : chaque operation est
+   envoyee au serveur, puis `mark_queue_done` la supprime (ou
+   `mark_queue_failed` la garde en `FAILED` pour reessai).
+
 ---
 
-## 9. Couche presentation : le dossier `views/`
+## 9. Couche presentation : le dossier `ui/`
 
-### 9.1 `views/loader.py` (26 lignes)
+### 9.1 `ui/loader.py` (26 lignes)
 
 | Fonction | Ligne | Role |
 |---|---|---|
@@ -469,7 +557,7 @@ dans le navigateur** (`QDesktopServices.openUrl`). Pas de dependance PDF.
 | `load_ui(relative_path, widget=None)` | 18 | Charge un `.ui` via `PyQt5.uic.loadUi`, rend la page responsive. |
 | `apply_ui(relative_path, widget)` | 24 | Applique un `.ui` a un widget existant (MainWindow, dialogues). |
 
-### 9.2 `views/main_view.py` (191 lignes)
+### 9.2 `ui/main_view.py` (191 lignes)
 
 | Element | Ligne | Role |
 |---|---|---|
@@ -481,14 +569,14 @@ Classe `MainWindow(QMainWindow)` (ligne 39) :
 
 | Methode | Ligne | Role |
 |---|---|---|
-| `__init__(user)` | 40 | Stocke l'utilisateur, cree `PageContext`, applique `main.ui`, remplit les labels, cree le label de statut API, cable la navigation, construit les pages, navigue vers `dashboard`. |
-| `_refresh_api_status()` | 106 | Interroge `api.api_disponible()` et met a jour le label de la barre d'etat. |
+| `__init__(user)` | 40 | Stocke l'utilisateur, cree `PageContext`, applique `main.ui`, remplit les labels, cree le label de statut du reseau, cable la navigation, construit les pages, navigue vers `dashboard`. |
+| `_refresh_api_status()` | 106 | Interroge `api.api_disponible()` et met a jour la barre d'etat : **« 🟢 En Ligne »** quand le serveur repond, **« 🔴 Mode Local »** sinon. |
 | `logout()` | 123 | Confirme puis ferme la fenetre. |
 | `_wire_nav()` | 128 | Affiche les boutons autorises, masque les autres. |
 | `_build_pages()` | 138 | Construit les pages autorisees dans des `QScrollArea` ; toute erreur affiche un libelle rouge. |
 | `navigate(page_name)` | 173 | Bascule la page, appelle `refresh()`, coche le bouton. |
 
-### 9.3 `views/login_view.py` (125 lignes)
+### 9.3 `ui/login_view.py` (125 lignes)
 
 | Element | Ligne | Role |
 |---|---|---|
@@ -498,7 +586,7 @@ Classe `MainWindow(QMainWindow)` (ligne 39) :
 | `_build()` | 34 | Construit l'interface **en code** : carte blanche arrondie, champs nom/mot de passe, bouton degrade, rappel des comptes de test. |
 | `_do_login()` | 112 | Appelle `auth.login`, affiche l'erreur si besoin, sinon stocke `self.user` et `accept()`. |
 
-### 9.4 `views/pages.py` (1455 lignes) — les pages metier
+### 9.4 `ui/pages.py` (1455 lignes) — les pages metier
 
 C'est le cœur de l'interface. Chaque fabrique suit le meme contrat :
 `fabrique(page, ctx)` remplit le widget `page`, connecte les signaux et expose
@@ -598,7 +686,7 @@ valeurs de la base locale.
 |---|---|---|
 | `parametres(page, ctx)` | 1403 | Signataire (nom/titre), ville, pays + images (bandeau haut/bas, signature) copiees dans `DOCS_DIR`. Bouton supprimer la configuration. |
 
-### 9.5 `views/widgets.py` (176 lignes) — graphiques et formats
+### 9.5 `ui/widgets.py` (176 lignes) — graphiques et formats
 
 | Element | Ligne | Role |
 |---|---|---|
@@ -614,7 +702,7 @@ valeurs de la base locale.
 
 ## 10. Fichiers `.ui`
 
-Les interfaces sont definies dans `views/ui_files/` et chargees par
+Les interfaces sont definies dans `ui/ui_files/` et chargees par
 `apply_ui`. Les fichiers reellement utilises :
 
 | Fichier | Charge par | Role |
@@ -689,6 +777,17 @@ salaire (REAL DEFAULT 0), statut (DEFAULT 'Contrat')
 (`signataire_nom`, `signataire_titre`, `ville`, `pays`, `frais_scolarite`,
 `bandeau_haut`, `bandeau_bas`, `signature`).
 
+**`file_attente_synchro`** — file d'attente du mode Offline-First
+
+| Colonne | Type | Contrainte |
+|---|---|---|
+| id | INTEGER | PK AUTOINCREMENT |
+| endpoint | TEXT | NOT NULL (route du serveur, ex. `/eleve`) |
+| method | TEXT | NOT NULL (`POST`, `PUT`, `DELETE`) |
+| payload | TEXT | NOT NULL (donnees JSON serialisees) |
+| created_at | TEXT | DEFAULT datetime('now','localtime') |
+| status | TEXT | DEFAULT `PENDING` (ou `FAILED` apres un echec) |
+
 ### Comptes par defaut (crees au premier lancement)
 
 | Nom | Identifiant | Mot de passe | Role |
@@ -724,20 +823,22 @@ salaire (REAL DEFAULT 0), statut (DEFAULT 'Contrat')
 
 ## 13. Construction des executables
 
+Deux spec PyInstaller **one-file** sont versionnees : `build.spec` (Linux) et
+`build_win.spec` (Windows). Les deux embarquent `ui/ui_files`. Le dossier
+`ui/ui_files` doit toujours etre au meme emplacement relatif que dans la
+source : les chemins sont calcules via `PROJECT_ROOT` (core/config.py:74),
+qui remonte d'un niveau depuis `core/`.
+
 ### Executable Linux
 
 ```bash
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
-venv/bin/pyinstaller --noconfirm --clean --onefile --windowed \
-  --name GestionScolaire \
-  --add-data "views/ui_files:views/ui_files" \
-  main.py
+venv/bin/pyinstaller --noconfirm --clean build.spec
 ```
 
-Sortie : `dist/GestionScolaire` (one-file, sans console). Les `.ui` sont
-embarques via `--add-data`. Hidden imports : `PyQt5.uic`, `PyQt5.uic.plugins`,
-`PyQt5.QtSql`.
+`build.spec` produit `dist/GestionScolaire` (one-file, sans console). Hidden
+imports : `PyQt5.uic`, `PyQt5.uic.plugins`, `PyQt5.QtSql`.
 
 ### Executable Windows (via GitHub Actions)
 
@@ -756,7 +857,7 @@ L'artefact est telechargeable depuis la page Actions du depot GitHub
 ### Spec Windows (`build_win.spec`)
 
 `build_win.spec` construit un **one-file** nomme `GestionScolaire.exe`, sans
-console, en embarquant `views/ui_files` et le manifeste DPI.
+console, en embarquant `ui/ui_files` et le manifeste DPI.
 
 ### Manifeste DPI Windows (`win_dpi_manifest.xml`)
 
@@ -831,7 +932,7 @@ Les fichiers sont stockes dans `data/documents/`.
 | Probleme | Cause / solution |
 |---|---|
 | L'executable ne s'ouvre pas / crashe silencieusement | Lancer depuis un terminal pour voir l'erreur, ou lire la boite « Erreur inattendue » du `_excepthook`. |
-| L'API FastAPI n'est pas lancee | L'app affiche « API : hors ligne (mode local) » dans la barre d'etat et fonctionne quand meme sur la base locale. |
+| L'API FastAPI n'est pas lancee | L'app affiche « 🔴 Mode Local » dans la barre d'etat et fonctionne quand meme sur la base locale. |
 | Les chiffres du dashboard semblent differents | Sans API, les indicateurs viennent de la base locale ; avec API, ils viennent du serveur. C'est le comportement attendu. |
 | « Module not found » en build | `hiddenimports` necessaires : `PyQt5.uic`, `PyQt5.uic.plugins`, `PyQt5.QtSql`. |
 | Texte flou sur Windows | Verifier que le manifeste est embarque et que `_setup_high_dpi` est execute avant `QApplication`. |
@@ -849,7 +950,7 @@ Les fichiers sont stockes dans `data/documents/`.
 |---|---|
 | 1.0.x | Prototype : API FastAPI + prototype web. |
 | 1.1.x | Bascule desktop PyQt5 + SQLite, architecture a 3 couches. |
-| 1.2.x | **Version actuelle** : pages metier completes, dashboards par role, client API FastAPI avec repli local, filtre des eleves par classe par defaut, certificat filtrable, exe Windows construit via GitHub Actions, exe Linux one-file. Code nettoye : tous les docstrings supprimes, commentaires courts en francais. |
+| 1.2.x | **Version actuelle** : pages metier completes, dashboards par role, client API FastAPI avec repli local (librairie httpx), filtre des eleves par classe par defaut, certificat filtrable, exe Windows construit via GitHub Actions, exe Linux one-file (build.spec). Restructuration Offline-First : `core/`, `api/` (client + sync_worker), `repositories/` par domaine, `database/` avec file d'attente `file_attente_synchro`, `views/` renomme `ui/`, barre d'etat « 🟢 En Ligne » / « 🔴 Mode Local ». Code nettoye : tous les docstrings supprimes, commentaires courts en francais. |
 
 ---
 

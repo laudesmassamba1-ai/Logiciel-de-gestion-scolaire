@@ -2,7 +2,7 @@ import secrets
 
 from database import db
 from database.db import hash_password
-from config import ROLES
+from core.config import ROLES
 
 class AuthService:
     # tout ce qui concerne la connexion et les mots de passe

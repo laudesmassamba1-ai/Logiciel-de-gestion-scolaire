@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QVBoxLayout,
 )
 
-from config import APP_NAME, APP_VERSION
+from core.config import APP_NAME, APP_VERSION
 from services import auth
 
 PRIMARY = "#047857"

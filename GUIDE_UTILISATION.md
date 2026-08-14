@@ -223,7 +223,7 @@ Apres connexion, la fenetre principale s'ouvre **en plein ecran** avec le titre 
 
 1. **une barre laterale** a gauche : logo « Gestion Scolaire », boutons de navigation (visibles selon votre role), nom et role de l'utilisateur connecte, bouton **Se deconnecter** ;
 2. **une zone centrale** : la page active (tableau de bord ou module) ;
-3. **une barre d'etat** en bas : « Connecte comme {role} », « Page active : {page} », et un indicateur de connexion au serveur de statistiques : **« API : connectee »** ou **« API : hors ligne (mode local) »**. En mode hors ligne, tout fonctionne normalement avec les donnees locales.
+3. **une barre d'etat** en bas : « Connecte comme {role} », « Page active : {page} », et un indicateur de connexion au serveur : **« 🟢 En Ligne »** quand le serveur repond, **« 🔴 Mode Local »** sinon. En mode local, tout fonctionne normalement avec les donnees locales.
 
 ### 5.2 La barre laterale (navigation)
 
@@ -714,7 +714,7 @@ Le logiciel est fourni avec un manifeste de haute resolution (DPI) : l'affichage
 ## 17. Foire aux questions (FAQ)
 
 **Q : Puis-je utiliser le logiciel sans connexion Internet ?**
-R : Oui. Le logiciel est entierement local (base de donnees dans `data/ecole.db`). Il peut en plus se connecter a un petit serveur local de statistiques (`API`), mais si celui-ci n'est pas lance, la barre d'etat affiche « API : hors ligne (mode local) » et tout continue de fonctionner avec les donnees locales.
+R : Oui. Le logiciel est entierement local (base de donnees dans `data/ecole.db`). Il peut en plus se connecter a un serveur (`API`), mais si celui-ci n'est pas lance, la barre d'etat affiche « 🔴 Mode Local » et tout continue de fonctionner avec les donnees locales.
 
 **Q : Combien d'eleves puis-je inscrire ?**
 R : Sans limite. Chaque classe a une capacite affichee ; un excedent est signale par une cellule rouge.

@@ -1,9 +1,9 @@
 from PyQt5.QtWidgets import QLabel, QMainWindow, QMessageBox, QWidget
 
-from config import APP_NAME, ROLE_LABELS
-from services import api
-from views import pages
-from views.loader import apply_ui
+from api import api_disponible
+from core.config import APP_NAME, ROLE_LABELS
+from ui import pages
+from ui.loader import apply_ui
 
 # correspondance entre les boutons de la barre et les noms des pages
 NAV_PAGES = {
@@ -106,16 +106,16 @@ class MainWindow(QMainWindow):
     def _refresh_api_status(self):
         # verifie si l'API repond et affiche le statut dans la barre
         try:
-            en_ligne = api.api_disponible()
+            en_ligne = api_disponible()
         except Exception:
             en_ligne = False
         if en_ligne:
-            self.lbl_api_status.setText("API : connectee")
+            self.lbl_api_status.setText("🟢 En Ligne")
             self.lbl_api_status.setStyleSheet(
                 "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
                 " background-color: #dcfce7; color: #166534;")
         else:
-            self.lbl_api_status.setText("API : hors ligne (mode local)")
+            self.lbl_api_status.setText("🔴 Mode Local")
             self.lbl_api_status.setStyleSheet(
                 "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
                 " background-color: #fef9c3; color: #854d0e;")

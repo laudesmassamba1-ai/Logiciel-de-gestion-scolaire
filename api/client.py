@@ -1,11 +1,8 @@
 import time
 
-try:
-    import requests
-except ImportError:
-    requests = None
+import httpx
 
-from config import API_BASE_URL, API_TIMEOUT
+from core.config import API_BASE_URL, API_TIMEOUT
 
 
 class ApiError(Exception):
@@ -14,17 +11,14 @@ class ApiError(Exception):
 
 # envoie une requete HTTP a l'API et renvoie (donnees, erreur)
 def _request(method, path, **kwargs):
-    if requests is None:
-        return None, "Le module 'requests' n'est pas installe"
     try:
-        resp = requests.request(
-            method, API_BASE_URL + path, timeout=API_TIMEOUT, **kwargs)
-    except requests.exceptions.RequestException as exc:
+        resp = httpx.request(method, API_BASE_URL + path, timeout=API_TIMEOUT, **kwargs)
+    except httpx.HTTPError as exc:
         # si l'API ne repond pas, on renvoie une erreur (l'appelant basculera sur la base locale)
         return None, f"API hors ligne ({exc.__class__.__name__})"
     try:
         resp.raise_for_status()
-    except requests.exceptions.HTTPError:
+    except httpx.HTTPStatusError:
         try:
             detail = resp.json().get("detail", resp.text)
         except ValueError:
@@ -47,7 +41,7 @@ class _CacheDispo:
     def get(cls, force=False):
         now = time.monotonic()
         if force or cls._last == 0 or now - cls._last > 5:
-            payload, err = _request("GET", "/total_eleves")
+            payload, err = _request("GET", "/annee_scolaire_active")
             cls._value = err is None
             cls._last = now
         return cls._value
@@ -64,8 +58,9 @@ def api_disponible(force=False) -> bool:
 class ApiClient:
     # un petit client pour chaque operation de l'API FastAPI
 
+    # ---- Eleves & inscriptions ----
+
     def total_eleves(self):
-        # nombre total d'eleves cote serveur
         data, err = _request("GET", "/total_eleves")
         if err:
             return None, err
@@ -79,7 +74,6 @@ class ApiClient:
         return data, None
 
     def eleves(self):
-        # recupere la liste des eleves enregistres cote serveur
         data, err = _request("GET", "/eleve")
         if err:
             return None, err
@@ -104,6 +98,34 @@ class ApiClient:
             return None, err
         return data.get("eleve_total_classe", []), None
 
+    def ajouter_eleve(self, eleve, paiement):
+        data, err = _request("POST", "/eleve",
+                             json={"eleve": eleve, "paiement": paiement})
+        return data, err
+
+    def modifier_eleve(self, identifiant, donnees):
+        return _request("PUT", f"/modifierEleve/{identifiant}", json=donnees)
+
+    def supprimer_eleve(self, identifiant):
+        return _request("DELETE", f"/eleve/{identifiant}")
+
+    def eleves_supprimes(self):
+        data, err = _request("GET", "/eleve_supprime")
+        if err:
+            return None, err
+        return data.get("eleves_supprimes", []), None
+
+    def restaurer_eleve(self, nom, prenom):
+        return _request("PUT", f"/restaurer_eleve/{nom}/{prenom}")
+
+    def parents_par_classe(self, classe):
+        data, err = _request("GET", f"/parents_par_classe/{classe}")
+        if err:
+            return None, err
+        return data.get("parents", []), None
+
+    # ---- Classes, cycles et annees scolaires ----
+
     def total_classe(self):
         data, err = _request("GET", "/total_classe")
         if err:
@@ -122,28 +144,7 @@ class ApiClient:
             return None, err
         return data.get("classe"), None
 
-    def ajouter_eleve(self, eleve, paiement):
-        # cree un eleve (et son premier paiement) cote serveur
-        return _request("POST", "/eleve",
-                        json={"eleve": eleve, "paiement": paiement})
-
-    def modifier_eleve(self, identifiant, donnees):
-        return _request("PUT", f"/modifierEleve/{identifiant}", json=donnees)
-
-    def supprimer_eleve(self, identifiant):
-        return _request("DELETE", f"/eleve/{identifiant}")
-
-    def eleves_supprimes(self):
-        data, err = _request("GET", "/eleve_supprime")
-        if err:
-            return None, err
-        return data.get("eleves_supprimes", []), None
-
-    def restaurer_eleve(self, nom, prenom):
-        return _request("PUT", f"/restaurer_eleve/{nom}/{prenom}")
-
     def ajouter_classe(self, nom, cycle_id):
-        # cree une classe cote serveur
         return _request("POST", "/classe",
                         json={"classe": nom, "cycle_id": cycle_id})
 
@@ -153,14 +154,74 @@ class ApiClient:
     def supprimer_classe(self, identifiant):
         return _request("DELETE", f"/supprimerClasse/{identifiant}")
 
-    def parents_par_classe(self, classe):
-        data, err = _request("GET", f"/parents_par_classe/{classe}")
+    def total_cycle(self):
+        data, err = _request("GET", "/total_cycle")
         if err:
             return None, err
-        return data.get("parents", []), None
+        return data.get("total_cycle"), None
+
+    def cycles(self):
+        data, err = _request("GET", "/cycle")
+        if err:
+            return None, err
+        return data.get("cycle", []), None
+
+    def cycle_par_id(self, identifiant):
+        data, err = _request("GET", f"/cycle/{identifiant}")
+        if err:
+            return None, err
+        return data.get("cycle"), None
+
+    def ajouter_cycle(self, nom):
+        return _request("POST", "/cycle", json={"nom": nom})
+
+    def modifier_cycle(self, identifiant, donnees):
+        return _request("PUT", f"/modifierCycle/{identifiant}", json=donnees)
+
+    def supprimer_cycle(self, identifiant):
+        return _request("DELETE", f"/supprimerCycle/{identifiant}")
+
+    def ajouter_annee_scolaire(self, libelle, date_debut, date_fin, est_active=False):
+        return _request("POST", "/ajouter_annee_scolaire", json={
+            "libelle": libelle, "date_debut": date_debut,
+            "date_fin": date_fin, "est_active": est_active})
+
+    def lister_annees_scolaires(self):
+        data, err = _request("GET", "/lister_annees_scolaires")
+        if err:
+            return None, err
+        return data.get("annees_scolaires", []), None
+
+    def annee_scolaire_active(self):
+        data, err = _request("GET", "/annee_scolaire_active")
+        if err:
+            return None, err
+        return data.get("annee_scolaire_active"), None
+
+    # ---- Finance, tarifs et scolarite ----
+
+    def tarifs_scolarite(self):
+        data, err = _request("GET", "/tarifs-scolarite")
+        if err:
+            return None, err
+        return data.get("tarifs", []), None
+
+    def ajouter_tarif(self, donnees):
+        return _request("POST", "/tarifs-scolarite", json=donnees)
+
+    def modifier_tarif(self, tarif_id, donnees):
+        return _request("PUT", f"/tarifs-scolarite/{tarif_id}", json=donnees)
+
+    def supprimer_tarif(self, tarif_id):
+        return _request("DELETE", f"/tarifs-scolarite/{tarif_id}")
+
+    def tarifs_scolarite_classe(self, classe_id):
+        data, err = _request("GET", f"/tarifs-scolarite/classe/{classe_id}")
+        if err:
+            return None, err
+        return data.get("tarifs", []), None
 
     def total_paiement(self):
-        # nombre total de paiements cote serveur
         data, err = _request("GET", "/total_paiement")
         if err:
             return None, err
@@ -176,11 +237,31 @@ class ApiClient:
         return data.get("total_montant_paiement"), None
 
     def paiements(self):
-        # liste les paiements enregistres cote serveur
         data, err = _request("GET", "/paiement")
         if err:
             return None, err
         return data.get("paiement", []), None
+
+    def ajouter_paiement(self, donnees):
+        return _request("POST", "/paiement", json=donnees)
+
+    def modifier_paiement(self, identifiant, donnees):
+        return _request("PUT", f"/modifierPaiement/{identifiant}", json=donnees)
+
+    def supprimer_paiement(self, identifiant):
+        return _request("DELETE", f"/supprimerPaiement/{identifiant}")
+
+    def solde_inscription(self, inscription_id):
+        data, err = _request("GET", f"/inscriptions/{inscription_id}/solde")
+        if err:
+            return None, err
+        return data, None
+
+    def suivi_mensuel_inscription(self, inscription_id):
+        data, err = _request("GET", f"/inscriptions/{inscription_id}/suivi-mensuel")
+        if err:
+            return None, err
+        return data, None
 
     def bilan_annee(self, annee_scolaire):
         data, err = _request("GET", f"/paiement/bilan/{annee_scolaire}")
@@ -200,6 +281,12 @@ class ApiClient:
             return None, err
         return data.get("paiement", []), None
 
+    def bilan_eleve(self, nom, prenom):
+        data, err = _request("GET", f"/paiement/bilan/eleve/{nom}/{prenom}")
+        if err:
+            return None, err
+        return data.get("paiement", []), None
+
     def bilan_classe(self, classe_id):
         data, err = _request("GET", f"/paiement/bilan/classe/{classe_id}")
         if err:
@@ -212,17 +299,9 @@ class ApiClient:
             return None, err
         return data.get("paiement", []), None
 
-    def ajouter_paiement(self, donnees):
-        return _request("POST", "/paiement", json=donnees)
-
-    def modifier_paiement(self, identifiant, donnees):
-        return _request("PUT", f"/modifierPaiement/{identifiant}", json=donnees)
-
-    def supprimer_paiement(self, identifiant):
-        return _request("DELETE", f"/supprimerPaiement/{identifiant}")
+    # ---- Enseignants, matieres et programmes ----
 
     def total_enseignant(self):
-        # nombre total d'enseignants cote serveur
         data, err = _request("GET", "/total_enseignant")
         if err:
             return None, err
@@ -249,63 +328,17 @@ class ApiClient:
     def supprimer_enseignant(self, identifiant):
         return _request("DELETE", f"/supprimerEnseignant/{identifiant}")
 
-    def cycles(self):
-        data, err = _request("GET", "/cycle")
-        if err:
-            return None, err
-        return data.get("cycle", []), None
-
-    def total_cycle(self):
-        data, err = _request("GET", "/total_cycle")
-        if err:
-            return None, err
-        return data.get("total_cycle"), None
-
-    def ajouter_cycle(self, nom):
-        return _request("POST", "/cycle", json={"nom": nom})
-
-    def modifier_cycle(self, identifiant, donnees):
-        return _request("PUT", f"/modifierCycle/{identifiant}", json=donnees)
-
-    def supprimer_cycle(self, identifiant):
-        return _request("DELETE", f"/supprimerCycle/{identifiant}")
-
-    def total_note(self):
-        # nombre total de notes cote serveur
-        data, err = _request("GET", "/total_note")
-        if err:
-            return None, err
-        return data.get("total_note"), None
-
-    def notes(self):
-        data, err = _request("GET", "/note")
-        if err:
-            return None, err
-        return data.get("note", []), None
-
-    def notes_eleve(self, nom, prenom):
-        data, err = _request("GET", f"/note/eleve/{nom}/{prenom}")
-        if err:
-            return None, err
-        return data.get("note", []), None
-
-    def moyenne(self, nom, prenom, type_evaluation):
-        data, err = _request("GET", f"/moyenne/{nom}/{prenom}/{type_evaluation}")
-        if err:
-            return None, err
-        return data, None
-
-    def bulletin(self, nom, prenom, trimestre):
-        data, err = _request("GET", f"/bulletin/{nom}/{prenom}/{trimestre}")
-        if err:
-            return None, err
-        return data, None
-
     def matieres(self):
         data, err = _request("GET", "/matiere")
         if err:
             return None, err
         return data.get("matieres", []), None
+
+    def matiere_par_id(self, identifiant):
+        data, err = _request("GET", f"/matiere/{identifiant}")
+        if err:
+            return None, err
+        return data.get("matiere"), None
 
     def ajouter_matiere(self, nom):
         return _request("POST", "/matiere", json={"nom": nom})
@@ -334,25 +367,48 @@ class ApiClient:
     def supprimer_programme(self, identifiant):
         return _request("DELETE", f"/supprimerProgramme/{identifiant}")
 
-    def ajouter_annee_scolaire(self, libelle, date_debut, date_fin, est_active=False):
-        return _request("POST", "/ajouter_annee_scolaire", json={
-            "libelle": libelle, "date_debut": date_debut,
-            "date_fin": date_fin, "est_active": est_active})
+    # ---- Notes, bulletins et presences ----
 
-    def lister_annees_scolaires(self):
-        data, err = _request("GET", "/lister_annees_scolaires")
+    def total_note(self):
+        data, err = _request("GET", "/total_note")
         if err:
             return None, err
-        return data.get("annees_scolaires", []), None
+        return data.get("total_note"), None
 
-    def annee_scolaire_active(self):
-        data, err = _request("GET", "/annee_scolaire_active")
+    def notes(self):
+        data, err = _request("GET", "/note")
         if err:
             return None, err
-        return data.get("annee_scolaire_active"), None
+        return data.get("note", []), None
+
+    def notes_eleve(self, nom, prenom):
+        data, err = _request("GET", f"/note/eleve/{nom}/{prenom}")
+        if err:
+            return None, err
+        return data.get("note", []), None
+
+    def ajouter_note(self, donnees):
+        return _request("POST", "/note", json=donnees)
+
+    def modifier_note(self, identifiant, donnees):
+        return _request("PUT", f"/modifierNote/{identifiant}", json=donnees)
+
+    def supprimer_note(self, identifiant):
+        return _request("DELETE", f"/supprimerNote/{identifiant}")
+
+    def moyenne(self, nom, prenom, type_evaluation):
+        data, err = _request("GET", f"/moyenne/{nom}/{prenom}/{type_evaluation}")
+        if err:
+            return None, err
+        return data, None
+
+    def bulletin(self, nom, prenom, trimestre):
+        data, err = _request("GET", f"/bulletin/{nom}/{prenom}/{trimestre}")
+        if err:
+            return None, err
+        return data, None
 
     def total_presence(self, classe):
-        # nombre total de presences pour une classe cote serveur
         data, err = _request("GET", f"/total_presence/{classe}")
         if err:
             return None, err

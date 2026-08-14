@@ -6,11 +6,10 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QFontDatabase
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
-import config
-from config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE
+from core.config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE
 from database import db
-from views.login_view import LoginDialog
-from views.main_view import MainWindow
+from ui.login_view import LoginDialog
+from ui.main_view import MainWindow
 
 # rend l'interface nette sur les ecrans haute resolution
 def _setup_high_dpi():

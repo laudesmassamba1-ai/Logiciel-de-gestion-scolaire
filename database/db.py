@@ -1,7 +1,7 @@
 import hashlib
 import sqlite3
 
-from config import DB_PATH, DEFAULT_ACCOUNTS, DEFAULT_MATIERES, DOCS_DIR, VILLE_DEFAUT, PAYS_DEFAUT
+from core.config import DB_PATH, DEFAULT_ACCOUNTS, DEFAULT_MATIERES, DOCS_DIR, VILLE_DEFAUT, PAYS_DEFAUT
 
 # tout le schema de la base : une table par domaine (eleves, notes, caisse...)
 SCHEMA = """
@@ -114,6 +114,15 @@ CREATE TABLE IF NOT EXISTS personnel (
 CREATE TABLE IF NOT EXISTS parametres (
     cle   TEXT PRIMARY KEY,
     valeur TEXT
+);
+
+CREATE TABLE IF NOT EXISTS file_attente_synchro (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    endpoint   TEXT NOT NULL,
+    method     TEXT NOT NULL,
+    payload    TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    status     TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'FAILED'))
 );
 """
 
@@ -232,3 +241,26 @@ class Database:
             conn.commit()
         finally:
             conn.close()
+
+    # met une operation hors ligne dans la file d'attente de synchronisation
+    def enqueue(self, method, endpoint, payload):
+        return self.execute(
+            """INSERT INTO file_attente_synchro (endpoint, method, payload, status)
+               VALUES (?, ?, ?, 'PENDING')""",
+            (endpoint, method, payload))
+
+    # renvoie les operations en attente, de la plus ancienne a la plus recente
+    def dequeue_pending(self, limit=50):
+        return self.query(
+            """SELECT * FROM file_attente_synchro WHERE status = 'PENDING'
+               ORDER BY id LIMIT ?""", (limit,))
+
+    # operation envoyee avec succes : on la retire de la file
+    def mark_queue_done(self, queue_id):
+        self.execute("DELETE FROM file_attente_synchro WHERE id = ?", (queue_id,))
+
+    # operation qui a echoue : on la marque pour qu'on puisse la relire
+    def mark_queue_failed(self, queue_id):
+        self.execute(
+            "UPDATE file_attente_synchro SET status = 'FAILED' WHERE id = ?",
+            (queue_id,))

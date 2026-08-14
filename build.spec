@@ -36,5 +36,4 @@ exe = EXE(
     upx=False,
     console=False,
     icon=None,
-    manifest=str(project_root / 'win_dpi_manifest.xml'),
 )

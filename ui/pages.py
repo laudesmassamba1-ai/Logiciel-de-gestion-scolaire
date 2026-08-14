@@ -10,13 +10,14 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QCheckBox, QFormLayout, QWidget,
 )
 
-from config import JOURS, CRENEAUX, PERIODES, ROLE_LABELS
+from api import client
+from core.config import JOURS, CRENEAUX, PERIODES, ROLE_LABELS
 from database.db import hash_password
-from models import repos
-from services import api, auth, reports
+from repositories import repos
+from services import auth, reports
 from services.auth import RoleAuthorizer
-from views.loader import apply_ui
-from views.widgets import SimpleBarChart, SimplePieChart, fmt_money
+from ui.loader import apply_ui
+from ui.widgets import SimpleBarChart, SimplePieChart, fmt_money
 
 # contient les infos communes a toutes les pages (utilisateur, navigation)
 class PageContext:
@@ -104,7 +105,7 @@ def dashboard_directeur(page, ctx):
         enseignants = repos.enseignants()
         page.vk1_val.setText(fmt_money(masse))
 
-        nb_ens_api, _ = api.client.total_enseignant()
+        nb_ens_api, _ = client.total_enseignant()
         page.vk2_val.setText(
             f"{nb_ens_api} Enseignants" if nb_ens_api is not None
             else f"{len(enseignants)} Enseignants")
@@ -113,7 +114,7 @@ def dashboard_directeur(page, ctx):
         frais = float(repos.parametres().get("frais_scolarite", "25000") or 0)
         _, _, solde = repos.caisse_totals()
         total_eleves = repos.stats_dashboard()["total_eleves"]
-        encaisse_api, _ = api.client.total_montant_paiement()
+        encaisse_api, _ = client.total_montant_paiement()
         if encaisse_api is not None:
             solde = float(encaisse_api)
         attendu = frais * total_eleves
@@ -132,7 +133,7 @@ def dashboard_directeur(page, ctx):
             fonctions = {}
             src = repos.personnel()
             if not src:
-                enseignants_api, _ = api.client.enseignants()
+                enseignants_api, _ = client.enseignants()
                 src = enseignants_api or []
             for p in src:
                 f = p.get("fonction") or p.get("statut") or "Autre"
@@ -207,11 +208,11 @@ def dashboard_gestionnaire(page, ctx):
     def refresh():
         page.lbl_date.setText(_today_fr())
         stats = repos.stats_dashboard()
-        total_api, _ = api.client.total_eleves()
+        total_api, _ = client.total_eleves()
         page.lbl_kpi1_valeur.setText(
             str(total_api) if total_api is not None else str(stats["total_eleves"]))
         page.lbl_kpi2_valeur.setText(str(stats["inscriptions_jour"]))
-        enc_api, _ = api.client.total_montant_paiement()
+        enc_api, _ = client.total_montant_paiement()
         encaisse = float(enc_api) if enc_api is not None else stats["encaissements_jour"]
         page.lbl_kpi3_valeur.setText(fmt_money(encaisse))
         page.lbl_kpi4_valeur.setText(str(stats["dossiers_incomplets"]))
@@ -241,7 +242,7 @@ def dashboard_gestionnaire(page, ctx):
 
         try:
             statuts = {}
-            eleves_api, _ = api.client.eleve_recherche()
+            eleves_api, _ = client.eleve_recherche()
             source = eleves_api if eleves_api else repos.eleves()
             for e in source:
                 s = e.get("statut") or "inconnu"

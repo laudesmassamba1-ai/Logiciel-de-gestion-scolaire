@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import QSizePolicy, QTableView
 from PyQt5.uic import loadUi
 
-from config import UI_DIR
+from core.config import UI_DIR
 
 # rend le widget (et ses tableaux) extensibles pour occuper la fenetre
 def _make_responsive(widget):
