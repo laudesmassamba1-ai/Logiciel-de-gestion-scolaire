@@ -25,7 +25,7 @@ def _pick_base_font() -> QFont:
     familles = list(APP_FONT_FALLBACK)
     if APP_FONT_FAMILY not in familles:
         familles.insert(0, APP_FONT_FAMILY)
-    disponibles = set(QFontDatabase.families())
+    disponibles = set(QFontDatabase().families())
     for famille in familles:
         if famille in disponibles:
             return QFont(famille, APP_FONT_SIZE)
