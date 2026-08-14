@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PageGestionnaire</class>
+ <widget class="QWidget" name="PageGestionnaire">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Espace Gestionnaire</string>
+  </property>
+  <property name="styleSheet">
+   <string>background-color: #f8fafc; font-family: 'Segoe UI', sans-serif;</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>20</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+
+   <!-- EN-TETE : salutation personnalisee, mise a jour par le controller au login -->
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <layout class="QVBoxLayout" name="titleLayout">
+       <item>
+        <widget class="QLabel" name="lbl_title">
+         <property name="styleSheet">
+          <string>color: #0f172a; font-size: 24px; font-weight: bold;</string>
+         </property>
+         <property name="text">
+          <string>Bonjour, Gestionnaire</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_subtitle">
+         <property name="styleSheet">
+          <string>color: #64748b; font-size: 13px;</string>
+         </property>
+         <property name="text">
+          <string>Voici un resume de la journee</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <spacer name="headerSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLabel" name="lbl_date">
+       <property name="styleSheet">
+        <string>color: #94a3b8; font-size: 13px;</string>
+       </property>
+       <property name="text">
+        <string>Mercredi 12 Aout 2026</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- CARTES KPI DU JOUR -->
+   <item>
+    <layout class="QHBoxLayout" name="kpiLayout">
+     <property name="spacing">
+      <number>15</number>
+     </property>
+     <item>
+      <widget class="QFrame" name="card_effectifs">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card_effectifs">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi1_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>EFFECTIF TOTAL</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi1_valeur">
+          <property name="styleSheet">
+           <string>color: #0f172a; font-size: 22px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="card_inscriptions_jour">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card_inscriptions">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi2_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>INSCRIPTIONS AUJOURD'HUI</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi2_valeur">
+          <property name="styleSheet">
+           <string>color: #2563eb; font-size: 22px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="card_caisse_jour">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card_caisse">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi3_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>ENCAISSEMENTS DU JOUR</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi3_valeur">
+          <property name="styleSheet">
+           <string>color: #059669; font-size: 22px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>0 FCFA</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="card_taches">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card_taches">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi4_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>DOSSIERS INCOMPLETS</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi4_valeur">
+          <property name="styleSheet">
+           <string>color: #d97706; font-size: 22px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- GRAPHIQUES : repartition des statuts des eleves (graphe circulaire) -->
+   <item>
+    <widget class="QFrame" name="container_chart_statuts">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>280</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+     </property>
+     <layout class="QVBoxLayout" name="layout_chart_statuts">
+      <property name="leftMargin"><number>15</number></property>
+      <property name="topMargin"><number>12</number></property>
+      <property name="rightMargin"><number>15</number></property>
+      <property name="bottomMargin"><number>12</number></property>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ACTIONS RAPIDES : le coeur du travail quotidien du gestionnaire -->
+   <item>
+    <widget class="QFrame" name="card_actions_rapides">
+     <property name="styleSheet">
+      <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+     </property>
+     <layout class="QVBoxLayout" name="layout_actions_rapides">
+      <property name="leftMargin">
+       <number>15</number>
+      </property>
+      <property name="topMargin">
+       <number>15</number>
+      </property>
+      <property name="rightMargin">
+       <number>15</number>
+      </property>
+      <property name="bottomMargin">
+       <number>15</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_actions_titre">
+        <property name="styleSheet">
+         <string>color: #0f172a; font-weight: bold; font-size: 14px;</string>
+        </property>
+        <property name="text">
+         <string>Actions Rapides</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="actionsButtonsLayout">
+        <property name="spacing">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_quick_inscrire">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #2563eb; color: #ffffff; border: none; border-radius: 6px; padding: 12px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>+ Inscrire un Eleve</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_quick_recette">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #059669; color: #ffffff; border: none; border-radius: 6px; padding: 12px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>+ Nouvelle Recette</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_quick_depense">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #f8fafc; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 12px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>+ Nouvelle Depense</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_quick_certificat">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #f8fafc; color: #334155; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; font-weight: bold;</string>
+          </property>
+          <property name="text">
+           <string>Imprimer un Certificat</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ACTIVITE RECENTE + DOSSIERS A COMPLETER -->
+   <item>
+    <layout class="QHBoxLayout" name="bottomLayout">
+     <property name="spacing">
+      <number>15</number>
+     </property>
+     <item>
+      <widget class="QFrame" name="card_activite">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_activite">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>15</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>15</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_activite_titre">
+          <property name="styleSheet">
+           <string>color: #0f172a; font-weight: bold; font-size: 14px;</string>
+          </property>
+          <property name="text">
+           <string>Activite Recente</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="list_activite_recente">
+          <property name="styleSheet">
+           <string>border: none; font-size: 13px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_activite_empty">
+          <property name="styleSheet">
+           <string>color: #94a3b8; font-size: 12px; padding: 10px; qproperty-alignment: AlignCenter;</string>
+          </property>
+          <property name="text">
+           <string>Aucune activite pour le moment</string>
+          </property>
+          <property name="visible">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="card_dossiers_incomplets">
+       <property name="minimumSize">
+        <size>
+         <width>320</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>320</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_dossiers">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>15</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>15</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_dossiers_titre">
+          <property name="styleSheet">
+           <string>color: #0f172a; font-weight: bold; font-size: 14px;</string>
+          </property>
+          <property name="text">
+           <string>Dossiers a Completer</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="list_dossiers_incomplets">
+          <property name="styleSheet">
+           <string>border: none; font-size: 13px;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

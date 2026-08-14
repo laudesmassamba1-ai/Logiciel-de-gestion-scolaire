@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PagePlanning</class>
+ <widget class="QWidget" name="PagePlanning">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>850</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Emploi du Temps</string>
+  </property>
+  <property name="styleSheet">
+   <string>background-color: #f8fafc; font-family: 'Segoe UI', sans-serif;</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>20</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+
+   <!-- EN-TETE -->
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <layout class="QVBoxLayout" name="titleLayout">
+       <item>
+        <widget class="QLabel" name="lbl_page_title">
+         <property name="styleSheet">
+          <string>color: #0f172a; font-size: 24px; font-weight: bold;</string>
+         </property>
+         <property name="text">
+          <string>Emploi du Temps</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_page_subtitle">
+         <property name="styleSheet">
+          <string>color: #64748b; font-size: 13px;</string>
+         </property>
+         <property name="text">
+          <string>Planning hebdomadaire par classe</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <spacer name="headerSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_edit_planning">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="styleSheet">
+        <string>background-color: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+       </property>
+       <property name="text">
+        <string>Modifier</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_print_planning">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="styleSheet">
+        <string>background-color: #047857; color: white; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+       </property>
+       <property name="text">
+        <string>Imprimer</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- SELECTEUR DE CLASSE -->
+   <item>
+    <widget class="QFrame" name="selectorBar">
+     <property name="styleSheet">
+      <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+     </property>
+     <layout class="QHBoxLayout" name="selectorLayout">
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_selector">
+        <property name="styleSheet">
+         <string>color: #334155; font-weight: bold;</string>
+        </property>
+        <property name="text">
+         <string>Classe :</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="combo_classe_planning">
+        <property name="minimumSize">
+         <size>
+          <width>220</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px;</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>-- Choisir une classe --</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <spacer name="selectorSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_legend_libre">
+        <property name="styleSheet">
+         <string>color: #94a3b8; font-size: 11px;</string>
+        </property>
+        <property name="text">
+         <string>Case vide = creneau libre</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- GRILLE HEBDOMADAIRE -->
+   <item>
+    <widget class="QTableWidget" name="table_planning">
+     <property name="styleSheet">
+      <string>
+       QTableWidget {
+           background-color: #ffffff;
+           border: 1px solid #e2e8f0;
+           border-radius: 8px;
+           gridline-color: #f1f5f9;
+           font-size: 12px;
+       }
+       QHeaderView::section {
+           background-color: #f8fafc;
+           color: #475569;
+           font-weight: bold;
+           padding: 8px;
+           border: none;
+           border-bottom: 1px solid #e2e8f0;
+       }
+       QTableWidget::item {
+           padding: 4px;
+           border-bottom: 1px solid #f1f5f9;
+       }
+      </string>
+     </property>
+     <property name="editTriggers">
+      <set>QAbstractItemView::NoEditTriggers</set>
+     </property>
+     <property name="showGrid">
+      <bool>true</bool>
+     </property>
+     <property name="rowCount">
+      <number>8</number>
+     </property>
+     <row>
+      <property name="text">
+       <string>07h30 - 08h20</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>08h20 - 09h10</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>09h10 - 10h00</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>10h00 - 10h20 (Pause)</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>10h20 - 11h10</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>11h10 - 12h00</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>12h00 - 13h30 (Pause dejeuner)</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>13h30 - 14h20</string>
+      </property>
+     </row>
+     <column>
+      <property name="text">
+       <string>Lundi</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Mardi</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Mercredi</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Jeudi</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Vendredi</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Samedi</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+
+   <!-- ETAT VIDE : affiche si aucune classe n'est selectionnee -->
+   <item>
+    <widget class="QLabel" name="lbl_empty_state_planning">
+     <property name="styleSheet">
+      <string>color: #94a3b8; font-size: 13px; padding: 30px; qproperty-alignment: AlignCenter;</string>
+     </property>
+     <property name="text">
+      <string>Selectionnez une classe pour afficher son emploi du temps.</string>
+     </property>
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PageClasses</class>
+ <widget class="QWidget" name="PageClasses">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>850</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Gestion des Classes</string>
+  </property>
+  <property name="styleSheet">
+   <string>background-color: #f8fafc; font-family: 'Segoe UI', sans-serif;</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>20</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+
+   <!-- EN-TETE ET ACTIONS -->
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <layout class="QVBoxLayout" name="titleLayout">
+       <item>
+        <widget class="QLabel" name="lbl_page_title">
+         <property name="styleSheet">
+          <string>color: #0f172a; font-size: 24px; font-weight: bold;</string>
+         </property>
+         <property name="text">
+          <string>Gestion des Classes</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_page_subtitle">
+         <property name="styleSheet">
+          <string>color: #64748b; font-size: 13px;</string>
+         </property>
+         <property name="text">
+          <string>Niveaux, effectifs et titulaires de chaque classe</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <spacer name="headerSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_add_classe">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="styleSheet">
+        <string>background-color: #047857; color: white; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+       </property>
+       <property name="text">
+        <string>+ Nouvelle Classe</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- CARTES KPI -->
+   <item>
+    <layout class="QHBoxLayout" name="kpiLayout">
+     <property name="spacing">
+      <number>15</number>
+     </property>
+     <item>
+      <widget class="QFrame" name="card_total_classes">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card1">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi1_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>TOTAL CLASSES</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi1_valeur">
+          <property name="styleSheet">
+           <string>color: #0f172a; font-size: 22px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="card_effectif_total">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card2">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi2_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>EFFECTIF TOTAL</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi2_valeur">
+          <property name="styleSheet">
+           <string>color: #2563eb; font-size: 22px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="card_classes_completes">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card3">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi3_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>CLASSES COMPLETES</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi3_valeur">
+          <property name="styleSheet">
+           <string>color: #d97706; font-size: 22px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="card_sans_titulaire">
+       <property name="styleSheet">
+        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+       </property>
+       <layout class="QVBoxLayout" name="layout_card4">
+        <property name="leftMargin">
+         <number>15</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>15</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_kpi4_titre">
+          <property name="styleSheet">
+           <string>color: #64748b; font-size: 11px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>SANS TITULAIRE</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_kpi4_valeur">
+          <property name="styleSheet">
+           <string>color: #dc2626; font-size: 22px; font-weight: bold; border: none;</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- BARRE DE RECHERCHE / FILTRES -->
+   <item>
+    <widget class="QFrame" name="filterBar">
+     <property name="styleSheet">
+      <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+     </property>
+     <layout class="QHBoxLayout" name="filterLayout">
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLineEdit" name="input_search_classe">
+        <property name="styleSheet">
+         <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px;</string>
+        </property>
+        <property name="placeholderText">
+         <string>Rechercher par nom de classe...</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="combo_filter_niveau">
+        <property name="styleSheet">
+         <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px;</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Tous les niveaux</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_apply_filter_classe">
+        <property name="styleSheet">
+         <string>background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 16px; font-weight: bold;</string>
+        </property>
+        <property name="text">
+         <string>Filtrer</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- TABLEAU DES CLASSES -->
+   <item>
+    <widget class="QTableWidget" name="table_classes">
+     <property name="styleSheet">
+      <string>
+       QTableWidget {
+           background-color: #ffffff;
+           border: 1px solid #e2e8f0;
+           border-radius: 8px;
+           gridline-color: #f1f5f9;
+           font-size: 13px;
+       }
+       QHeaderView::section {
+           background-color: #f8fafc;
+           color: #475569;
+           font-weight: bold;
+           padding: 10px;
+           border: none;
+           border-bottom: 1px solid #e2e8f0;
+       }
+       QTableWidget::item {
+           padding: 6px;
+           border-bottom: 1px solid #f1f5f9;
+       }
+      </string>
+     </property>
+     <property name="editTriggers">
+      <set>QAbstractItemView::NoEditTriggers</set>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectRows</enum>
+     </property>
+     <property name="alternatingRowColors">
+      <bool>true</bool>
+     </property>
+     <property name="showGrid">
+      <bool>false</bool>
+     </property>
+     <column>
+      <property name="text">
+       <string>Nom de la Classe</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Niveau</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Effectif</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Capacite Max</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Titulaire</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Salle</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Actions</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+
+   <!-- ETAT VIDE : le controller affiche ce label (et masque table_classes) quand la liste est vide -->
+   <item>
+    <widget class="QLabel" name="lbl_empty_state_classes">
+     <property name="styleSheet">
+      <string>color: #94a3b8; font-size: 13px; padding: 30px; qproperty-alignment: AlignCenter;</string>
+     </property>
+     <property name="text">
+      <string>Aucune classe enregistree. Cliquez sur "+ Nouvelle Classe" pour commencer.</string>
+     </property>
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

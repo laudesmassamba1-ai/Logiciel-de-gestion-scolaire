@@ -1,0 +1,496 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FormInscriptionEleve</class>
+ <widget class="QWidget" name="FormInscriptionEleve">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1150</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Dossier d'Inscription Complet</string>
+  </property>
+  <property name="styleSheet">
+   <string>background-color: #f8fafc; font-family: sans-serif;</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_Main">
+   <property name="spacing">
+    <number>15</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <!-- EN-TETE : TYPE D'OPERATION -->
+    <layout class="QHBoxLayout" name="horizontalLayout_Header">
+     <item>
+      <widget class="QLabel" name="lbl_title">
+       <property name="styleSheet">
+        <string>font-size: 20px; font-weight: bold; color: #0f172a;</string>
+       </property>
+       <property name="text">
+        <string>Dossier d'Inscription &amp; Reinscription</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_Header">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QRadioButton" name="radio_new">
+       <property name="styleSheet">
+        <string>font-weight: bold; color: #0f172a; font-size: 13px;</string>
+       </property>
+       <property name="text">
+        <string>Nouvelle Inscription</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QRadioButton" name="radio_reins">
+       <property name="styleSheet">
+        <string>font-weight: bold; color: #0f172a; font-size: 13px;</string>
+       </property>
+       <property name="text">
+        <string>Reinscription</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <!-- ZONE FORMULAIRE SCROLLABLE -->
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="styleSheet">
+      <string>border: none; background: transparent;</string>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollContent">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>1090</width>
+        <height>680</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_Scroll">
+       <property name="spacing">
+        <number>15</number>
+       </property>
+
+       <!-- SECTION 1 : IDENTITE ELEVE & AFFECTATION -->
+       <item>
+        <widget class="QFrame" name="card_eleve">
+         <property name="styleSheet">
+          <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_Card1">
+          <item>
+           <widget class="QLabel" name="lbl_sec1">
+            <property name="styleSheet">
+             <string>font-size: 14px; font-weight: bold; color: #2563eb; border: none;</string>
+            </property>
+            <property name="text">
+             <string>1. Identite de l'Eleve &amp; Affectation Pedagogique</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QGridLayout" name="gridLayout_Eleve">
+            <property name="horizontalSpacing">
+             <number>15</number>
+            </property>
+            <property name="verticalSpacing">
+             <number>10</number>
+            </property>
+            <item row="0" column="0">
+             <widget class="QLineEdit" name="input_nom">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Nom de famille *</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="input_prenom">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Prenoms *</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QComboBox" name="combo_sexe">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <item>
+               <property name="text">
+                <string>Sexe : Masculin</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Sexe : Feminin</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QDateEdit" name="date_naissance">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="displayFormat">
+               <string>dd/MM/yyyy</string>
+              </property>
+              <property name="calendarPopup">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="input_lieu_naiss">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Lieu de naissance</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="2">
+             <!-- BLOC SELECTION / AJOUT DE CLASSE -->
+             <layout class="QHBoxLayout" name="horizontalLayout_Classe">
+              <property name="spacing">
+               <number>5</number>
+              </property>
+              <item>
+               <widget class="QComboBox" name="combo_classe">
+                <property name="styleSheet">
+                 <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>-- Choisir la classe (depuis BDD) --</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_add_classe">
+                <property name="toolTip">
+                 <string>Ajouter une nouvelle classe manuellement</string>
+                </property>
+                <property name="styleSheet">
+                 <string>background-color: #0284c7; color: white; font-weight: bold; border-radius: 6px; padding: 8px 12px;</string>
+                </property>
+                <property name="text">
+                 <string>+ Classe</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item row="2" column="0" colspan="3">
+             <widget class="QLineEdit" name="input_ecole_provenance">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Etablissement scolaire de provenance (facultatif pour les nouveaux)</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- SECTION 2 : PARENTS ET NUMEROS DE TELEPHONE -->
+       <item>
+        <widget class="QFrame" name="card_parents">
+         <property name="styleSheet">
+          <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_Card2">
+          <item>
+           <widget class="QLabel" name="lbl_sec2">
+            <property name="styleSheet">
+             <string>font-size: 14px; font-weight: bold; color: #2563eb; border: none;</string>
+            </property>
+            <property name="text">
+             <string>2. Coordonnees des Parents &amp; Contacts d'Urgence</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QGridLayout" name="gridLayout_Parents">
+            <property name="horizontalSpacing">
+             <number>15</number>
+            </property>
+            <property name="verticalSpacing">
+             <number>10</number>
+            </property>
+            <!-- PERE -->
+            <item row="0" column="0">
+             <widget class="QLineEdit" name="input_pere_nom">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Nom &amp; Prenom du Pere</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="input_pere_tel">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Telephone du Pere</string>
+              </property>
+             </widget>
+            </item>
+            <!-- MERE -->
+            <item row="1" column="0">
+             <widget class="QLineEdit" name="input_mere_nom">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Nom &amp; Prenom de la Mere</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="input_mere_tel">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Telephone de la Mere</string>
+              </property>
+             </widget>
+            </item>
+            <!-- TUTEUR RESPONSABLE (WHATSAPP / ADRESSE) -->
+            <item row="2" column="0">
+             <widget class="QLineEdit" name="input_tuteur_nom">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Tuteur Legal / Contact d'urgence *</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLineEdit" name="input_tuteur_tel">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Tel Principal Tuteur (Notif WhatsApp) *</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0" colspan="2">
+             <widget class="QLineEdit" name="input_adresse_famille">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Adresse de residence de la famille (Quartier / Ville)</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- SECTION 3 : PIECES & FRAIS DE SCOLARITE -->
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_BottomCards">
+         <property name="spacing">
+          <number>15</number>
+         </property>
+         <!-- CHECKLIST PIECES -->
+         <item>
+          <widget class="QFrame" name="card_pieces">
+           <property name="styleSheet">
+            <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_Pieces">
+            <item>
+             <widget class="QLabel" name="lbl_sec3">
+              <property name="styleSheet">
+               <string>font-size: 14px; font-weight: bold; color: #2563eb; border: none;</string>
+              </property>
+              <property name="text">
+               <string>3. Pieces du Dossier</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="check_acte">
+              <property name="text">
+               <string>Acte de naissance (Copie certifiee)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="check_photos">
+              <property name="text">
+               <string>2 Photos d'identite recentes</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="check_bulletin">
+              <property name="text">
+               <string>Dernier bulletin de notes</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <!-- REGLEMENT DE CAISSE INITIAL -->
+         <item>
+          <widget class="QFrame" name="card_caisse">
+           <property name="styleSheet">
+            <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_Caisse">
+            <item>
+             <widget class="QLabel" name="lbl_sec4">
+              <property name="styleSheet">
+               <string>font-size: 14px; font-weight: bold; color: #2563eb; border: none;</string>
+              </property>
+              <property name="text">
+               <string>4. Premier Versement (Caisse)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="input_montant_verse">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <property name="placeholderText">
+               <string>Montant verse (Droits / Acompte)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="combo_mode_reglement">
+              <property name="styleSheet">
+               <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background-color: #ffffff; color: #0f172a;</string>
+              </property>
+              <item>
+               <property name="text">
+                <string>Mode : Especes</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Mode : Mobile Money (MTN / Moov)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Mode : Cheque / Virement</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+
+      </layout>
+     </widget>
+    </widget>
+   </item>
+
+   <!-- BOUTONS D'ACTION (PIED DE PAGE) -->
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_Actions">
+     <item>
+      <spacer name="horizontalSpacer_Actions">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_cancel">
+       <property name="styleSheet">
+        <string>background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 20px; font-weight: bold;</string>
+       </property>
+       <property name="text">
+        <string>Annuler</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_save">
+       <property name="styleSheet">
+        <string>background-color: #16a34a; color: #ffffff; border-radius: 6px; padding: 10px 22px; font-weight: bold;</string>
+       </property>
+       <property name="text">
+        <string>Enregistrer &amp; Imprimer Reçu</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

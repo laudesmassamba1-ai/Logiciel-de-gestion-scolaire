@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Gestion Scolaire</string>
+  </property>
+  <property name="styleSheet">
+   <string>
+    QMainWindow { background-color: #f1f5f9; }
+    #sidebar { background-color: #047857; }
+    #sidebar QPushButton {
+        color: #ffffff;
+        text-align: left;
+        padding: 12px 20px;
+        border: none;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    #sidebar QPushButton:hover { background-color: #065f46; }
+    #sidebar QPushButton:checked {
+        background-color: #064e3b;
+        border-left: 4px solid #34d399;
+    }
+    #userBox { background-color: #065f46; border-top: 1px solid #0e5c46; }
+    #lbl_user_name { color: #ffffff; font-size: 13px; font-weight: bold; }
+    #lbl_user_role { color: #6ee7b7; font-size: 11px; }
+    #btn_logout {
+        color: #fca5a5;
+        text-align: left;
+        border: none;
+        font-size: 12px;
+        padding: 4px 0px;
+    }
+    #btn_logout:hover { color: #ffffff; }
+   </string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="mainLayout">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+
+    <!-- MENU LATERAL -->
+    <item>
+     <widget class="QFrame" name="sidebar">
+      <property name="minimumSize">
+       <size>
+        <width>250</width>
+        <height>900</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>250</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <property name="spacing">
+        <number>5</number>
+       </property>
+       <property name="topMargin">
+        <number>20</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_logo">
+         <property name="styleSheet">
+          <string>color: #ffffff; font-size: 18px; font-weight: bold; padding-left: 15px; margin-bottom: 20px;</string>
+         </property>
+         <property name="text">
+          <string>Gestion Scolaire</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+
+       <!-- RESERVE A L'ADMIN : controller.py n'affiche QUE ce bouton (masque tous les autres) si role == "admin" -->
+       <item>
+        <widget class="QPushButton" name="btn_nav_comptes">
+         <property name="text">
+          <string>Gestion des Comptes</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+
+       <!-- BOUTONS DE NAVIGATION COMMUNS -->
+       <item>
+        <widget class="QPushButton" name="btn_nav_dashboard">
+         <property name="text">
+          <string>Tableau de bord</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_eleves">
+         <property name="text">
+          <string>Liste des Eleves</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_caisse">
+         <property name="text">
+          <string>Gestion Caisse</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_classes">
+         <property name="text">
+          <string>Classes</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_notes">
+         <property name="text">
+          <string>Notes et Bulletins</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_planning">
+         <property name="text">
+          <string>Emploi du Temps</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+
+       <!-- RESERVE AU DIRECTEUR : controller.py masque ces boutons si role != "directeur" -->
+       <item>
+        <widget class="QPushButton" name="btn_nav_personnel">
+         <property name="text">
+          <string>Personnel &amp;&amp; RH</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_parametres">
+         <property name="text">
+          <string>Parametres Etablissement</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+
+       <!-- BLOC UTILISATEUR CONNECTE -->
+       <item>
+        <widget class="QFrame" name="userBox">
+         <layout class="QVBoxLayout" name="userBoxLayout">
+          <property name="leftMargin">
+           <number>15</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>15</number>
+          </property>
+          <property name="bottomMargin">
+           <number>15</number>
+          </property>
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_user_name">
+            <property name="text">
+             <string>Nom Utilisateur</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_user_role">
+            <property name="text">
+             <string>Role</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_logout">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Se deconnecter</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- ZONE D'AFFICHAGE CENTRALE (QStackedWidget) -->
+    <item>
+     <widget class="QStackedWidget" name="stackedWidget">
+      <property name="styleSheet">
+       <string>background-color: #f8fafc;</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
