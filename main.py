@@ -2,8 +2,13 @@ from fastapi import FastAPI, Path, HTTPException
 from datetime import date
 from pydantic import BaseModel
 from typing import Optional
-from typing import Optional
+from passlib.context import CryptContext
 import mysql.connector
+import time
+from typing import Optional
+import jwt
+import bcrypt
+from passlib.context import CryptContext
 
 app = FastAPI()
 def get_connection():
@@ -13,6 +18,18 @@ def get_connection():
         password="Josias50",
         database="ecole"
     )
+
+def hacher_mot_de_passe(mot_de_passe: str) -> str:
+    # On convertit en bytes et on tronque à 72 octets max pour éviter tout blocage
+    pwd_bytes = mot_de_passe.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
+
+
+def verifier_mot_de_passe(mot_de_passe_brut: str, hash_stocke: str) -> bool:
+    pwd_bytes = mot_de_passe_brut.encode("utf-8")[:72]
+    hash_bytes = hash_stocke.encode("utf-8")
+    return bcrypt.checkpw(pwd_bytes, hash_bytes)
 
 #affichage du nombre total d'élèves
 @app.get("/total_eleves")
@@ -91,7 +108,7 @@ def get_eleve_total_classe():
     conn.close()
     return {"eleve_total_classe": eleve_total_classe}
 
-# Modèle des données attendues dans le corps de la requête (JSON)
+# 1. Modèles Pydantic ajustés
 class Eleveajouter(BaseModel):
     nom: str
     prenom: str
@@ -100,37 +117,45 @@ class Eleveajouter(BaseModel):
     lieu_naissance: str
     adresse: str
     nom_parent: str
-    redoublant: str  # 0 pour Non, 1 pour Oui
+    redoublant: str  # "0" pour Non, "1" pour Oui
     statut: str
     classe_id: int
     telephone_parent: str
 
-# Modèle des données attendues dans le corps de la requête (JSON)
-#pour gerer les inscriptions en debut d'annee
+
+# On ne demande PAS l'inscription_id ici car il sera généré automatiquement
 class paiementAjouter(BaseModel):
-    eleve_id: Optional[int]= None
     type_frais: str
     montant: float
     mode_paiement: str
-    annee_scolaire: str
-    trimestre: str
-    classe_id: Optional[int]= None
-    mois: Optional[str]= None
+    trimestre: Optional[str] = None
+    mois: Optional[str] = None
 
-# 2. Route POST pour ajouter l'élève
+
+class RequeteAjoutEleve(BaseModel):
+    eleve: Eleveajouter
+    paiement: paiementAjouter
+
+
+# 2. Route POST corrigée
 @app.post("/eleve")
-def ajouter_eleve(eleve: Eleveajouter, paiement: paiementAjouter):
+def ajouter_eleve(payload: RequeteAjoutEleve):
+    eleve = payload.eleve
+    paiement = payload.paiement
+
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+
     try:
-
-        sql = """
+        # A. Insertion de l'élève
+        sql_eleve = """
             INSERT INTO eleve (
-            nom, prenom, sexe, date_naissance,
-            lieu_naissance, adresse, nom_parent,
-            redoublant, statut, classe_id, numero_parent) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) """
-
-        valeurs = (
+                nom, prenom, sexe, date_naissance,
+                lieu_naissance, adresse, nom_parent,
+                redoublant, statut, classe_id, numero_parent
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        valeurs_eleve = (
             eleve.nom,
             eleve.prenom,
             eleve.sexe,
@@ -142,37 +167,65 @@ def ajouter_eleve(eleve: Eleveajouter, paiement: paiementAjouter):
             eleve.statut,
             eleve.classe_id,
             eleve.telephone_parent,
-      )
+        )
+        cursor.execute(sql_eleve, valeurs_eleve)
+        eleve_id = cursor.lastrowid
 
-        cursor.execute(sql, valeurs)
+        # B. Récupération de l'année scolaire active
+        cursor.execute(
+            "SELECT id FROM annee_scolaire WHERE est_active = TRUE LIMIT 1"
+        )
+        annee_active = cursor.fetchone()
 
-        nouvel_id = cursor.lastrowid
+        if not annee_active:
+            raise Exception("Aucune année scolaire active n'a été trouvée.")
 
-        sql_paiement = """insert into paiement (eleve_id, type_frais, montant, mode_paiement, annee_scolaire, trimestre, classe_id) values ( %s, %s, %s, %s, %s, %s, %s)"""
+        annee_scolaire_id = annee_active["id"]
 
+        # C. Insertion automatique dans la table inscription
+        sql_inscription = """
+            INSERT INTO inscription (eleve_id, classe_id, annee_scolaire_id) 
+            VALUES (%s, %s, %s)
+        """
+        cursor.execute(
+            sql_inscription, (eleve_id, eleve.classe_id, annee_scolaire_id)
+        )
+        inscription_id = cursor.lastrowid  # Récupération immédiate de l'ID !
+
+        # D. Insertion du paiement lié à l'inscription
+        sql_paiement = """
+            INSERT INTO paiement (inscription_id, type_frais, montant, mode_paiement, trimestre, mois) 
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """
         valeurs_paiement = (
-            nouvel_id,
+            inscription_id,
             paiement.type_frais,
             paiement.montant,
             paiement.mode_paiement,
-            paiement.annee_scolaire,
             paiement.trimestre,
-            paiement.classe_id
+            paiement.mois,
         )
         cursor.execute(sql_paiement, valeurs_paiement)
+
+        # E. Une seule validation transactionnelle à la toute fin
         conn.commit()
+
+        return {
+            "message": "Élève, inscription et paiement enregistrés avec succès !",
+            "eleve_id": eleve_id,
+            "inscription_id": inscription_id,
+        }
 
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de l'élève et du paiement: {str(e)}")
-    finally:
-        conn.close()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de l'enregistrement : {str(e)}",
+        )
 
-    return {
-            "message": "Élève ajouté avec succès",
-            "id": nouvel_id,
-            "eleve": eleve.dict()
-        }
+    finally:
+        cursor.close()
+        conn.close()
 
 class EleveModifier(BaseModel):
     nom: Optional[str] = None
@@ -798,7 +851,6 @@ def get_paiement_par_eleve(nom: str, prenom: str) -> dict:
             paiement.montant , 
             paiement.date_paiement , 
             paiement.mode_paiement , 
-            paiement.annee_scolaire 
         FROM paiement 
         JOIN eleve ON paiement.eleve_id = eleve.id 
         WHERE eleve.nom = %s AND eleve.prenom = %s 
@@ -834,8 +886,8 @@ def ajouter_paiement(paiement: paiementAjouter):
 
     sql = """
         INSERT INTO paiement (
-            eleve_id, type_frais, montant, mode_paiement, annee_scolaire, trimestre, classe_id, mois
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            eleve_id, type_frais, montant, mode_paiement, trimestre, classe_id, mois
+        ) VALUES ( %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
@@ -843,7 +895,6 @@ def ajouter_paiement(paiement: paiementAjouter):
         paiement.type_frais,
         paiement.montant,
         paiement.mode_paiement,
-        paiement.annee_scolaire,
         paiement.trimestre,
         paiement.classe_id,
         paiement.mois
@@ -866,7 +917,6 @@ class paiementModifier(BaseModel):
     type_frais: Optional[str] = None
     montant: Optional[float] = None
     mode_paiement: Optional[str] = None
-    annee_scolaire: Optional[str] = None
     trimestre: Optional[str] = None
     classe_id: Optional[int] = None
     mois: Optional[str] = None
@@ -897,7 +947,6 @@ def put_un_paiement(id: int, paiement: paiementModifier):
             type_frais = %s,
             montant = %s,
             mode_paiement = %s,
-            annee_scolaire = %s,
             trimestre = %s,
             classe_id = %s,
             mois = %s
@@ -908,7 +957,6 @@ def put_un_paiement(id: int, paiement: paiementModifier):
         existant["type_frais"],
         existant["montant"],
         existant["mode_paiement"],
-        existant["annee_scolaire"],
         existant["trimestre"],
         existant["classe_id"],
         existant["mois"],
@@ -970,14 +1018,13 @@ def get_note_par_eleve(nom: str, prenom: str)-> dict:
 
 # Modèle des données attendues dans le corps de la requête (JSON)
 class noteAjouter(BaseModel):
-    eleve_id: int
+    inscription_id: int
+    matiere_id: int
     type_evaluation: str
     note: float
     note_sur: int
     date_evaluation: str
     trimestre: str
-    annee_scolaire: str
-    matiere_id: int
 
 # 2. Route POST pour ajouter une note
 @app.post("/note")
@@ -987,18 +1034,17 @@ def ajouter_note(note: noteAjouter):
 
     sql = """
         INSERT INTO note (
-            eleve_id, type_evaluation, note, note_sur, date_evaluation, trimestre, annee_scolaire, matiere_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            inscription_id, type_evaluation, note, note_sur, date_evaluation, trimestre, matiere_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
-        note.eleve_id,        
+        note.inscription_id,        
         note.type_evaluation,
         note.note,
         note.note_sur,
         note.date_evaluation,
         note.trimestre,
-        note.annee_scolaire,
         note.matiere_id
     )
 
@@ -1015,13 +1061,12 @@ def ajouter_note(note: noteAjouter):
     }
 
 class noteModifier(BaseModel):
-    eleve_id: Optional[int] = None
+    inscription_id: Optional[int] = None
     type_evaluation: Optional[str] = None
     note: Optional[float] = None
     note_sur: Optional[int] = None
     date_evaluation: Optional[str] = None
     trimestre: Optional[str] = None
-    annee_scolaire: Optional[str] = None
     matiere_id: Optional[int] = None
 
 
@@ -1033,24 +1078,22 @@ def put_un_note(id: int, note: noteModifier):
 
     sql = """
         UPDATE note
-        SET eleve_id = COALESCE(%s, eleve_id),
+        SET inscription_id = COALESCE(%s, inscription_id),
             type_evaluation = COALESCE(%s, type_evaluation),
             note = COALESCE(%s, note),
             note_sur = COALESCE(%s, note_sur),
             date_evaluation = COALESCE(%s, date_evaluation),
             trimestre = COALESCE(%s, trimestre),
-            annee_scolaire = COALESCE(%s, annee_scolaire)
             matiere_id = COALESCE(%s, matiere_id)
         WHERE  id = %s
     """
     valeurs = (
-        note.eleve_id,
+        note.inscription_id,
         note.type_evaluation,
         note.note,
         note.note_sur,
         note.date_evaluation,
         note.trimestre,
-        note.annee_scolaire,
         note.matiere_id,
         id
     )
@@ -1646,3 +1689,457 @@ def recuperer_annee_scolaire_active():
     annee_scolaire_active = cursor.fetchone()
     conn.close()
     return {"annee_scolaire_active": annee_scolaire_active}
+
+# route pour créer un tarif
+class TarifScolariteCreate(BaseModel):
+    classe_id: int
+    frais_inscription: float  # ex: 15000.00
+    montant_pension: float  # ex: 150000.00
+
+
+@app.post("/tarifs-scolarite")
+def creer_tarif_scolarite(tarif: TarifScolariteCreate):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        #recuperer l'annee scolaire en cours
+        cursor.execute("select id from annee_scolaire where est_active= true")
+        annee_scolaire=cursor.fetchone()
+
+        if not annee_scolaire:
+            raise HTTPException(
+                status_code=400,
+                detail="Aucune année scolaire active n'est définie dans la base de données.",
+            )
+
+        sql = """
+            INSERT INTO tarif_scolarite (classe_id, annee_scolaire_id, frais_inscription, montant_pension)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(
+            sql,
+            (
+                tarif.classe_id,
+                annee_scolaire,
+                tarif.frais_inscription,
+                tarif.montant_pension,
+            ),
+        )
+        conn.commit()
+        tarif_id = cursor.lastrowid
+
+        return {
+            "message": "Tarif défini avec succès pour la classe.",
+            "tarif_id": tarif_id,
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Erreur (vérifiez si un tarif n'est pas déjà configuré pour cette classe) : {str(e)}",
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+# route pour modifier un tarif existant
+class TarifScolariteUpdate(BaseModel):
+    frais_inscription: Optional[float] = None
+    montant_pension: Optional[float] = None
+
+@app.put("/tarifs-scolarite/{tarif_id}")
+def modifier_tarif_scolarite(tarif_id: int, tarif: TarifScolariteUpdate):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    updates = []
+    values = []
+
+    if tarif.frais_inscription is not None:
+        updates.append("frais_inscription = %s")
+        values.append(tarif.frais_inscription)
+
+    if tarif.montant_pension is not None:
+        updates.append("montant_pension = %s")
+        values.append(tarif.montant_pension)
+
+    if not updates:
+        cursor.close()
+        conn.close()
+        raise HTTPException(
+            status_code=400, detail="Aucune champ à mettre à jour."
+        )
+
+    values.append(tarif_id)
+    sql = f"UPDATE tarif_scolarite SET {', '.join(updates)} WHERE id = %s"
+
+    try:
+        cursor.execute(sql, tuple(values))
+        conn.commit()
+        return {"message": "Tarif de scolarité mis à jour avec succès"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500, detail=f"Erreur lors de la mise à jour : {str(e)}"
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+#lister tous les tarifs de l'annee en cours
+@app.get("/tarifs-scolarite")
+def lister_tarifs_annee_active():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    sql = """
+        SELECT 
+            t.id AS tarif_id,
+            c.id AS classe_id,
+            c.classe,
+            a.libelle AS annee_scolaire,
+            t.frais_inscription,
+            t.montant_pension,
+            (t.frais_inscription + t.montant_pension) AS total_scolarite
+        FROM tarif_scolarite t
+        JOIN classe c ON t.classe_id = c.id
+        JOIN annee_scolaire a ON t.annee_scolaire_id = a.id
+        WHERE a.est_active = TRUE
+    """
+    cursor.execute(sql)
+    tarifs = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return tarifs
+
+#obtenir le tarif precis d'une classe
+@app.get("/tarifs-scolarite/classe/{classe_id}")
+def obtenir_tarif_classe(classe_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    sql = """
+        SELECT 
+            t.id AS tarif_id,
+            c.classe,
+            a.libelle AS annee_scolaire,
+            t.frais_inscription,
+            t.montant_pension,
+            (t.frais_inscription + t.montant_pension) AS total_scolarite
+        FROM tarif_scolarite t
+        JOIN classe c ON t.classe_id = c.id
+        JOIN annee_scolaire a ON t.annee_scolaire_id = a.id
+        WHERE t.classe_id = %s AND a.est_active = TRUE
+        LIMIT 1
+    """
+    cursor.execute(sql, (classe_id,))
+    tarif = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    if not tarif:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun tarif configuré pour cette classe sur l'année scolaire active.",
+        )
+
+    return tarif
+
+#route pour supprimer un tarif
+@app.delete("/tarifs-scolarite/{tarif_id}")
+def supprimer_tarif_scolarite(tarif_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Requête de suppression
+        sql = "DELETE FROM tarif_scolarite WHERE id = %s"
+        cursor.execute(sql, (tarif_id,))
+
+        # Si aucune ligne n'a été affectée, c'est que l'ID n'existait pas
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Aucun tarif trouvé avec l'ID {tarif_id}.",
+            )
+
+        conn.commit()
+
+        return {
+            "message": f"Le tarif ID {tarif_id} a été supprimé avec succès."
+        }
+
+    except HTTPException as http_ex:
+        conn.rollback()
+        raise http_ex
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la suppression du tarif : {str(e)}",
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+#route pour calculer le reste a payer
+@app.get("/inscriptions/{inscription_id}/solde")
+def obtenir_solde_eleve(inscription_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 1. Récupérer l'inscription, l'élève, la classe et le tarif correspondant
+        sql_info = """
+            SELECT 
+                i.id AS inscription_id,
+                e.nom, e.prenom,
+                c.classe,
+                IFNULL(t.frais_inscription, 0) AS frais_inscription,
+                IFNULL(t.montant_pension, 0) AS montant_pension,
+                (IFNULL(t.frais_inscription, 0) + IFNULL(t.montant_pension, 0)) AS total_a_payer
+            FROM inscription i
+            JOIN eleve e ON i.eleve_id = e.id
+            JOIN classe c ON i.classe_id = c.id
+            LEFT JOIN tarif_scolarite t ON (t.classe_id = i.classe_id AND t.annee_scolaire_id = i.annee_scolaire_id)
+            WHERE i.id = %s
+        """
+        cursor.execute(sql_info, (inscription_id,))
+        info = cursor.fetchone()
+
+        if not info:
+            raise HTTPException(
+                status_code=404, detail="Inscription non trouvée."
+            )
+
+        # 2. Calculer le total des paiements déjà effectués pour cette inscription
+        sql_paiements = """
+            SELECT IFNULL(SUM(montant), 0) AS total_paye 
+            FROM paiement 
+            WHERE inscription_id = %s
+        """
+        cursor.execute(sql_paiements, (inscription_id,))
+        res_paye = cursor.fetchone()
+        total_paye = res_paye["total_paye"]
+
+        # 3. Calcul du reste à payer
+        total_a_payer = float(info["total_a_payer"])
+        reste_a_payer = total_a_payer - float(total_paye)
+
+        return {
+            "inscription_id": inscription_id,
+            "eleve": f"{info['nom']} {info['prenom']}",
+            "classe": info["classe"],
+            "total_a_payer": total_a_payer,
+            "total_paye": float(total_paye),
+            "reste_a_payer": reste_a_payer,
+            "statut_paiement": "SOLDE" if reste_a_payer <= 0 else "EN_RETARD",
+        }
+
+    finally:
+        cursor.close()
+        conn.close()
+
+#afficher le tarif mensuel d'un eleve
+@app.get("/inscriptions/{inscription_id}/suivi-mensuel")
+def suivi_mensuel_eleve(inscription_id: int, type_frais: str):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        sql = """
+            SELECT id, montant, mois, mode_paiement, date_paiement
+            FROM paiement
+            WHERE inscription_id = %s AND type_frais = %s AND mois IS NOT NULL
+            ORDER BY date_paiement ASC
+        """
+        cursor.execute(sql, (inscription_id, type_frais))
+        paiements = cursor.fetchall()
+
+        # Liste des mois déjà réglés
+        mois_payes = [p["mois"] for p in paiements]
+
+        return {
+            "inscription_id": inscription_id,
+            "type_frais": type_frais,
+            "mois_regles": mois_payes,
+            "details": paiements,
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+# CONFIGURATION ET UTILITAIRES SÉCURITÉ / JWT
+SECRET_KEY = "MON_SECRET_SUPER_SECURISE_A_CHANGER_EN_PROD_123456789"
+ALGORITHM = "HS256"
+TOKEN_EXPIRATION_SECONDS = 8 * 3600  # 8 heures
+
+
+# 1. Hachage des mots de passe (Version bcrypt native)
+def hacher_mot_de_passe(mot_de_passe: str) -> str:
+    pwd_bytes = mot_de_passe.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
+
+
+def verifier_mot_de_passe(mot_de_passe_brut: str, hash_stocke: str) -> bool:
+    pwd_bytes = mot_de_passe_brut.encode("utf-8")[:72]
+    hash_bytes = hash_stocke.encode("utf-8")
+    return bcrypt.checkpw(pwd_bytes, hash_bytes)
+
+
+# 2. Génération du Token JWT
+def creer_token_accès(data: dict) -> str:
+    payload = data.copy()
+    exp = time.time() + TOKEN_EXPIRATION_SECONDS
+    payload.update({"exp": exp})
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+# MODÈLES PYDANTIC
+class UtilisateurCreate(BaseModel):
+    nom: str
+    prenom: str
+    telephone: str
+    email: Optional[str] = None
+    identifiant: Optional[str] = None
+    mot_de_passe: str
+    role: str = "gestionnaire"
+
+
+class ConnexionDemande(BaseModel):
+    identifiant: str  # Accepte le téléphone, l'email ou un identifiant
+    mot_de_passe: str
+
+
+# ---------------------------------------------------------
+# ROUTES FASTAPI
+# ---------------------------------------------------------
+
+
+# 1. Créer un compte utilisateur
+@app.post("/utilisateurs")
+def creer_utilisateur(user: UtilisateurCreate):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        mdp_hache = hacher_mot_de_passe(user.mot_de_passe)
+
+        sql = """
+            INSERT INTO utilisateur (nom, prenom, telephone, email, identifiant, mot_de_passe, role)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        valeurs = (
+            user.nom,
+            user.prenom,
+            user.telephone,
+            user.email,
+            user.identifiant,
+            mdp_hache,
+            user.role,
+        )
+        cursor.execute(sql, valeurs)
+        conn.commit()
+
+        return {
+            "message": "Compte utilisateur créé avec succès",
+            "id": cursor.lastrowid,
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Erreur lors de la création du compte (Vérifiez le téléphone/email/identifiant) : {str(e)}",
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# 2. Se connecter (Login)
+@app.post("/login")
+def connexion(credentials: ConnexionDemande):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        sql = """
+            SELECT id, nom, prenom, telephone, email, mot_de_passe, role, statut 
+            FROM utilisateur 
+            WHERE telephone = %s OR email = %s OR identifiant = %s
+        """
+        cursor.execute(
+            sql,
+            (
+                credentials.identifiant,
+                credentials.identifiant,
+                credentials.identifiant,
+            ),
+        )
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Identifiant (téléphone/email) ou mot de passe incorrect.",
+            )
+
+        if user["statut"] != "actif":
+            raise HTTPException(
+                status_code=403, detail="Ce compte a été suspendu ou désactivé."
+            )
+
+        if not verifier_mot_de_passe(credentials.mot_de_passe, user["mot_de_passe"]):
+            raise HTTPException(
+                status_code=401,
+                detail="Identifiant (téléphone/email) ou mot de passe incorrect.",
+            )
+
+        token_payload = {
+            "user_id": user["id"],
+            "telephone": user["telephone"],
+            "role": user["role"],
+        }
+        access_token = creer_token_accès(token_payload)
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "utilisateur": {
+                "id": user["id"],
+                "nom": user["nom"],
+                "prenom": user["prenom"],
+                "telephone": user["telephone"],
+                "role": user["role"],
+            },
+        }
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# 3. Lister les comptes utilisateurs
+@app.get("/utilisateurs")
+def lister_utilisateurs():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        sql = """
+            SELECT id, nom, prenom, telephone, email, role, statut, date_creation 
+            FROM utilisateur 
+            ORDER BY nom ASC
+        """
+        cursor.execute(sql)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
