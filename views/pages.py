@@ -339,11 +339,18 @@ def eleves(page, ctx):
         page.lbl_empty_state.setVisible(not rows)
         page.table_eleves.setVisible(bool(rows))
 
-        eleves_all = repos.eleves()
+        eleves_all = repos.eleves(classe_id=classe_id)
         page.v1_val.setText(str(len(eleves_all)))
         page.v2_val.setText(str(len([e for e in eleves_all if e["statut"] == "Pre-inscrit"])))
         page.v3_val.setText(str(len([e for e in eleves_all if e["statut"] == "Inscrit"])))
         page.v4_val.setText(str(len([e for e in eleves_all if e["statut"] == "Inactif"])))
+
+        if classe_id:
+            page.lbl_page_subtitle.setText(
+                f"Effectifs et suivis scolaires - classe {page.combo_classe.currentText()}")
+        else:
+            page.lbl_page_subtitle.setText(
+                "Effectifs de toute l'ecole - filtrez par classe pour plus de lisibilite")
 
     def _delete_eleve(parent, ctx, eleve):
         if QMessageBox.question(parent, "Supprimer",
@@ -357,6 +364,8 @@ def eleves(page, ctx):
         page.combo_classe.addItem("Toutes les classes", None)
         for c in repos.classes():
             page.combo_classe.addItem(c["nom"], c["id"])
+        if page.combo_classe.count() > 1:
+            page.combo_classe.setCurrentIndex(1)
 
     populate_class_combo()
     page.btn_add_eleve.clicked.connect(lambda: open_inscription_dialog(page, ctx))
@@ -364,7 +373,8 @@ def eleves(page, ctx):
     page.search_eleve.textChanged.connect(fill)
     page.combo_classe.currentIndexChanged.connect(fill)
     page.combo_statut.currentIndexChanged.connect(fill)
-    page.btn_export_eleves.clicked.connect(lambda: reports.export_eleves_csv(repos.eleves()))
+    page.btn_export_eleves.clicked.connect(
+        lambda: reports.export_eleves_csv(getattr(page, "_rows", [])))
 
     def double_clicked(row, _col):
         if 0 <= row < len(getattr(page, "_rows", [])):
@@ -1443,10 +1453,21 @@ def open_certificat_dialog(parent):
     dlg.resize(420, 160)
     lay = QVBoxLayout(dlg)
     form = QFormLayout()
+    combo_classe = QComboBox()
+    combo_classe.addItem("Toutes les classes", None)
+    for c in repos.classes():
+        combo_classe.addItem(c["nom"], c["id"])
     combo = QComboBox()
-    for e in repos.eleves():
-        combo.addItem(f"{e['prenom']} {e['nom']} ({e['matricule']})", e["id"])
+
+    def fill_eleves():
+        combo.clear()
+        for e in repos.eleves(classe_id=combo_classe.currentData()):
+            combo.addItem(f"{e['prenom']} {e['nom']} ({e['matricule']})", e["id"])
+
+    combo_classe.currentIndexChanged.connect(fill_eleves)
+    form.addRow("Classe :", combo_classe)
     form.addRow("Eleve :", combo)
+    fill_eleves()
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
     buttons.button(QDialogButtonBox.Ok).setText("Generer")
