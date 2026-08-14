@@ -1,9 +1,9 @@
-"""Connexion SQLite, schema et donnees initiales."""
 import hashlib
 import sqlite3
 
 from config import DB_PATH, DEFAULT_ACCOUNTS, DEFAULT_MATIERES, DOCS_DIR, VILLE_DEFAUT, PAYS_DEFAUT
 
+# tout le schema de la base : une table par domaine (eleves, notes, caisse...)
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS utilisateurs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,16 +117,15 @@ CREATE TABLE IF NOT EXISTS parametres (
 );
 """
 
-
+# cache le mot de passe pour ne jamais l'enregistrer en clair
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
-
 class Database:
-    """Wrapper SQLite : connection unique et initialisation au premier acces."""
 
     _instance = None
 
+    # design "singleton" : toute l'app partage une seule instance de la base
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -136,6 +135,7 @@ class Database:
         DOCS_DIR.mkdir(parents=True, exist_ok=True)
         self._initialized = False
 
+    # ouvre la base de donnees SQLite et renvoie une connexion
     def connect(self):
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
@@ -143,6 +143,7 @@ class Database:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
+    # cree les tables et ajoute les donnees de depart (une seule fois)
     def init_db(self):
         if self._initialized:
             return
@@ -155,6 +156,7 @@ class Database:
             conn.close()
         self._initialized = True
 
+    # remplit les tables avec des comptes et matieres de depart
     def _seed(self, conn):
         cur = conn.execute("SELECT COUNT(*) FROM utilisateurs")
         if cur.fetchone()[0] == 0:
@@ -198,7 +200,7 @@ class Database:
                 ),
             )
 
-    # --- helpers d'execution ---
+    # renvoie tous les resultats d'une requete de lecture (SELECT)
     def query(self, sql, params=()):
         conn = self.connect()
         try:
@@ -207,10 +209,12 @@ class Database:
         finally:
             conn.close()
 
+    # comme query, mais renvoie un seul resultat (ou rien)
     def query_one(self, sql, params=()):
         rows = self.query(sql, params)
         return rows[0] if rows else None
 
+    # execute une modification (INSERT, UPDATE, DELETE) et enregistre
     def execute(self, sql, params=()):
         conn = self.connect()
         try:
@@ -220,6 +224,7 @@ class Database:
         finally:
             conn.close()
 
+    # execute plusieurs modifications d'un coup, en passant une liste
     def executemany(self, sql, seq_params):
         conn = self.connect()
         try:

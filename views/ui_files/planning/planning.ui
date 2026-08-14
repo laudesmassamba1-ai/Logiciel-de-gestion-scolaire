@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -101,8 +99,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- SELECTEUR DE CLASSE -->
    <item>
     <widget class="QFrame" name="selectorBar">
      <property name="styleSheet">
@@ -178,8 +174,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- GRILLE HEBDOMADAIRE -->
    <item>
     <widget class="QTableWidget" name="table_planning">
      <property name="styleSheet">
@@ -286,8 +280,6 @@
      </column>
     </widget>
    </item>
-
-   <!-- ETAT VIDE : affiche si aucune classe n'est selectionnee -->
    <item>
     <widget class="QLabel" name="lbl_empty_state_planning">
      <property name="styleSheet">

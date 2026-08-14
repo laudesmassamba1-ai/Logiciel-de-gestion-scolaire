@@ -60,8 +60,6 @@
     <property name="bottomMargin">
      <number>0</number>
     </property>
-
-    <!-- MENU LATERAL -->
     <item>
      <widget class="QFrame" name="sidebar">
       <property name="minimumSize">
@@ -99,8 +97,6 @@
          </property>
         </widget>
        </item>
-
-       <!-- RESERVE A L'ADMIN : controller.py n'affiche QUE ce bouton (masque tous les autres) si role == "admin" -->
        <item>
         <widget class="QPushButton" name="btn_nav_comptes">
          <property name="text">
@@ -111,8 +107,6 @@
          </property>
         </widget>
        </item>
-
-       <!-- BOUTONS DE NAVIGATION COMMUNS -->
        <item>
         <widget class="QPushButton" name="btn_nav_dashboard">
          <property name="text">
@@ -176,8 +170,6 @@
          </property>
         </widget>
        </item>
-
-       <!-- RESERVE AU DIRECTEUR : controller.py masque ces boutons si role != "directeur" -->
        <item>
         <widget class="QPushButton" name="btn_nav_personnel">
          <property name="text">
@@ -212,8 +204,6 @@
          </property>
         </spacer>
        </item>
-
-       <!-- BLOC UTILISATEUR CONNECTE -->
        <item>
         <widget class="QFrame" name="userBox">
          <layout class="QVBoxLayout" name="userBoxLayout">
@@ -262,8 +252,6 @@
       </layout>
      </widget>
     </item>
-
-    <!-- ZONE D'AFFICHAGE CENTRALE (QStackedWidget) -->
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="styleSheet">

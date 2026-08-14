@@ -33,7 +33,6 @@
     <number>20</number>
    </property>
    <item>
-    <!-- EN-TETE : TYPE D'OPERATION -->
     <layout class="QHBoxLayout" name="horizontalLayout_Header">
      <item>
       <widget class="QLabel" name="lbl_title">
@@ -84,7 +83,6 @@
     </layout>
    </item>
    <item>
-    <!-- ZONE FORMULAIRE SCROLLABLE -->
     <widget class="QScrollArea" name="scrollArea">
      <property name="styleSheet">
       <string>border: none; background: transparent;</string>
@@ -105,8 +103,6 @@
        <property name="spacing">
         <number>15</number>
        </property>
-
-       <!-- SECTION 1 : IDENTITE ELEVE & AFFECTATION -->
        <item>
         <widget class="QFrame" name="card_eleve">
          <property name="styleSheet">
@@ -192,7 +188,6 @@
              </widget>
             </item>
             <item row="1" column="2">
-             <!-- BLOC SELECTION / AJOUT DE CLASSE -->
              <layout class="QHBoxLayout" name="horizontalLayout_Classe">
               <property name="spacing">
                <number>5</number>
@@ -239,8 +234,6 @@
          </layout>
         </widget>
        </item>
-
-       <!-- SECTION 2 : PARENTS ET NUMEROS DE TELEPHONE -->
        <item>
         <widget class="QFrame" name="card_parents">
          <property name="styleSheet">
@@ -265,7 +258,6 @@
             <property name="verticalSpacing">
              <number>10</number>
             </property>
-            <!-- PERE -->
             <item row="0" column="0">
              <widget class="QLineEdit" name="input_pere_nom">
               <property name="styleSheet">
@@ -286,7 +278,6 @@
               </property>
              </widget>
             </item>
-            <!-- MERE -->
             <item row="1" column="0">
              <widget class="QLineEdit" name="input_mere_nom">
               <property name="styleSheet">
@@ -307,7 +298,6 @@
               </property>
              </widget>
             </item>
-            <!-- TUTEUR RESPONSABLE (WHATSAPP / ADRESSE) -->
             <item row="2" column="0">
              <widget class="QLineEdit" name="input_tuteur_nom">
               <property name="styleSheet">
@@ -343,14 +333,11 @@
          </layout>
         </widget>
        </item>
-
-       <!-- SECTION 3 : PIECES & FRAIS DE SCOLARITE -->
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_BottomCards">
          <property name="spacing">
           <number>15</number>
          </property>
-         <!-- CHECKLIST PIECES -->
          <item>
           <widget class="QFrame" name="card_pieces">
            <property name="styleSheet">
@@ -391,7 +378,6 @@
            </layout>
           </widget>
          </item>
-         <!-- REGLEMENT DE CAISSE INITIAL -->
          <item>
           <widget class="QFrame" name="card_caisse">
            <property name="styleSheet">
@@ -450,8 +436,6 @@
      </widget>
     </widget>
    </item>
-
-   <!-- BOUTONS D'ACTION (PIED DE PAGE) -->
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_Actions">
      <item>

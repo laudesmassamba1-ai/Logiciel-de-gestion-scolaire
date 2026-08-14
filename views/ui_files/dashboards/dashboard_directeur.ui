@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -85,8 +83,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- CARTES KPI -->
    <item>
     <layout class="QHBoxLayout" name="kpiLayout">
      <property name="spacing">
@@ -213,15 +209,11 @@
      </item>
     </layout>
    </item>
-
-   <!-- SECTION DASHBOARD GRAPHIQUES (CONTENEURS) -->
    <item>
     <layout class="QHBoxLayout" name="chartsLayout">
      <property name="spacing">
       <number>15</number>
      </property>
-
-     <!-- CONTENEUR GRAPHIQUE 1 (FINANCES) -->
      <item>
       <widget class="QFrame" name="container_chart_finances">
        <property name="minimumSize">
@@ -241,8 +233,6 @@
        </layout>
       </widget>
      </item>
-
-     <!-- CONTENEUR GRAPHIQUE 2 (SCOLARITE / RECOUVREMENT) -->
      <item>
       <widget class="QFrame" name="container_chart_scolarite">
        <property name="minimumSize">
@@ -262,8 +252,6 @@
        </layout>
       </widget>
      </item>
-
-     <!-- CONTENEUR GRAPHIQUE 3 (PERSONNEL / RH - graphe circulaire) -->
      <item>
       <widget class="QFrame" name="container_chart_personnel">
        <property name="minimumSize">
@@ -285,15 +273,11 @@
      </item>
     </layout>
    </item>
-
-   <!-- PANNEAU DES VALIDATIONS & ACTIONS -->
    <item>
     <layout class="QHBoxLayout" name="contentLayout">
      <property name="spacing">
       <number>15</number>
      </property>
-
-     <!-- TABLEAU DES VALIDATIONS -->
      <item>
       <widget class="QFrame" name="frame_validations">
        <property name="styleSheet">
@@ -354,8 +338,6 @@
        </layout>
       </widget>
      </item>
-
-     <!-- ACTIONS DIRECTEUR -->
      <item>
       <widget class="QFrame" name="frame_quick_actions">
        <property name="minimumSize">

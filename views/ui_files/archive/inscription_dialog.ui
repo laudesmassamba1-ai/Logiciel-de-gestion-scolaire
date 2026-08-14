@@ -45,8 +45,6 @@
    <property name="bottomMargin">
     <number>25</number>
    </property>
-
-   <!-- TITRE MODAL -->
    <item>
     <widget class="QLabel" name="lbl_title">
      <property name="styleSheet">
@@ -57,8 +55,6 @@
      </property>
     </widget>
    </item>
-
-   <!-- SECTION 1: IDENTITE ELEVE -->
    <item>
     <widget class="QGroupBox" name="group_eleve">
      <property name="styleSheet">
@@ -132,8 +128,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- SECTION 2: AFFECTATION ACADEMIQUE -->
    <item>
     <widget class="QGroupBox" name="group_scolaire">
      <property name="styleSheet">
@@ -178,8 +172,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- SECTION 3: PARENT / TUTEUR -->
    <item>
     <widget class="QGroupBox" name="group_parent">
      <property name="styleSheet">
@@ -232,8 +224,6 @@
      </property>
     </spacer>
    </item>
-
-   <!-- BOUTONS DE VALIDATION -->
    <item>
     <layout class="QHBoxLayout" name="buttonLayout">
      <item>

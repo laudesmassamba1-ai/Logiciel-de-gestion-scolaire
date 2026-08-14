@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -88,8 +86,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- CARTES KPI -->
    <item>
     <layout class="QHBoxLayout" name="kpiLayout">
      <property name="spacing">
@@ -261,8 +257,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- RECHERCHE -->
    <item>
     <widget class="QFrame" name="filterBar">
      <property name="styleSheet">
@@ -329,8 +323,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- TABLEAU DES COMPTES -->
    <item>
     <widget class="QTableWidget" name="table_comptes">
      <property name="styleSheet">
@@ -400,8 +392,6 @@
      </column>
     </widget>
    </item>
-
-   <!-- ETAT VIDE -->
    <item>
     <widget class="QLabel" name="lbl_empty_state_comptes">
      <property name="styleSheet">

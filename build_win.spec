@@ -1,9 +1,3 @@
-# -*- mode: python ; coding: utf-8 -*-
-"""Spec PyInstaller WINDOWS (one-file) : construit GestionScolaire.exe autonome.
-
-A executer avec un Python Windows (ex: sous Wine) :
-    pyinstaller build_win.spec --noconfirm --clean
-"""
 from pathlib import Path
 
 project_root = Path(SPECPATH)
@@ -42,9 +36,5 @@ exe = EXE(
     upx=False,
     console=False,
     icon=None,
-    # Manifeste DPI : rendu net sur ecrans 100/125/150/200 %.
-    # Qt 5.15 ne gere que le DPI systeme (<dpiAware>true</dpiAware>) : declare ici
-    # pour eviter l'etirement bitmap de Windows (texte/contours flous) avant meme
-    # l'init de Qt.
     manifest=str(project_root / 'win_dpi_manifest.xml'),
 )

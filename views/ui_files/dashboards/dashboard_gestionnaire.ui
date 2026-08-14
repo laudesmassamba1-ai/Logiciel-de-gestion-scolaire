@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE : salutation personnalisee, mise a jour par le controller au login -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -85,8 +83,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- CARTES KPI DU JOUR -->
    <item>
     <layout class="QHBoxLayout" name="kpiLayout">
      <property name="spacing">
@@ -258,8 +254,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- GRAPHIQUES : repartition des statuts des eleves (graphe circulaire) -->
    <item>
     <widget class="QFrame" name="container_chart_statuts">
      <property name="minimumSize">
@@ -279,8 +273,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- ACTIONS RAPIDES : le coeur du travail quotidien du gestionnaire -->
    <item>
     <widget class="QFrame" name="card_actions_rapides">
      <property name="styleSheet">
@@ -371,8 +363,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- ACTIVITE RECENTE + DOSSIERS A COMPLETER -->
    <item>
     <layout class="QHBoxLayout" name="bottomLayout">
      <property name="spacing">

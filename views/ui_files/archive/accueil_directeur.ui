@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE DIRECTION -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -85,8 +83,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- INDICATEURS CLES DIRECTION (KPIs RH & FINANCES) -->
    <item>
     <layout class="QHBoxLayout" name="kpiLayout">
      <property name="spacing">
@@ -213,15 +209,11 @@
      </item>
     </layout>
    </item>
-
-   <!-- PANNEAU CENTRAL (DEMANDES A VALIDER & APERÇU EFFECTIFS) -->
    <item>
     <layout class="QHBoxLayout" name="contentLayout">
      <property name="spacing">
       <number>15</number>
      </property>
-
-     <!-- TABLEAU DES VALIDATIONS (CONGES, AVANCES, DEPENSES) -->
      <item>
       <widget class="QFrame" name="frame_validations">
        <property name="styleSheet">
@@ -282,8 +274,6 @@
        </layout>
       </widget>
      </item>
-
-     <!-- RACCOURCIS DE GESTION DIRECTION -->
      <item>
       <widget class="QFrame" name="frame_quick_actions">
        <property name="minimumSize">

@@ -1,10 +1,3 @@
-"""Fabrication des pages et dialogues metier.
-
-Chaque fabrique recoit un widget vide (PageContext) et le remplit :
-- applique le fichier .ui correspondant
-- cree les controleurs (signaux + donnees)
-- expose une methode refresh() appelee lors de la navigation
-"""
 import datetime
 from functools import partial
 from pathlib import Path
@@ -25,11 +18,7 @@ from services.auth import RoleAuthorizer
 from views.loader import apply_ui
 from views.widgets import SimpleBarChart, SimplePieChart, fmt_money
 
-# ---------------------------------------------------------------------------
-# Contexte commun
-# ---------------------------------------------------------------------------
-
-
+# contient les infos communes a toutes les pages (utilisateur, navigation)
 class PageContext:
     def __init__(self, user, navigate):
         self.user = user
@@ -41,12 +30,6 @@ class PageContext:
     def can_edit(self, page):
         return self.authorizer.can_edit(page)
 
-
-# ---------------------------------------------------------------------------
-# Utilitaires
-# ---------------------------------------------------------------------------
-
-
 def _btn(text, callback, style=None):
     b = QPushButton(text)
     b.setCursor(Qt.PointingHandCursor)
@@ -56,11 +39,9 @@ def _btn(text, callback, style=None):
     b.clicked.connect(callback)
     return b
 
-
 def _simple_btn_style(bg="#f1f5f9", fg="#334155", border="#cbd5e1"):
     return (f"background-color: {bg}; color: {fg}; border: 1px solid {border};"
             " border-radius: 4px; padding: 3px 8px; font-size: 10px;")
-
 
 def _money_edit(value=0, minimum=0, maximum=100000000):
     spin = QDoubleSpinBox()
@@ -71,7 +52,6 @@ def _money_edit(value=0, minimum=0, maximum=100000000):
     spin.setSuffix(" FCFA")
     return spin
 
-
 def _today_fr():
     jours = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
     mois = ["Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin",
@@ -79,19 +59,13 @@ def _today_fr():
     d = datetime.date.today()
     return f"{jours[d.weekday()]} {d.day} {mois[d.month - 1]} {d.year}"
 
-
 def _fill_combos(combo, items, clear_first=True):
     if clear_first:
         combo.clear()
     for item in items:
         combo.addItem(item)
 
-
-# ---------------------------------------------------------------------------
-# Dashboard Admin
-# ---------------------------------------------------------------------------
-
-
+# tableau de bord de l'administrateur
 def dashboard_admin(page, ctx):
     apply_ui("dashboards/dashboard_admin.ui", page)
 
@@ -121,12 +95,7 @@ def dashboard_admin(page, ctx):
     refresh()
     page.refresh = refresh
 
-
-# ---------------------------------------------------------------------------
-# Dashboard Directeur
-# ---------------------------------------------------------------------------
-
-
+# tableau de bord du directeur
 def dashboard_directeur(page, ctx):
     apply_ui("dashboards/dashboard_directeur.ui", page)
 
@@ -203,7 +172,6 @@ def dashboard_directeur(page, ctx):
     refresh()
     page.refresh = refresh
 
-
 def _directeur_charts():
     rows = repos.transactions()
     months = {}
@@ -224,7 +192,6 @@ def _directeur_charts():
     return {"fin_labels": labels, "fin_values": values,
             "scol_labels": scol_labels, "scol_values": scol_values}
 
-
 def _replace_layout(layout, widget):
     while layout.count():
         item = layout.takeAt(0)
@@ -233,12 +200,7 @@ def _replace_layout(layout, widget):
             w.deleteLater()
     layout.addWidget(widget)
 
-
-# ---------------------------------------------------------------------------
-# Dashboard Gestionnaire
-# ---------------------------------------------------------------------------
-
-
+# tableau de bord du gestionnaire
 def dashboard_gestionnaire(page, ctx):
     apply_ui("dashboards/dashboard_gestionnaire.ui", page)
 
@@ -303,15 +265,11 @@ def dashboard_gestionnaire(page, ctx):
     refresh()
     page.refresh = refresh
 
-
-# ---------------------------------------------------------------------------
-# Eleves
-# ---------------------------------------------------------------------------
-
-
+# page de gestion des eleves
 def eleves(page, ctx):
     apply_ui("eleves/eleves.ui", page)
 
+    # affiche les eleves de la classe choisie avec les filtres
     def fill():
         classe_id = page.combo_classe.currentData()
         statut = page.combo_statut.currentText()
@@ -386,19 +344,13 @@ def eleves(page, ctx):
     fill()
     page.refresh = fill
 
-
-# ---------------------------------------------------------------------------
-# Inscription (eleve)
-# ---------------------------------------------------------------------------
-
-
+# dialogue d'inscription ou de modification d'un eleve
 def open_inscription_dialog(parent, ctx, eleve=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Dossier d'Inscription")
     dlg.resize(1000, 780)
     apply_ui("eleves/inscription.ui", dlg)
 
-    # Apercu du matricule (nouveaux) + recherche pour les reinscriptions
     lbl_matricule = QLabel()
     lbl_matricule.setStyleSheet(
         "color: #047857; font-weight: bold; font-size: 13px;")
@@ -512,6 +464,7 @@ def open_inscription_dialog(parent, ctx, eleve=None):
     on_radio()
     update_matricule()
 
+    # enregistre la fiche eleve en base
     def save():
         nom = dlg.input_nom.text().strip()
         prenom = dlg.input_prenom.text().strip()
@@ -575,19 +528,13 @@ def open_inscription_dialog(parent, ctx, eleve=None):
     dlg.btn_cancel.clicked.connect(dlg.reject)
     dlg.exec_()
 
-
 def _parse_money(text):
     try:
         return float(text.replace(" ", "").replace(",", "").replace("FCFA", "").strip())
     except (TypeError, ValueError):
         return 0.0
 
-
-# ---------------------------------------------------------------------------
-# Classes
-# ---------------------------------------------------------------------------
-
-
+# page de gestion des classes
 def classes(page, ctx):
     apply_ui("classes/classes.ui", page)
 
@@ -655,7 +602,7 @@ def classes(page, ctx):
     fill()
     page.refresh = fill
 
-
+# dialogue pour creer ou modifier une classe
 def open_classe_dialog(parent, ctx, classe=None, on_created=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvelle Classe" if not classe else "Modifier la Classe")
@@ -703,12 +650,7 @@ def open_classe_dialog(parent, ctx, classe=None, on_created=None):
     dlg.btn_cancel.clicked.connect(dlg.reject)
     dlg.exec_()
 
-
-# ---------------------------------------------------------------------------
-# Notes et bulletins
-# ---------------------------------------------------------------------------
-
-
+# page de saisie des notes par classe et matiere
 def notes(page, ctx):
     apply_ui("notes/notes.ui", page)
 
@@ -855,7 +797,6 @@ def notes(page, ctx):
     page.table_notes.setRowCount(0)
     page.refresh = load_classe
 
-
 def _appreciation(moyenne):
     if moyenne >= 16:
         return "Excellent"
@@ -868,11 +809,6 @@ def _appreciation(moyenne):
     if moyenne >= 8:
         return "Passable"
     return "Insuffisant"
-
-
-# ---------------------------------------------------------------------------
-# Planning
-# ---------------------------------------------------------------------------
 
 class PlanningCellDialog(QDialog):
     def __init__(self, parent, jour, creneau, matieres, current=None):
@@ -905,7 +841,7 @@ class PlanningCellDialog(QDialog):
     def values(self):
         return self.combo.currentData(), self.salle.text().strip()
 
-
+# page de l'emploi du temps
 def planning(page, ctx):
     apply_ui("planning/planning.ui", page)
     _fill_combos(page.combo_classe_planning, [])
@@ -1019,12 +955,7 @@ def planning(page, ctx):
     refresh()
     page.refresh = refresh
 
-
-# ---------------------------------------------------------------------------
-# Caisse
-# ---------------------------------------------------------------------------
-
-
+# page de la caisse (recettes, depenses, solde)
 def caisse(page, ctx):
     apply_ui("caisse/caisse.ui", page)
 
@@ -1102,7 +1033,7 @@ def caisse(page, ctx):
     refresh()
     page.refresh = refresh
 
-
+# dialogue pour ajouter une recette ou une depense
 def open_transaction_dialog(parent, ctx, type_trans):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvelle Recette" if type_trans == "entree" else "Nouvelle Depense")
@@ -1148,12 +1079,7 @@ def open_transaction_dialog(parent, ctx, type_trans):
             mode.currentText())
         QMessageBox.information(dlg, "Caisse", "Transaction enregistree.")
 
-
-# ---------------------------------------------------------------------------
-# Comptes
-# ---------------------------------------------------------------------------
-
-
+# page de gestion des comptes utilisateurs
 def comptes(page, ctx):
     apply_ui("comptes/comptes.ui", page)
 
@@ -1218,7 +1144,7 @@ def comptes(page, ctx):
     refresh()
     page.refresh = refresh
 
-
+# dialogue pour creer ou modifier un compte
 def open_compte_dialog(parent, ctx, compte=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouveau Compte")
@@ -1264,7 +1190,7 @@ def open_compte_dialog(parent, ctx, compte=None):
     dlg.btn_cancel.clicked.connect(dlg.reject)
     dlg.exec_()
 
-
+# dialogue pour changer son propre mot de passe
 def open_change_password_dialog(parent, user):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Changer mon mot de passe")
@@ -1293,7 +1219,7 @@ def open_change_password_dialog(parent, user):
         ok, message = auth.change_password(user["id"], old.text(), new.text())
         QMessageBox.information(dlg, "Mot de passe", message)
 
-
+# dialogue pour reinitialiser le mot de passe d'un compte
 def open_reset_password_dialog(parent, ctx):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Reinitialiser un mot de passe")
@@ -1319,12 +1245,7 @@ def open_reset_password_dialog(parent, ctx):
         repos.reset_password(combo.currentData(), hash_password(new_pwd.text()))
         QMessageBox.information(dlg, "Mot de passe", "Mot de passe reinitialise.")
 
-
-# ---------------------------------------------------------------------------
-# Personnel (module RH)
-# ---------------------------------------------------------------------------
-
-
+# page du personnel (enseignants et salaires)
 def personnel(page, ctx):
     page.setStyleSheet("background-color: #f8fafc;")
     lay = QVBoxLayout(page)
@@ -1395,7 +1316,7 @@ def personnel(page, ctx):
     fill()
     page.refresh = fill
 
-
+# dialogue pour ajouter ou modifier un employe
 def open_personnel_dialog(parent, ctx, employe=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvel Employe" if not employe else "Modifier Employe")
@@ -1441,12 +1362,7 @@ def open_personnel_dialog(parent, ctx, employe=None):
         else:
             repos.add_personnel(*data)
 
-
-# ---------------------------------------------------------------------------
-# Certificat
-# ---------------------------------------------------------------------------
-
-
+# prepare le certificat de scolarite
 def open_certificat_dialog(parent):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Certificat de scolarite")
@@ -1483,12 +1399,7 @@ def open_certificat_dialog(parent):
                 eleve["classe_nom"] = classe["nom"]
             reports.certificat_scolarite(eleve, repos.parametres())
 
-
-# ---------------------------------------------------------------------------
-# Parametres
-# ---------------------------------------------------------------------------
-
-
+# page des parametres de l'ecole
 def parametres(page, ctx):
     apply_ui("parametres/parametres.ui", page)
 

@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -88,8 +86,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- CARTES KPI -->
    <item>
     <layout class="QHBoxLayout" name="kpiLayout">
      <property name="spacing">
@@ -261,8 +257,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- ACCES RAPIDE + ACTIVITE -->
    <item>
     <layout class="QHBoxLayout" name="bottomLayout">
      <property name="spacing">

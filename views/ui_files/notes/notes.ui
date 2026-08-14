@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -88,8 +86,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- SELECTEURS : classe / matiere / periode -->
    <item>
     <widget class="QFrame" name="selectorBar">
      <property name="styleSheet">
@@ -228,8 +224,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- TABLEAU DE SAISIE DES NOTES -->
    <item>
     <widget class="QTableWidget" name="table_notes">
      <property name="styleSheet">
@@ -304,8 +298,6 @@
      </column>
     </widget>
    </item>
-
-   <!-- ETAT VIDE -->
    <item>
     <widget class="QLabel" name="lbl_empty_state_notes">
      <property name="styleSheet">
@@ -319,8 +311,6 @@
      </property>
     </widget>
    </item>
-
-   <!-- BARRE D'ACTIONS BAS DE PAGE -->
    <item>
     <layout class="QHBoxLayout" name="bottomBarLayout">
      <item>

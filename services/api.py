@@ -1,34 +1,26 @@
-"""Client HTTP vers l'API FastAPI backend exposee sur http://127.0.0.1:8000.
-
-Chaque methode renvoie un tuple ``(resultat, message_erreur)`` :
-- ``resultat`` : objet deserialise (int, float, dict, list) ou ``None`` en cas d'echec.
-- ``message_erreur`` : texte explicite ou ``None`` si la requete a reussi.
-
-Toutes les erreurs de reseau (API hors-ligne, timeout, JSON invalide, code HTTP)
-sont interceptees : l'interface PyQt5 ne plante jamais a cause du backend.
-"""
 import time
 
 try:
     import requests
-except ImportError:  # pragma: no cover - l'app tourne quand meme en local
+except ImportError:
     requests = None
 
 from config import API_BASE_URL, API_TIMEOUT
 
 
 class ApiError(Exception):
-    """Erreur applicative portee par le client (ne sort jamais de ce module)."""
+    pass
 
 
+# envoie une requete HTTP a l'API et renvoie (donnees, erreur)
 def _request(method, path, **kwargs):
-    """Execute une requete HTTP et normalise le resultat (payload, erreur)."""
     if requests is None:
         return None, "Le module 'requests' n'est pas installe"
     try:
         resp = requests.request(
             method, API_BASE_URL + path, timeout=API_TIMEOUT, **kwargs)
     except requests.exceptions.RequestException as exc:
+        # si l'API ne repond pas, on renvoie une erreur (l'appelant basculera sur la base locale)
         return None, f"API hors ligne ({exc.__class__.__name__})"
     try:
         resp.raise_for_status()
@@ -45,8 +37,8 @@ def _request(method, path, **kwargs):
     return payload, None
 
 
+# garde en memoire si l'API est disponible, pour eviter de tester a chaque fois
 class _CacheDispo:
-    """Cible la disponibilite de l'API pendant quelques secondes (pas de timeout ui)."""
 
     _last = 0.0
     _value = None
@@ -61,8 +53,8 @@ class _CacheDispo:
         return cls._value
 
 
+# dit si l'API est joignable (ou False si elle est hors ligne)
 def api_disponible(force=False) -> bool:
-    """Retourne True si le backend FastAPI repond (resultat mis en cache 5 s)."""
     try:
         return bool(_CacheDispo.get(force=force))
     except Exception:
@@ -70,12 +62,10 @@ def api_disponible(force=False) -> bool:
 
 
 class ApiClient:
-    """Client typé regroupant tous les endpoints du Swagger du backend."""
+    # un petit client pour chaque operation de l'API FastAPI
 
-    # ------------------------------------------------------------------
-    # A. ELEVES & CLASSES
-    # ------------------------------------------------------------------
     def total_eleves(self):
+        # nombre total d'eleves cote serveur
         data, err = _request("GET", "/total_eleves")
         if err:
             return None, err
@@ -89,6 +79,7 @@ class ApiClient:
         return data, None
 
     def eleves(self):
+        # recupere la liste des eleves enregistres cote serveur
         data, err = _request("GET", "/eleve")
         if err:
             return None, err
@@ -132,6 +123,7 @@ class ApiClient:
         return data.get("classe"), None
 
     def ajouter_eleve(self, eleve, paiement):
+        # cree un eleve (et son premier paiement) cote serveur
         return _request("POST", "/eleve",
                         json={"eleve": eleve, "paiement": paiement})
 
@@ -151,6 +143,7 @@ class ApiClient:
         return _request("PUT", f"/restaurer_eleve/{nom}/{prenom}")
 
     def ajouter_classe(self, nom, cycle_id):
+        # cree une classe cote serveur
         return _request("POST", "/classe",
                         json={"classe": nom, "cycle_id": cycle_id})
 
@@ -166,10 +159,8 @@ class ApiClient:
             return None, err
         return data.get("parents", []), None
 
-    # ------------------------------------------------------------------
-    # B. PAIEMENTS & CAISSE
-    # ------------------------------------------------------------------
     def total_paiement(self):
+        # nombre total de paiements cote serveur
         data, err = _request("GET", "/total_paiement")
         if err:
             return None, err
@@ -185,6 +176,7 @@ class ApiClient:
         return data.get("total_montant_paiement"), None
 
     def paiements(self):
+        # liste les paiements enregistres cote serveur
         data, err = _request("GET", "/paiement")
         if err:
             return None, err
@@ -229,10 +221,8 @@ class ApiClient:
     def supprimer_paiement(self, identifiant):
         return _request("DELETE", f"/supprimerPaiement/{identifiant}")
 
-    # ------------------------------------------------------------------
-    # C. ENSEIGNANTS, CYCLES & RH
-    # ------------------------------------------------------------------
     def total_enseignant(self):
+        # nombre total d'enseignants cote serveur
         data, err = _request("GET", "/total_enseignant")
         if err:
             return None, err
@@ -280,10 +270,8 @@ class ApiClient:
     def supprimer_cycle(self, identifiant):
         return _request("DELETE", f"/supprimerCycle/{identifiant}")
 
-    # ------------------------------------------------------------------
-    # D. NOTES, BULLETINS & PROGRAMMES
-    # ------------------------------------------------------------------
     def total_note(self):
+        # nombre total de notes cote serveur
         data, err = _request("GET", "/total_note")
         if err:
             return None, err
@@ -363,10 +351,8 @@ class ApiClient:
             return None, err
         return data.get("annee_scolaire_active"), None
 
-    # ------------------------------------------------------------------
-    # E. PRESENCES
-    # ------------------------------------------------------------------
     def total_presence(self, classe):
+        # nombre total de presences pour une classe cote serveur
         data, err = _request("GET", f"/total_presence/{classe}")
         if err:
             return None, err

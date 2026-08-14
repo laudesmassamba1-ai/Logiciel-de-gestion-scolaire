@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-
-   <!-- EN-TETE ET ACTIONS -->
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
@@ -95,8 +93,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- CARTES DE SYNTHESE (KPIs) -->
    <item>
     <layout class="QHBoxLayout" name="kpiLayout">
      <property name="spacing">
@@ -220,8 +216,6 @@
      </item>
     </layout>
    </item>
-
-   <!-- FILTRES DE RECHERCHE -->
    <item>
     <widget class="QFrame" name="filterFrame">
      <property name="styleSheet">
@@ -335,8 +329,6 @@
      </layout>
     </widget>
    </item>
-
-   <!-- TABLEAU DES ELEVES -->
    <item>
     <widget class="QTableWidget" name="table_eleves">
      <property name="styleSheet">
@@ -416,8 +408,6 @@
      </column>
     </widget>
    </item>
-
-   <!-- ETAT VIDE : le controller affiche ce label (et masque table_eleves) quand la liste est vide -->
    <item>
     <widget class="QLabel" name="lbl_empty_state">
      <property name="styleSheet">

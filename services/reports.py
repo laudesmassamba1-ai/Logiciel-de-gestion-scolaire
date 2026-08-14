@@ -1,4 +1,3 @@
-"""Generation de documents (HTML) : bulletins, certificats, paie, rapports."""
 import datetime
 from pathlib import Path
 
@@ -17,14 +16,14 @@ th { background-color: #f8fafc; }
 .meta { color: #64748b; font-size: 12px; margin-top: 4px; }
 """
 
-
 def _open_in_browser(path: Path):
+    # ouvre le fichier genere dans le navigateur par defaut
     from PyQt5.QtCore import QUrl
     from PyQt5.QtGui import QDesktopServices
     QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
-
 def _write(title, body_html, filename):
+    # cree le fichier HTML a partir du corps donne et l'ouvre
     path = DOCS_DIR / filename
     html = (f"<html><head><meta charset='utf-8'><title>{title}</title>"
             f"<style>{STYLE}</style></head><body>{body_html}</body></html>")
@@ -32,8 +31,8 @@ def _write(title, body_html, filename):
     _open_in_browser(path)
     return path
 
-
 def _entete_doc():
+    # l'entete commun a tous les documents (nom, ville, date)
     params = repos.parametres()
     pays = params.get("pays", "") or "Republique du Congo"
     ville = params.get("ville", "")
@@ -43,8 +42,8 @@ def _entete_doc():
             f"<div class='meta'>{pays}{localite}</div></div>"
             f"<div class='meta'>Edite le {now}</div></div>")
 
-
 def export_eleves_csv(eleves):
+    # exporte la liste des eleves dans un fichier CSV
     import csv
     path = DOCS_DIR / f"eleves_{datetime.date.today():%Y%m%d}.csv"
     with open(path, "w", newline="", encoding="utf-8-sig") as fh:
@@ -57,8 +56,8 @@ def export_eleves_csv(eleves):
                              e["tuteur_tel"] or "-", e["statut"]])
     _open_in_browser(path)
 
-
 def bulletins(classe_id, periode):
+    # cree les bulletins de toute une classe pour une periode donnee
     classe = repos.classe_by_id(classe_id)
     nom_classe = classe["nom"] if classe else "?"
     eleves = repos.eleves(classe_id=classe_id)
@@ -84,6 +83,7 @@ def bulletins(classe_id, periode):
             else:
                 lignes += (f"<tr><td>{m['nom']}</td><td>-</td><td>-</td>"
                            f"<td>-</td><td>-</td></tr>")
+        # moyenne ponderee par les coefficients des matieres
         generale = round(total / coefs, 2) if coefs else 0
         appreciation = _appreciation(generale)
         corps.append(
@@ -95,8 +95,8 @@ def bulletins(classe_id, periode):
             f"<p class='meta'>Appreciation : <strong>{appreciation}</strong></p>")
     return _write(f"Bulletins {nom_classe}", _entete_doc() + "".join(corps), f"bulletins_{nom_classe.replace(' ', '_')}_{periode.split()[0]}.html")
 
-
 def recu_paiement(eleve, montant, mode, reference):
+    # cree un recu de paiement pour un eleve
     date = datetime.datetime.now().strftime("%d/%m/%Y")
     params = repos.parametres()
     ville = params.get("ville", "") or "Abidjan"
@@ -114,8 +114,8 @@ def recu_paiement(eleve, montant, mode, reference):
     """
     return _write("Recu de paiement", corps, f"recu_{eleve['matricule']}_{reference}.html")
 
-
 def certificat_scolarite(eleve, params):
+    # cree un certificat de scolarite pour un eleve
     date = datetime.datetime.now().strftime("%d/%m/%Y")
     ville = params.get("ville", "") or "Abidjan"
     signataire = params.get("signataire_nom", "")
@@ -134,8 +134,8 @@ def certificat_scolarite(eleve, params):
     """
     return _write("Certificat de scolarite", corps, f"certificat_{eleve['matricule']}.html")
 
-
 def paie():
+    # cree le bulletin de paie du mois (avec la masse salariale)
     personnel = repos.personnel()
     masse = repos.masse_salariale()
     lignes = "".join(
@@ -148,7 +148,6 @@ def paie():
         f"<td><strong>{fmt_money(masse)}</strong></td></tr></table>"
     )
     return _write("Paie", corps, "paie.html")
-
 
 def rapport_rh():
     personnel = repos.personnel()
@@ -163,8 +162,8 @@ def rapport_rh():
     )
     return _write("Rapport RH", corps, "rapport_rh.html")
 
-
 def planning(classe):
+    # cree l'emploi du temps d'une classe en HTML
     entetes = "".join(f"<th>{j}</th>" for j in ["Creneau"] + list(__import__("config").JOURS))
     grid = {row["jour"]: {row["creneau"]: row} for row in
             db.query("SELECT * FROM planning WHERE classe_id = ?", (classe["id"],))}
@@ -179,8 +178,8 @@ def planning(classe):
             f"<table><tr>{entetes}</tr>{lignes}</table>"
     return _write("Emploi du temps", corps, f"planning_{classe['nom'].replace(' ', '_')}.html")
 
-
 def _appreciation(moyenne):
+    # transforme la moyenne en appreciation (Excellent, Bien, etc.)
     if moyenne >= 16:
         return "Excellent"
     if moyenne >= 14:

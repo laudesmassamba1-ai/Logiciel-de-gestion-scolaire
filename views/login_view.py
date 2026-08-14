@@ -1,4 +1,3 @@
-"""Fenetre de connexion."""
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QLinearGradient, QPainter
 from PyQt5.QtWidgets import (
@@ -12,25 +11,28 @@ from services import auth
 PRIMARY = "#047857"
 PRIMARY_DARK = "#065f46"
 
-
+# petit fond degrade vert derriere la carte de connexion
 class _Gradient(QFrame):
     def paintEvent(self, _event):
+        # peint un degrade vert sur toute la surface du fond
         painter = QPainter(self)
         grad = QLinearGradient(0, 0, self.width(), self.height())
         grad.setColorAt(0.0, QColor("#065f46"))
         grad.setColorAt(1.0, QColor("#0f766e"))
         painter.fillRect(self.rect(), grad)
 
-
+# fenetre de connexion de l'application
 class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.user = None
         self.setWindowTitle(f"{APP_NAME} - Connexion")
+        # taille fixe de la fenetre puis construction de l'interface
         self.setFixedSize(700, 540)
         self._build()
 
     def _build(self):
+        # construit toute l'interface de connexion
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
 
@@ -60,6 +62,7 @@ class LoginDialog(QDialog):
 
         card_layout.addSpacing(10)
 
+        # cree une ligne avec le libelle au-dessus du champ de saisie
         def row(label, field):
             lay = QVBoxLayout()
             lab = QLabel(label)
@@ -73,6 +76,7 @@ class LoginDialog(QDialog):
             lay.addWidget(field)
             return lay
 
+        # les deux champs de saisie : identifiant et mot de passe
         self.input_username = QLineEdit()
         self.input_username.setPlaceholderText("Identifiant")
         self.input_password = QLineEdit()
@@ -83,6 +87,7 @@ class LoginDialog(QDialog):
         card_layout.addLayout(row("Identifiant", self.input_username))
         card_layout.addLayout(row("Mot de passe", self.input_password))
 
+        # bouton pour lancer la connexion
         btn = QPushButton("Se connecter")
         btn.setCursor(Qt.PointingHandCursor)
         btn.setStyleSheet(
@@ -105,6 +110,7 @@ class LoginDialog(QDialog):
         self.input_username.setFocus()
 
     def _do_login(self):
+        # verifie les identifiants puis ferme la fenetre si c'est bon
         username = self.input_username.text().strip()
         password = self.input_password.text()
         if not username or not password:
