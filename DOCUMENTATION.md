@@ -76,7 +76,7 @@ Logiciel-de-gestion-scolaire/
 ├── main.py                      # Point d'entree : HighDPI + demarrage (66 lignes)
 ├── config.py                    # Constantes + feuille de style (118 lignes)
 ├── requirements.txt             # PyQt5==5.15.11 + requests==2.32.3
-├── .gitignore                   # venv/, .venv/, __pycache__/, *.db, build/, dist/, dist_win/, data/
+├── .gitignore                   # venv/, .venv/, __pycache__/, *.db, build/, dist/, dist_win/, exe-win/, data/, GestionScolaire.spec
 │
 ├── build_win.spec               # Spec PyInstaller WINDOWS (one-file + manifeste DPI)
 ├── win_dpi_manifest.xml         # Manifeste <dpiAware>true</dpiAware> pour Windows
@@ -116,8 +116,7 @@ Logiciel-de-gestion-scolaire/
 │       ├── planning/            # planning.ui (emploi du temps)
 │       ├── caisse/              # caisse.ui (recettes / depenses)
 │       ├── comptes/             # comptes.ui + compte_dialog.ui
-│       ├── parametres/          # parametres.ui (en-tete des documents)
-│       └── archive/             # MAQUETTES ANCIENNES non referencees par le code
+│       └── parametres/          # parametres.ui (en-tete des documents)
 │
 ├── data/                        # CREE A L'EXECUTION (base + documents)
 │   ├── ecole.db                 # La base SQLite
@@ -128,16 +127,6 @@ Logiciel-de-gestion-scolaire/
 ├── build/                       # Travail intermediaire PyInstaller (nettoyable)
 └── .venv/                       # Environnement virtuel de developpement
 ```
-
-### Reliquats (a connaitre, a ne pas utiliser)
-
-| Element | Statut |
-|---|---|
-| `views/ui_files/archive/` | Maquettes `.ui` anciennes **non referencees** par le code |
-| `GestionScolaire.spec` | Ancienne spec PyInstaller, **remplacee** par `build_win.spec` |
-| `app.py`, `config.env` | Fichiers vides laisses d'une ancienne organisation |
-
----
 
 ## 3. Architecture et demarrage
 
@@ -644,9 +633,6 @@ Les interfaces sont definies dans `views/ui_files/` et chargees par
 | `comptes/comptes.ui` | `pages.py:1084` | Liste des comptes. |
 | `comptes/compte_dialog.ui` | `pages.py:1152` | Dialogue compte. |
 | `parametres/parametres.ui` | `pages.py:1404` | Parametres des documents. |
-
-Le dossier `archive/` contient d'anciennes maquettes **non referencees** par le
-code.
 
 ---
 
