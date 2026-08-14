@@ -1,4 +1,4 @@
-# operations sur les comptes utilisateurs (base locale uniquement)
+
 from database import db
 from repositories.base import RepositoryBase
 
@@ -6,7 +6,7 @@ from repositories.base import RepositoryBase
 class CompteRepository(RepositoryBase):
 
     def utilisateurs(self, role=None, recherche=""):
-        # liste les comptes utilisateurs, avec filtre par role ou nom
+
         sql = "SELECT id, nom_complet, username, email, telephone, role, actif, created_at, last_login FROM utilisateurs WHERE 1=1"
         params = []
         if role and role != "Tous les roles":

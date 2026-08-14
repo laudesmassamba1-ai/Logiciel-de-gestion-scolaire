@@ -9,12 +9,12 @@ class ApiError(Exception):
     pass
 
 
-# envoie une requete HTTP a l'API et renvoie (donnees, erreur)
+
 def _request(method, path, **kwargs):
     try:
         resp = httpx.request(method, API_BASE_URL + path, timeout=API_TIMEOUT, **kwargs)
     except httpx.HTTPError as exc:
-        # si l'API ne repond pas, on renvoie une erreur (l'appelant basculera sur la base locale)
+
         return None, f"API hors ligne ({exc.__class__.__name__})"
     try:
         resp.raise_for_status()
@@ -31,7 +31,7 @@ def _request(method, path, **kwargs):
     return payload, None
 
 
-# garde en memoire si l'API est disponible, pour eviter de tester a chaque fois
+
 class _CacheDispo:
 
     _last = 0.0
@@ -47,7 +47,7 @@ class _CacheDispo:
         return cls._value
 
 
-# dit si l'API est joignable (ou False si elle est hors ligne)
+
 def api_disponible(force=False) -> bool:
     try:
         return bool(_CacheDispo.get(force=force))
@@ -56,9 +56,9 @@ def api_disponible(force=False) -> bool:
 
 
 class ApiClient:
-    # un petit client pour chaque operation de l'API FastAPI
 
-    # ---- Eleves & inscriptions ----
+
+
 
     def total_eleves(self):
         data, err = _request("GET", "/total_eleves")
@@ -124,7 +124,7 @@ class ApiClient:
             return None, err
         return data.get("parents", []), None
 
-    # ---- Classes, cycles et annees scolaires ----
+
 
     def total_classe(self):
         data, err = _request("GET", "/total_classe")
@@ -198,7 +198,7 @@ class ApiClient:
             return None, err
         return data.get("annee_scolaire_active"), None
 
-    # ---- Finance, tarifs et scolarite ----
+
 
     def tarifs_scolarite(self):
         data, err = _request("GET", "/tarifs-scolarite")
@@ -299,7 +299,7 @@ class ApiClient:
             return None, err
         return data.get("paiement", []), None
 
-    # ---- Enseignants, matieres et programmes ----
+
 
     def total_enseignant(self):
         data, err = _request("GET", "/total_enseignant")
@@ -367,7 +367,7 @@ class ApiClient:
     def supprimer_programme(self, identifiant):
         return _request("DELETE", f"/supprimerProgramme/{identifiant}")
 
-    # ---- Notes, bulletins et presences ----
+
 
     def total_note(self):
         data, err = _request("GET", "/total_note")

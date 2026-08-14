@@ -1,4 +1,4 @@
-# operations sur les parametres et les statistiques (base locale uniquement)
+
 from database import db
 from repositories.base import RepositoryBase
 
@@ -6,7 +6,7 @@ from repositories.base import RepositoryBase
 class ParametreRepository(RepositoryBase):
 
     def parametres(self):
-        # renvoie les parametres (nom de l'ecole, ville, signataire...) sous forme de dictionnaire
+
         rows = db.query("SELECT cle, valeur FROM parametres")
         return {r["cle"]: r["valeur"] for r in rows}
 
@@ -21,7 +21,7 @@ class ParametreRepository(RepositoryBase):
             db.execute("INSERT INTO parametres (cle, valeur) VALUES (?, '')", (cle,))
 
     def stats_dashboard(self):
-        # les chiffres affiches sur le tableau de bord (effectifs, encaissements...)
+
         total_eleves = db.query_one("SELECT COUNT(*) AS c FROM eleves")["c"]
         inscrits_jour = db.query_one(
             "SELECT COUNT(*) AS c FROM eleves WHERE date_inscription = date('now', 'localtime')")["c"]

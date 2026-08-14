@@ -1,4 +1,4 @@
-# operations sur les matieres et les enseignants, avec aiguillage si en ligne
+
 from database import db
 from repositories.base import RepositoryBase
 

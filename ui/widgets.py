@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont, QPainter, QPen
 from PyQt5.QtWidgets import QSizePolicy, QWidget
 
-# palette de couleurs utilisee par les graphiques
+
 CHART_COLORS = [
     "#047857", "#2563eb", "#d97706", "#dc2626",
     "#8b5cf6", "#ec4899", "#0891b2", "#65a30d",
@@ -13,18 +13,18 @@ CHART_COLORS = [
 def _color(i):
     return QColor(CHART_COLORS[i % len(CHART_COLORS)])
 
-# formate un montant en FCFA, exemple : 1 250 FCFA
+
 def fmt_money(montant) -> str:
     try:
         return f"{float(montant):,.0f}".replace(",", " ") + " FCFA"
     except (TypeError, ValueError):
         return "0 FCFA"
 
-# pareil mais sans le texte "FCFA"
+
 def fmt_money_short(montant) -> str:
     return fmt_money(montant).replace(" FCFA", "")
 
-# base commune des graphiques : garde les donnees et dessine le titre
+
 class _BaseChart(QWidget):
 
     def __init__(self, parent=None, titre=""):
@@ -36,7 +36,7 @@ class _BaseChart(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def set_data(self, labels, values, titre=None):
-        # memorise les nouvelles donnees puis redessine le graphique
+
         self.labels = list(labels)
         self.values = [float(v) if v is not None else 0.0 for v in values]
         if titre:
@@ -66,7 +66,7 @@ class _BaseChart(QWidget):
         painter.drawText(6, y, self.width() - 12, hauteur,
                          Qt.AlignCenter, "Aucune donnee a afficher")
 
-# dessine le graphique en barres avec les valeurs au-dessus
+
 class SimpleBarChart(_BaseChart):
 
     def __init__(self, parent=None, titre=""):
@@ -95,7 +95,7 @@ class SimpleBarChart(_BaseChart):
         bar_w = max(6.0, (w - pad * 2) / n * 0.55)
         gap = (w - pad * 2) / n
 
-        # une barre pour chaque donnee, avec la valeur au-dessus
+
         for i, (label, value) in enumerate(zip(self.labels, self.values)):
             x = pad + i * gap + (gap - bar_w) / 2
             bar_h = (value / max_val) * (chart_h - 10)
@@ -113,7 +113,7 @@ class SimpleBarChart(_BaseChart):
                              Qt.AlignHCenter, str(label))
         painter.end()
 
-# dessine le graphique circulaire (camembert)
+
 class SimplePieChart(_BaseChart):
 
     def __init__(self, parent=None, titre=""):
@@ -142,7 +142,7 @@ class SimplePieChart(_BaseChart):
         if radius < 10:
             radius = 10
 
-        # dessine chaque part du camembert, de la taille de sa valeur
+
         start_angle = 0
         for i, value in enumerate(self.values):
             span_angle = (value / total) * 360 * 16
@@ -160,7 +160,7 @@ class SimplePieChart(_BaseChart):
         row_h = max(18, int((h - y0 - 8) / len(self.labels)) if len(self.labels) else 18)
         if row_h < 16:
             row_h = 16
-        # legende a droite avec le pourcentage de chaque part
+
         y = y0 + 6
         for i, (label, value) in enumerate(zip(self.labels, self.values)):
             pct = (value / total) * 100

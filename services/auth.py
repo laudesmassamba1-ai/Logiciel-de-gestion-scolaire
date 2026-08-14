@@ -5,10 +5,10 @@ from database.db import hash_password
 from core.config import ROLES
 
 class AuthService:
-    # tout ce qui concerne la connexion et les mots de passe
+
 
     def login(self, username, password):
-        # verifie les identifiants et renvoie l'utilisateur si c'est bon
+
         user = db.query_one(
             "SELECT * FROM utilisateurs WHERE username = ? OR email = ?",
             (username, username))
@@ -16,7 +16,7 @@ class AuthService:
             return None, "Identifiant ou mot de passe incorrect."
         if not user["actif"]:
             return None, "Ce compte est desactive. Contactez l'administrateur."
-        # compare le mot de passe saisi avec celui stocke (hashe)
+
         if user["password"] != hash_password(password):
             return None, "Identifiant ou mot de passe incorrect."
         db.execute("UPDATE utilisateurs SET last_login = datetime('now', 'localtime') WHERE id = ?",
@@ -25,7 +25,7 @@ class AuthService:
         return user, None
 
     def change_password(self, user_id, old_password, new_password):
-        # change le mot de passe, apres avoir verifie l'ancien
+
         user = db.query_one("SELECT * FROM utilisateurs WHERE id = ?", (user_id,))
         if not user or user["password"] != hash_password(old_password):
             return False, "Ancien mot de passe incorrect."
@@ -34,7 +34,7 @@ class AuthService:
         return True, "Mot de passe mis a jour."
 
     def random_password(self):
-        # genere un mot de passe provisoire aleatoire
+
         return secrets.token_hex(6)
 
     def derniere_connexions(self, limit=20):
@@ -45,7 +45,7 @@ class AuthService:
         return rows
 
 class RoleAuthorizer:
-    # dit quelles pages chaque role (admin, directeur, gestionnaire) peut voir
+
 
     NAV = {
         "admin": ["dashboard", "comptes"],
@@ -58,7 +58,7 @@ class RoleAuthorizer:
         self.role = role if role in ROLES else "gestionnaire"
 
     def allowed(self, page):
-        # la page est-elle autorisee pour ce role ?
+
         return page in self.NAV.get(self.role, [])
 
     def can_edit(self, page):

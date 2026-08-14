@@ -1,4 +1,4 @@
-# operations sur le personnel, avec aiguillage vers le serveur si en ligne
+
 from database import db
 from repositories.base import RepositoryBase
 

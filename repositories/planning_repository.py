@@ -1,4 +1,4 @@
-# operations sur l'emploi du temps (base locale uniquement)
+
 from database import db
 from repositories.base import RepositoryBase
 
@@ -6,7 +6,7 @@ from repositories.base import RepositoryBase
 class PlanningRepository(RepositoryBase):
 
     def planning_for(self, classe_id):
-        # recupere l'emploi du temps d'une classe
+
         rows = db.query(
             "SELECT * FROM planning WHERE classe_id = ?", (classe_id,))
         return {(r["jour"], r["creneau"]): r for r in rows}

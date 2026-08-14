@@ -1,4 +1,4 @@
-# instance partagee des depots : tout le projet l'utilise pour lire/ecrire
+
 from repositories.base import RepositoryBase
 from repositories.classe_repository import ClasseRepository
 from repositories.compte_repository import CompteRepository
@@ -12,7 +12,7 @@ from repositories.planning_repository import PlanningRepository
 
 
 class _Repos:
-    # regroupe tous les depots derriere une seule facade
+
     def __init__(self):
         self.eleve = EleveRepository()
         self.classe = ClasseRepository()
@@ -28,7 +28,7 @@ class _Repos:
             self.personnel_repo, self.compte, self.planning, self.parametre,
         )
 
-    # fait passer les appels (ex: repos.eleves()) vers le bon depot
+
     def __getattr__(self, name):
         for depot in self._depots:
             if hasattr(depot, name):

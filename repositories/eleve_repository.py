@@ -1,4 +1,4 @@
-# operations sur les eleves, avec aiguillage vers le serveur si en ligne
+
 from database import db
 from repositories.base import RepositoryBase
 
@@ -6,7 +6,7 @@ from repositories.base import RepositoryBase
 class EleveRepository(RepositoryBase):
 
     def eleves(self, classe_id=None, statut=None, recherche=""):
-        # liste les eleves, avec filtres optionnels (classe, statut, nom...)
+
         sql = """SELECT e.*, c.nom AS classe_nom
                  FROM eleves e LEFT JOIN classes c ON c.id = e.classe_id WHERE 1=1"""
         params = []
@@ -30,7 +30,7 @@ class EleveRepository(RepositoryBase):
         return db.query_one("SELECT * FROM eleves WHERE matricule = ?", (matricule,))
 
     def add_eleve(self, data):
-        # cree un nouvel eleve ; si pas de matricule, on en genere un
+
         if not data.get("matricule"):
             data["matricule"] = self.next_matricule()
         data = dict(data)
@@ -67,7 +67,7 @@ class EleveRepository(RepositoryBase):
                           db.execute, "DELETE FROM eleves WHERE id = ?", (eleve_id,))
 
     def next_matricule(self):
-        # genere le prochain matricule de l'annee en cours (ex: ELEV2026-001)
+
         year = __import__("datetime").date.today().year
         prefix = f"ELEV{year}"
         row = db.query_one(

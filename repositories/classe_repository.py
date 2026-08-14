@@ -1,4 +1,4 @@
-# operations sur les classes, avec aiguillage vers le serveur si en ligne
+
 from database import db
 from repositories.base import RepositoryBase
 
@@ -32,7 +32,7 @@ class ClasseRepository(RepositoryBase):
             (nom, niveau, capacite, salle, titulaire, classe_id))
 
     def delete_classe(self, classe_id):
-        # on efface d'abord ce qui depend de la classe (eleves, planning)
+
         db.execute("DELETE FROM eleves WHERE classe_id = ?", (classe_id,))
         db.execute("DELETE FROM planning WHERE classe_id = ?", (classe_id,))
         self._route_write("DELETE", f"/supprimerClasse/{classe_id}", {},

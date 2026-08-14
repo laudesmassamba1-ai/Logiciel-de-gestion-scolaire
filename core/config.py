@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-# nom et version de l'app
+
 APP_NAME = "Gestion Scolaire"
 APP_VERSION = "1.2.0"
 
@@ -10,22 +10,22 @@ os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
 os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
 os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
 
-# police utilisee dans toute l'interface, avec une liste de secours
+
 APP_FONT_FAMILY = "Segoe UI"
 APP_FONT_FALLBACK = ("DejaVu Sans", "Noto Sans", "Ubuntu", "Helvetica", "sans-serif")
 APP_FONT_SIZE = 10
 
-# serveur optionnel ; l'app fonctionne aussi sans lui, en local
+
 API_BASE_URL = "http://127.0.0.1:8000"
 API_TIMEOUT = 3.0
 
-# infos locales par defaut de l'ecole
+
 PAYS_DEFAUT = "Republique du Congo"
 VILLE_DEFAUT = "Brazzaville"
 INDICATIF_TEL = "+242"
 DEVISE = "FCFA"
 
-# feuille de style qui habille toutes les fenetres
+
 APP_STYLESHEET = """
 QMainWindow, QDialog, QWidget { font-family: 'Segoe UI', 'DejaVu Sans', sans-serif; }
 QToolTip { background-color: #0f172a; color: #ffffff; border: none; padding: 5px; }
@@ -45,7 +45,7 @@ QHeaderView::section { background-color: #f8fafc; color: #475569; font-weight: b
 QListWidget::item { padding: 6px; }
 """
 
-# roles autorises pour les comptes, et leur libelle dans l'interface
+
 ROLES = ("admin", "directeur", "gestionnaire")
 
 ROLE_LABELS = {
@@ -54,7 +54,7 @@ ROLE_LABELS = {
     "gestionnaire": "Gestionnaire",
 }
 
-# listes fixees : periodes de l'annee, jours d'ecole et creneaux de cours
+
 PERIODES = ("1er Trimestre", "2eme Trimestre", "3eme Trimestre")
 
 JOURS = ("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi")
@@ -70,16 +70,16 @@ CRENEAUX = (
     "13h30 - 14h20",
 )
 
-# racine du projet (un dossier au-dessus de core/)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# retrouve le chemin d'un fichier, meme quand l'app est un executable
+
 def resource_path(relative: str) -> Path:
     if hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS) / relative
     return PROJECT_ROOT / relative
 
-# dossier des donnees de l'app, cree automatiquement si besoin
+
 def data_dir() -> Path:
     if hasattr(sys, "_MEIPASS"):
         base = Path(sys.executable).resolve().parent
@@ -93,7 +93,7 @@ UI_DIR = resource_path("ui/ui_files")
 DB_PATH = data_dir() / "ecole.db"
 DOCS_DIR = data_dir() / "documents"
 
-# comptes crees automatiquement au premier lancement
+
 DEFAULT_ACCOUNTS = (
     {"nom_complet": "Administrateur Systeme", "username": "admin",
      "email": "admin@ecole.cg", "telephone": "+242 06 000 0000",
@@ -106,7 +106,7 @@ DEFAULT_ACCOUNTS = (
      "password": "gestionnaire123", "role": "gestionnaire"},
 )
 
-# matieres ajoutees automatiquement au premier lancement
+
 DEFAULT_MATIERES = (
     "Francais",
     "Mathematiques",

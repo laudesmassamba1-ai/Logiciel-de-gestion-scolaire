@@ -5,7 +5,7 @@ from core.config import APP_NAME, ROLE_LABELS
 from ui import pages
 from ui.loader import apply_ui
 
-# correspondance entre les boutons de la barre et les noms des pages
+
 NAV_PAGES = {
     "btn_nav_dashboard": "dashboard",
     "btn_nav_eleves": "eleves",
@@ -35,10 +35,10 @@ BUILDERS = {
     "comptes": pages.comptes,
 }
 
-# fenetre principale de l'application
+
 class MainWindow(QMainWindow):
     def __init__(self, user):
-        # prepare la fenetre, le style et l'utilisateur connecte
+
         super().__init__()
         self.user = user
         self.ctx = pages.PageContext(user, self.navigate)
@@ -97,14 +97,14 @@ class MainWindow(QMainWindow):
         self.btn_logout.clicked.connect(self.logout)
         self._refresh_api_status()
 
-        # met en place la navigation puis construit les pages
+
         self._wire_nav()
         self._build_pages()
         default = "dashboard" if user["role"] in {"admin", "directeur", "gestionnaire"} else "comptes"
         self.navigate(default)
 
     def _refresh_api_status(self):
-        # verifie si l'API repond et affiche le statut dans la barre
+
         try:
             en_ligne = api_disponible()
         except Exception:
@@ -121,12 +121,12 @@ class MainWindow(QMainWindow):
                 " background-color: #fef9c3; color: #854d0e;")
 
     def logout(self):
-        # demande confirmation puis ferme la fenetre
+
         if QMessageBox.question(self, "Déconnexion", "Voulez-vous vraiment vous déconnecter ?") == QMessageBox.Yes:
             self.close()
 
     def _wire_nav(self):
-        # affiche seulement les boutons de navigation autorises pour ce role
+
         for btn_name, page_name in NAV_PAGES.items():
             btn = getattr(self, btn_name)
             if self.ctx.authorizer.allowed(page_name):
@@ -136,7 +136,7 @@ class MainWindow(QMainWindow):
                 btn.setVisible(False)
 
     def _build_pages(self):
-        # cree les pages une par une selon les droits de l'utilisateur
+
         dashboard_builder = DASHBOARD_BUILDERS.get(self.user["role"], pages.dashboard_admin)
         if self.ctx.authorizer.allowed("dashboard"):
             widget = QWidget()
@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
             self._pages[page_name] = widget
 
     def navigate(self, page_name):
-        # affiche la page demandee et met a jour le bouton actif
+
         widget = self._pages.get(page_name)
         if widget is None:
             return

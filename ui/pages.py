@@ -19,7 +19,7 @@ from services.auth import RoleAuthorizer
 from ui.loader import apply_ui
 from ui.widgets import SimpleBarChart, SimplePieChart, fmt_money
 
-# contient les infos communes a toutes les pages (utilisateur, navigation)
+
 class PageContext:
     def __init__(self, user, navigate):
         self.user = user
@@ -66,7 +66,7 @@ def _fill_combos(combo, items, clear_first=True):
     for item in items:
         combo.addItem(item)
 
-# tableau de bord de l'administrateur
+
 def dashboard_admin(page, ctx):
     apply_ui("dashboards/dashboard_admin.ui", page)
 
@@ -96,7 +96,7 @@ def dashboard_admin(page, ctx):
     refresh()
     page.refresh = refresh
 
-# tableau de bord du directeur
+
 def dashboard_directeur(page, ctx):
     apply_ui("dashboards/dashboard_directeur.ui", page)
 
@@ -201,7 +201,7 @@ def _replace_layout(layout, widget):
             w.deleteLater()
     layout.addWidget(widget)
 
-# tableau de bord du gestionnaire
+
 def dashboard_gestionnaire(page, ctx):
     apply_ui("dashboards/dashboard_gestionnaire.ui", page)
 
@@ -266,11 +266,11 @@ def dashboard_gestionnaire(page, ctx):
     refresh()
     page.refresh = refresh
 
-# page de gestion des eleves
+
 def eleves(page, ctx):
     apply_ui("eleves/eleves.ui", page)
 
-    # affiche les eleves de la classe choisie avec les filtres
+
     def fill():
         classe_id = page.combo_classe.currentData()
         statut = page.combo_statut.currentText()
@@ -345,7 +345,7 @@ def eleves(page, ctx):
     fill()
     page.refresh = fill
 
-# dialogue d'inscription ou de modification d'un eleve
+
 def open_inscription_dialog(parent, ctx, eleve=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Dossier d'Inscription")
@@ -465,7 +465,7 @@ def open_inscription_dialog(parent, ctx, eleve=None):
     on_radio()
     update_matricule()
 
-    # enregistre la fiche eleve en base
+
     def save():
         nom = dlg.input_nom.text().strip()
         prenom = dlg.input_prenom.text().strip()
@@ -535,7 +535,7 @@ def _parse_money(text):
     except (TypeError, ValueError):
         return 0.0
 
-# page de gestion des classes
+
 def classes(page, ctx):
     apply_ui("classes/classes.ui", page)
 
@@ -603,7 +603,7 @@ def classes(page, ctx):
     fill()
     page.refresh = fill
 
-# dialogue pour creer ou modifier une classe
+
 def open_classe_dialog(parent, ctx, classe=None, on_created=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvelle Classe" if not classe else "Modifier la Classe")
@@ -651,7 +651,7 @@ def open_classe_dialog(parent, ctx, classe=None, on_created=None):
     dlg.btn_cancel.clicked.connect(dlg.reject)
     dlg.exec_()
 
-# page de saisie des notes par classe et matiere
+
 def notes(page, ctx):
     apply_ui("notes/notes.ui", page)
 
@@ -842,7 +842,7 @@ class PlanningCellDialog(QDialog):
     def values(self):
         return self.combo.currentData(), self.salle.text().strip()
 
-# page de l'emploi du temps
+
 def planning(page, ctx):
     apply_ui("planning/planning.ui", page)
     _fill_combos(page.combo_classe_planning, [])
@@ -956,7 +956,7 @@ def planning(page, ctx):
     refresh()
     page.refresh = refresh
 
-# page de la caisse (recettes, depenses, solde)
+
 def caisse(page, ctx):
     apply_ui("caisse/caisse.ui", page)
 
@@ -1034,7 +1034,7 @@ def caisse(page, ctx):
     refresh()
     page.refresh = refresh
 
-# dialogue pour ajouter une recette ou une depense
+
 def open_transaction_dialog(parent, ctx, type_trans):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvelle Recette" if type_trans == "entree" else "Nouvelle Depense")
@@ -1080,7 +1080,7 @@ def open_transaction_dialog(parent, ctx, type_trans):
             mode.currentText())
         QMessageBox.information(dlg, "Caisse", "Transaction enregistree.")
 
-# page de gestion des comptes utilisateurs
+
 def comptes(page, ctx):
     apply_ui("comptes/comptes.ui", page)
 
@@ -1145,7 +1145,7 @@ def comptes(page, ctx):
     refresh()
     page.refresh = refresh
 
-# dialogue pour creer ou modifier un compte
+
 def open_compte_dialog(parent, ctx, compte=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouveau Compte")
@@ -1191,7 +1191,7 @@ def open_compte_dialog(parent, ctx, compte=None):
     dlg.btn_cancel.clicked.connect(dlg.reject)
     dlg.exec_()
 
-# dialogue pour changer son propre mot de passe
+
 def open_change_password_dialog(parent, user):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Changer mon mot de passe")
@@ -1220,7 +1220,7 @@ def open_change_password_dialog(parent, user):
         ok, message = auth.change_password(user["id"], old.text(), new.text())
         QMessageBox.information(dlg, "Mot de passe", message)
 
-# dialogue pour reinitialiser le mot de passe d'un compte
+
 def open_reset_password_dialog(parent, ctx):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Reinitialiser un mot de passe")
@@ -1246,7 +1246,7 @@ def open_reset_password_dialog(parent, ctx):
         repos.reset_password(combo.currentData(), hash_password(new_pwd.text()))
         QMessageBox.information(dlg, "Mot de passe", "Mot de passe reinitialise.")
 
-# page du personnel (enseignants et salaires)
+
 def personnel(page, ctx):
     page.setStyleSheet("background-color: #f8fafc;")
     lay = QVBoxLayout(page)
@@ -1317,7 +1317,7 @@ def personnel(page, ctx):
     fill()
     page.refresh = fill
 
-# dialogue pour ajouter ou modifier un employe
+
 def open_personnel_dialog(parent, ctx, employe=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvel Employe" if not employe else "Modifier Employe")
@@ -1363,7 +1363,7 @@ def open_personnel_dialog(parent, ctx, employe=None):
         else:
             repos.add_personnel(*data)
 
-# prepare le certificat de scolarite
+
 def open_certificat_dialog(parent):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Certificat de scolarite")
@@ -1400,7 +1400,7 @@ def open_certificat_dialog(parent):
                 eleve["classe_nom"] = classe["nom"]
             reports.certificat_scolarite(eleve, repos.parametres())
 
-# page des parametres de l'ecole
+
 def parametres(page, ctx):
     apply_ui("parametres/parametres.ui", page)
 
