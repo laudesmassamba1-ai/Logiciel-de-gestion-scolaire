@@ -12,3 +12,5 @@ installers/
 mobile/build_src/
 mobile/bin/
 mobile/.buildozer/
+mobile/*.keystore
+mobile/keystore-credentials.txt

@@ -58,16 +58,46 @@ Puis :
 
 ```bash
 cd mobile
-./scripts/build_apk.sh
+./scripts/build_apk.sh            # APK debug (non signé)
+./scripts/build_apk.sh release    # APK release signé
 ```
 
-L'APK (debug) est produit dans `mobile/bin/` :
-`GestionScolaire-1.2.0-arm64-v8a-debug.apk`.
+L'APK est produit dans `mobile/bin/` :
+- debug : `gestionscolaire-<version>-arm64-v8a-debug.apk`
+- release : `gestionscolaire-<version>-arm64-v8a-release.apk`
 
 - Le premier build télécharge Android SDK/NDK dans `~/.buildozer` (plusieurs
   centaines de Mo, un peu long).
 - `scripts/build_apk.sh` régénère `mobile/build_src/` (backend partagé + app
   Kivy) pour que l'APK soit toujours synchronisé avec le dépôt.
+
+### Signature (release)
+
+Le build release est signé avec le keystore `mobile/gestionscolaire-release.keystore`
+(généré via `keytool`, identifiant : `gestionscolaire`). Les identifiants de
+stockage sont dans `mobile/keystore-credentials.txt` (fichier local, ignoré
+par git — à sauvegarder, il ne faut PAS le perdre ni le committer).
+
+Le build passe les variables d'environnement suivantes à python-for-android :
+
+- `P4A_RELEASE_KEYSTORE` (chemin du .keystore)
+- `P4A_RELEASE_KEYSTORE_PASSWD`
+- `P4A_RELEASE_KEYALIAS`
+- `P4A_RELEASE_KEYALIAS_PASSWD`
+
+### Build via GitHub Actions (recommandé)
+
+Pas besoin de SDK local : le workflow `.github/workflows/build_android.yml`
+compile l'APK signé sur un runner Ubuntu (SDK/NDK téléchargés en cloud).
+
+```bash
+gh workflow run build_android.yml --ref exe
+gh run download <run-id> --repo <owner>/<repo> --dir apk
+```
+
+Les secrets suivants doivent être définis dans le dépôt :
+`APK_KEYSTORE_B64` (keystore en base64), `APK_KEYSTORE_PASSWORD`,
+`APK_KEY_ALIAS`, `APK_KEY_PASSWORD`.
 
 ## État d'avancement
 

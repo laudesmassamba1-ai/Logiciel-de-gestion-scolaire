@@ -30,4 +30,4 @@ cp "$MOBILE_DIR/main.py" "$STAGING/main.py"
 find "$STAGING" -name "__pycache__" -type d -prune -exec rm -rf {} \;
 
 cd "$MOBILE_DIR"
-exec buildozer android debug "$@"
+exec buildozer android "${1:-debug}"
