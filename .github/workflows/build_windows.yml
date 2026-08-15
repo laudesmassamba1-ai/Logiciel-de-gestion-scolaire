@@ -5,31 +5,47 @@ on:
     branches: [ exe ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          pip install -r requirements.txt pyinstaller
 
-      - name: Build Executable with PyInstaller (onefile + manifeste DPI)
-        run: pyinstaller --noconfirm --clean build_win.spec
+      - run: pyinstaller --noconfirm --clean build_win.spec
 
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
+      - run: Copy-Item -Force dist/GestionScolaire.exe dist_win/GestionScolaire.exe
+
+      - name: Commit Executable
+        shell: bash
+        run: |
+          git lfs install --skip-repo
+          git add dist_win/GestionScolaire.exe
+          if git diff --cached --quiet -- dist_win/GestionScolaire.exe; then
+            echo "executable unchanged"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty-message -m ""
+            git lfs push --all origin
+            git push origin HEAD:exe
+          fi
+
+      - uses: actions/upload-artifact@v4
         with:
           name: GestionScolaire-Windows-x64
           path: dist/GestionScolaire.exe

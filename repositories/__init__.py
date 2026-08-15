@@ -9,6 +9,7 @@ from repositories.parametre_repository import ParametreRepository
 from repositories.pedagogie_repository import PedagogieRepository
 from repositories.personnel_repository import PersonnelRepository
 from repositories.planning_repository import PlanningRepository
+from repositories.presence_repository import PresenceRepository
 
 
 class _Repos:
@@ -23,9 +24,11 @@ class _Repos:
         self.compte = CompteRepository()
         self.planning = PlanningRepository()
         self.parametre = ParametreRepository()
+        self.presence = PresenceRepository()
         self._depots = (
             self.eleve, self.classe, self.pedagogie, self.finance, self.note,
             self.personnel_repo, self.compte, self.planning, self.parametre,
+            self.presence,
         )
 
 

@@ -7,7 +7,9 @@ from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QMessageBox, QPushButton, QTableWidgetItem, QVBoxLayout, QComboBox,
-    QDoubleSpinBox, QCheckBox, QFormLayout, QWidget,
+    QDoubleSpinBox, QCheckBox, QFormLayout, QWidget, QDateEdit, QFrame,
+    QGridLayout, QHeaderView, QTabWidget, QTableWidget, QScrollArea,
+    QSizePolicy,
 )
 
 from api import client
@@ -42,7 +44,7 @@ def _btn(text, callback, style=None):
 
 def _simple_btn_style(bg="#f1f5f9", fg="#334155", border="#cbd5e1"):
     return (f"background-color: {bg}; color: {fg}; border: 1px solid {border};"
-            " border-radius: 4px; padding: 3px 8px; font-size: 10px;")
+            " border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 600;")
 
 def _money_edit(value=0, minimum=0, maximum=100000000):
     spin = QDoubleSpinBox()
@@ -65,6 +67,28 @@ def _fill_combos(combo, items, clear_first=True):
         combo.clear()
     for item in items:
         combo.addItem(item)
+
+
+def _reload_combo(combo, items, selected_id=None):
+    if selected_id is None:
+        selected_id = combo.currentData()
+    combo.blockSignals(True)
+    combo.clear()
+    for label, data in items:
+        combo.addItem(label, data)
+    idx = combo.findData(selected_id)
+    if idx >= 0:
+        combo.setCurrentIndex(idx)
+    elif combo.count():
+        combo.setCurrentIndex(0)
+    combo.blockSignals(False)
+
+
+def _classe_items(avec_toutes=True):
+    items = [(c["nom"], c["id"]) for c in repos.classes()]
+    if avec_toutes:
+        items.insert(0, ("Toutes les classes", None))
+    return items
 
 
 def dashboard_admin(page, ctx):
@@ -202,6 +226,140 @@ def _replace_layout(layout, widget):
     layout.addWidget(widget)
 
 
+def statistiques(page, ctx):
+    page.setStyleSheet("background-color: #f8fafc;")
+    lay = QVBoxLayout(page)
+    lay.setContentsMargins(20, 20, 20, 20)
+    lay.setSpacing(16)
+    _page_header(lay, "Statistiques de l'ecole",
+                 "Scolarite, finances et presences en un coup d'oeil")
+
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+    conteneur = QWidget()
+    grille = QGridLayout(conteneur)
+    grille.setSpacing(16)
+    grille.setColumnStretch(0, 1)
+    grille.setColumnStretch(1, 1)
+    scroll.setWidget(conteneur)
+    lay.addWidget(scroll)
+
+    def _ajouter(chart, ligne, colonne):
+        cadre = QFrame()
+        cadre.setStyleSheet(
+            "QFrame { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; }")
+        cadre.setMinimumHeight(250)
+        cl = QVBoxLayout(cadre)
+        cl.setContentsMargins(15, 15, 15, 15)
+        cl.setSpacing(10)
+        chart.setMinimumHeight(230)
+        chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        cl.addWidget(chart)
+        grille.addWidget(cadre, ligne, colonne)
+        grille.setRowStretch(ligne, 1)
+
+    def _group_rows(rows, cle, somme):
+        d = {}
+        for r in rows:
+            k = r.get(cle) or "Autre"
+            d[k] = d.get(k, 0) + float(r.get(somme) or 0)
+        return d
+
+    def refresh():
+        while grille.count():
+            item = grille.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        classes = repos.classes()
+        eleves = repos.eleves()
+
+        eff = SimpleBarChart(titre="Effectifs par classe")
+        eff.set_data([c["nom"][:12] for c in classes[:8]],
+                     [c["effectif"] for c in classes[:8]])
+        _ajouter(eff, 0, 0)
+
+        par_cycle = {}
+        for c in classes:
+            cle = c.get("cycle_nom") or "Sans cycle"
+            par_cycle[cle] = par_cycle.get(cle, 0) + c["effectif"]
+        ch_cycle = SimpleBarChart(titre="Effectifs par cycle")
+        ch_cycle.set_data(list(par_cycle.keys()), list(par_cycle.values()))
+        _ajouter(ch_cycle, 0, 1)
+
+        sexes = {}
+        for e in eleves:
+            s = (e.get("sexe") or "Non precise").strip().capitalize()
+            sexes[s] = sexes.get(s, 0) + 1
+        ch_sexe = SimplePieChart(titre="Repartition par sexe")
+        ch_sexe.set_data(list(sexes.keys()), list(sexes.values()))
+        _ajouter(ch_sexe, 1, 0)
+
+        statuts = {}
+        for e in eleves:
+            s = (e.get("statut") or "Inconnu").capitalize()
+            statuts[s] = statuts.get(s, 0) + 1
+        ch_statut = SimplePieChart(titre="Repartition par statut")
+        ch_statut.set_data(list(statuts.keys()), list(statuts.values()))
+        _ajouter(ch_statut, 1, 1)
+
+        mois = {}
+        for t in repos.transactions():
+            cle = t["date"][:7]
+            mois.setdefault(cle, 0)
+            mois[cle] += t["montant"] if t["type"] == "entree" else -t["montant"]
+        today = datetime.date.today()
+        lbls, vals = [], []
+        for i in range(11, -1, -1):
+            d = today - datetime.timedelta(days=30 * i)
+            cle = d.strftime("%Y-%m")
+            lbls.append(d.strftime("%b"))
+            vals.append(int(mois.get(cle, 0)))
+        ch_mois = SimpleBarChart(titre="Tresorerie sur 12 mois")
+        ch_mois.set_data(lbls, vals)
+        _ajouter(ch_mois, 2, 0)
+
+        paiements = repos.paiements()
+        ch_frais = SimplePieChart(titre="Encaissements par type de frais")
+        frais = _group_rows(paiements, "type_frais", "montant")
+        ch_frais.set_data(list(frais.keys()), list(frais.values()))
+        _ajouter(ch_frais, 2, 1)
+
+        ch_mode = SimplePieChart(titre="Encaissements par mode de reglement")
+        modes = _group_rows(paiements, "mode_reglement", "montant")
+        ch_mode.set_data(list(modes.keys()), list(modes.values()))
+        _ajouter(ch_mode, 3, 0)
+
+        par_classe = {}
+        for p in paiements:
+            cle = p.get("classe_nom") or "Sans classe"
+            par_classe[cle] = par_classe.get(cle, 0) + float(p["montant"] or 0)
+        ch_classe = SimpleBarChart(titre="Encaissements par classe")
+        ch_classe.set_data(list(par_classe.keys())[:8],
+                           list(par_classe.values())[:8])
+        _ajouter(ch_classe, 3, 1)
+
+        comptes = {}
+        for r in repos.presences_statuts():
+            comptes[r["statut"]] = r["total"]
+        ch_pres = SimplePieChart(titre="Presences (toutes dates)")
+        ch_pres.set_data(list(comptes.keys()), list(comptes.values()))
+        _ajouter(ch_pres, 4, 0)
+
+        complets = sum(1 for e in eleves
+                       if e.get("check_acte") and e.get("check_photos")
+                       and e.get("check_bulletin"))
+        ch_doss = SimplePieChart(titre="Dossiers des eleves")
+        ch_doss.set_data(["Complets", "Incomplets"],
+                         [complets, len(eleves) - complets])
+        _ajouter(ch_doss, 4, 1)
+
+    refresh()
+    page.refresh = refresh
+
+
 def dashboard_gestionnaire(page, ctx):
     apply_ui("dashboards/dashboard_gestionnaire.ui", page)
 
@@ -269,9 +427,11 @@ def dashboard_gestionnaire(page, ctx):
 
 def eleves(page, ctx):
     apply_ui("eleves/eleves.ui", page)
+    _fit_rows(page.table_eleves)
 
 
     def fill():
+        _reload_combo(page.combo_classe, _classe_items())
         classe_id = page.combo_classe.currentData()
         statut = page.combo_statut.currentText()
         recherche = page.search_eleve.text().strip()
@@ -538,21 +698,28 @@ def _parse_money(text):
 
 def classes(page, ctx):
     apply_ui("classes/classes.ui", page)
+    _fit_rows(page.table_classes)
+    page.table_classes.insertColumn(6)
+    page.table_classes.setHorizontalHeaderItem(6, QTableWidgetItem("Cycle"))
 
     def fill():
+        _reload_combo(page.combo_filter_niveau,
+                      [("Tous les niveaux", None)] +
+                      [(n, n) for n in sorted({c["niveau"] for c in repos.classes() if c.get("niveau")})])
         recherche = page.input_search_classe.text().strip().lower()
-        niveau = page.combo_filter_niveau.currentText()
+        niveau = page.combo_filter_niveau.currentData()
         rows = repos.classes()
         if recherche:
             rows = [c for c in rows if recherche in c["nom"].lower()]
-        if niveau != "Tous les niveaux":
+        if niveau:
             rows = [c for c in rows if c["niveau"] == niveau]
         page.table_classes.setRowCount(len(rows))
         for i, c in enumerate(rows):
             effectif = c["effectif"]
             capacite = c["capacite"]
             values = [c["nom"], c["niveau"] or "-", effectif, capacite,
-                      c["titulaire"] or "-", c["salle"] or "-"]
+                      c["titulaire"] or "-", c["salle"] or "-",
+                      c.get("cycle_nom") or "-"]
             for j, val in enumerate(values):
                 item = QTableWidgetItem(str(val))
                 if j == 2 and capacite and effectif >= capacite:
@@ -566,7 +733,7 @@ def classes(page, ctx):
                                _simple_btn_style(bg="#eff6ff", fg="#1d4ed8", border="#bfdbfe")))
             lay.addWidget(_btn("Supprimer", partial(_delete_classe, page, ctx, c),
                                _simple_btn_style(bg="#fef2f2", fg="#dc2626", border="#fecaca")))
-            page.table_classes.setCellWidget(i, 6, cell)
+            page.table_classes.setCellWidget(i, 7, cell)
         page._classe_rows = rows
         page.table_classes.resizeColumnsToContents()
         page.lbl_empty_state_classes.setVisible(not rows)
@@ -584,9 +751,6 @@ def classes(page, ctx):
                 == QMessageBox.Yes:
             repos.delete_classe(c["id"])
             fill()
-
-    niveaux = sorted({c["niveau"] for c in repos.classes() if c.get("niveau")})
-    _fill_combos(page.combo_filter_niveau, ["Tous les niveaux"] + niveaux)
 
     page.btn_add_classe.clicked.connect(lambda: open_classe_dialog(page, ctx))
     page.btn_apply_filter_classe.clicked.connect(fill)
@@ -610,6 +774,15 @@ def open_classe_dialog(parent, ctx, classe=None, on_created=None):
     dlg.resize(460, 480)
     apply_ui("classes/classe_dialog.ui", dlg)
 
+    combo_cycle = QComboBox()
+    combo_cycle.addItem("-- Sans cycle --", None)
+    for cyc in repos.cycles():
+        combo_cycle.addItem(cyc["nom"], cyc["id"])
+    lbl_cycle = QLabel("Cycle :")
+    lbl_cycle.setStyleSheet("color: #334155; font-weight: bold; font-size: 12px;")
+    dlg.mainLayout.insertWidget(5, lbl_cycle)
+    dlg.mainLayout.insertWidget(6, combo_cycle)
+
     personnel = repos.personnel()
     dlg.combo_titulaire.clear()
     dlg.combo_titulaire.addItem("-- A affecter plus tard --", None)
@@ -628,6 +801,9 @@ def open_classe_dialog(parent, ctx, classe=None, on_created=None):
             idx = dlg.combo_titulaire.findData(classe["titulaire"])
             if idx >= 0:
                 dlg.combo_titulaire.setCurrentIndex(idx)
+        idx = combo_cycle.findData(classe.get("cycle_id"))
+        if idx >= 0:
+            combo_cycle.setCurrentIndex(idx)
 
     def save():
         nom = dlg.input_nom_classe.text().strip()
@@ -638,11 +814,11 @@ def open_classe_dialog(parent, ctx, classe=None, on_created=None):
         if classe:
             repos.update_classe(classe["id"], nom, dlg.combo_niveau.currentText(),
                                 dlg.input_capacite.value(), dlg.input_salle.text().strip(),
-                                titulaire)
+                                titulaire, combo_cycle.currentData())
         else:
             repos.add_classe(nom, dlg.combo_niveau.currentText(),
                              dlg.input_capacite.value(), dlg.input_salle.text().strip(),
-                             titulaire)
+                             titulaire, combo_cycle.currentData())
         if on_created:
             on_created()
         dlg.accept()
@@ -654,6 +830,7 @@ def open_classe_dialog(parent, ctx, classe=None, on_created=None):
 
 def notes(page, ctx):
     apply_ui("notes/notes.ui", page)
+    _fit_rows(page.table_notes)
 
     _fill_combos(page.combo_classe, [])
     for c in repos.classes():
@@ -741,6 +918,8 @@ def notes(page, ctx):
     page.table_notes.itemChanged.connect(on_item_changed)
 
     def load_classe():
+        _reload_combo(page.combo_classe, _classe_items(avec_toutes=False))
+        _reload_combo(page.combo_matiere, [(m["nom"], m["id"]) for m in repos.matieres()])
         classe_id = page.combo_classe.currentData()
         matiere_id = page.combo_matiere.currentData()
         periode = page.combo_periode.currentText()
@@ -845,6 +1024,7 @@ class PlanningCellDialog(QDialog):
 
 def planning(page, ctx):
     apply_ui("planning/planning.ui", page)
+    _fit_rows(page.table_planning)
     _fill_combos(page.combo_classe_planning, [])
     for c in repos.classes():
         page.combo_classe_planning.addItem(c["nom"], c["id"])
@@ -852,6 +1032,7 @@ def planning(page, ctx):
     editing = {"on": False}
 
     def refresh():
+        _reload_combo(page.combo_classe_planning, _classe_items(avec_toutes=False))
         classe_id = page.combo_classe_planning.currentData()
         page.table_planning.clearContents()
         if not classe_id:
@@ -959,6 +1140,7 @@ def planning(page, ctx):
 
 def caisse(page, ctx):
     apply_ui("caisse/caisse.ui", page)
+    _fit_rows(page.table_transactions)
 
     if not ctx.can_edit("caisse"):
         page.btn_add_income.setVisible(False)
@@ -1083,6 +1265,7 @@ def open_transaction_dialog(parent, ctx, type_trans):
 
 def comptes(page, ctx):
     apply_ui("comptes/comptes.ui", page)
+    _fit_rows(page.table_comptes)
 
     def refresh():
         role = page.combo_filter_role.currentText()
@@ -1282,6 +1465,7 @@ def personnel(page, ctx):
     table.setSelectionBehavior(QTableWidget.SelectRows)
     table.setAlternatingRowColors(True)
     table.verticalHeader().setVisible(False)
+    table.verticalHeader().setDefaultSectionSize(40)
     table.setStyleSheet(
         "QTableWidget { background: #ffffff; border: 1px solid #e2e8f0;"
         " border-radius: 8px; gridline-color: #f1f5f9; }"
@@ -1454,3 +1638,989 @@ def parametres(page, ctx):
 
     load()
     page.refresh = load
+
+
+def _fit_rows(t):
+    t.verticalHeader().setDefaultSectionSize(40)
+
+
+def _make_table(headers):
+    t = QTableWidget(0, len(headers))
+    t.setHorizontalHeaderLabels(headers)
+    t.setEditTriggers(QTableWidget.NoEditTriggers)
+    t.setSelectionBehavior(QTableWidget.SelectRows)
+    t.setAlternatingRowColors(True)
+    t.verticalHeader().setVisible(False)
+    t.verticalHeader().setDefaultSectionSize(40)
+    t.setStyleSheet(
+        "QTableWidget { background: #ffffff; border: 1px solid #e2e8f0;"
+        " border-radius: 10px; gridline-color: #f1f5f9; }"
+        "QTableWidget::item { padding: 0px 6px; border: none; }"
+        "QTableWidget::item:selected { background: #d1fae5; color: #064e3b; }"
+        "QHeaderView::section { background: #f8fafc; color: #475569;"
+        " font-weight: 600; padding: 10px 6px; border: none;"
+        " border-bottom: 1px solid #e2e8f0; }")
+    t.horizontalHeader().setHighlightSections(False)
+    return t
+
+def _page_header(parent_lay, titre, sous_titre):
+    header = QVBoxLayout()
+    header.setSpacing(4)
+    t = QLabel(titre)
+    t.setStyleSheet("font-size: 26px; font-weight: 700; color: #0f172a; letter-spacing: -0.3px;")
+    s = QLabel(sous_titre)
+    s.setStyleSheet("color: #64748b; font-size: 13px;")
+    header.addWidget(t)
+    header.addWidget(s)
+    parent_lay.addLayout(header)
+
+def _kpi_card(label, valeur, couleur="#047857"):
+    frame = QFrame()
+    frame.setStyleSheet(
+        "QFrame { background: #ffffff; border: 1px solid #e2e8f0;"
+        " border-radius: 12px; }")
+    v = QVBoxLayout(frame)
+    v.setContentsMargins(16, 14, 16, 14)
+    v.setSpacing(2)
+    val = QLabel(str(valeur))
+    val.setStyleSheet(f"font-size: 22px; font-weight: 700; color: {couleur};")
+    lab = QLabel(label)
+    lab.setStyleSheet("font-size: 11px; color: #64748b; font-weight: 500;")
+    v.addWidget(val)
+    v.addWidget(lab)
+    return frame
+
+def _add_btn(text, callback):
+    return _btn(text, callback,
+                "background-color: #047857; color: white; border: none; border-radius: 8px;"
+                " padding: 10px 18px; font-weight: 600;")
+
+
+def cycles_annees(page, ctx):
+    page.setStyleSheet("background-color: #f8fafc;")
+    lay = QVBoxLayout(page)
+    lay.setContentsMargins(20, 20, 20, 20)
+    lay.setSpacing(16)
+    _page_header(lay, "Cycles & Annees Scolaires",
+                 "Cycles pedagogiques et annees scolaires de l'etablissement")
+
+    tabs = QTabWidget()
+    lay.addWidget(tabs)
+
+    page_cycles = QWidget()
+    lay_cycles = QVBoxLayout(page_cycles)
+    top_c = QHBoxLayout()
+    btn_add_cycle = _add_btn("+ Nouveau Cycle", lambda: open_cycle_dialog(page, ctx, fill_cycles))
+    top_c.addStretch(1)
+    if ctx.can_edit("cycles"):
+        top_c.addWidget(btn_add_cycle)
+    lay_cycles.addLayout(top_c)
+    table_cycles = _make_table(["Nom", "Description", "Actions"])
+    lay_cycles.addWidget(table_cycles)
+    lbl_empty_cycles = QLabel("Aucun cycle enregistre")
+    lbl_empty_cycles.setStyleSheet("color: #94a3b8; padding: 30px;")
+    lbl_empty_cycles.setAlignment(Qt.AlignCenter)
+    lay_cycles.addWidget(lbl_empty_cycles)
+
+    def fill_cycles():
+        rows = repos.cycles()
+        table_cycles.setRowCount(len(rows))
+        for i, c in enumerate(rows):
+            table_cycles.setItem(i, 0, QTableWidgetItem(c["nom"]))
+            table_cycles.setItem(i, 1, QTableWidgetItem(c["description"] or "-"))
+            cell = QWidget()
+            cl = QHBoxLayout(cell)
+            cl.setContentsMargins(2, 2, 2, 2)
+            cl.addWidget(_btn("Modifier", partial(open_cycle_dialog, page, ctx, c, fill_cycles),
+                              _simple_btn_style(bg="#eff6ff", fg="#1d4ed8", border="#bfdbfe")))
+            cl.addWidget(_btn("Supprimer", partial(_delete_cycle, page, ctx, c),
+                              _simple_btn_style(bg="#fef2f2", fg="#dc2626", border="#fecaca")))
+            table_cycles.setCellWidget(i, 2, cell)
+        table_cycles.resizeColumnsToContents()
+        lbl_empty_cycles.setVisible(not rows)
+        table_cycles.setVisible(bool(rows))
+
+    def _delete_cycle(parent, ctx, c):
+        if QMessageBox.question(parent, "Cycle",
+                                f"Supprimer le cycle {c['nom']} ?") == QMessageBox.Yes:
+            repos.delete_cycle(c["id"])
+            fill_cycles()
+
+    tabs.addTab(page_cycles, "Cycles")
+
+    page_annees = QWidget()
+    lay_annees = QVBoxLayout(page_annees)
+    top_a = QHBoxLayout()
+    btn_add_annee = _add_btn("+ Nouvelle Annee", lambda: open_annee_dialog(page, ctx, fill_annees))
+    top_a.addStretch(1)
+    if ctx.can_edit("cycles"):
+        top_a.addWidget(btn_add_annee)
+    lay_annees.addLayout(top_a)
+    table_annees = _make_table(["Libelle", "Debut", "Fin", "Active", "Actions"])
+    lay_annees.addWidget(table_annees)
+    lbl_empty_annees = QLabel("Aucune annee scolaire enregistree")
+    lbl_empty_annees.setStyleSheet("color: #94a3b8; padding: 30px;")
+    lbl_empty_annees.setAlignment(Qt.AlignCenter)
+    lay_annees.addWidget(lbl_empty_annees)
+
+    def fill_annees():
+        rows = repos.annees_scolaires()
+        table_annees.setRowCount(len(rows))
+        for i, a in enumerate(rows):
+            table_annees.setItem(i, 0, QTableWidgetItem(a["libelle"]))
+            table_annees.setItem(i, 1, QTableWidgetItem(a["date_debut"] or "-"))
+            table_annees.setItem(i, 2, QTableWidgetItem(a["date_fin"] or "-"))
+            table_annees.setItem(i, 3, QTableWidgetItem("Oui" if a["est_active"] else "Non"))
+            cell = QWidget()
+            cl = QHBoxLayout(cell)
+            cl.setContentsMargins(2, 2, 2, 2)
+            if not a["est_active"] and ctx.can_edit("cycles"):
+                cl.addWidget(_btn("Activer", partial(_set_active, page, ctx, a),
+                                  _simple_btn_style(bg="#ecfdf5", fg="#059669", border="#a7f3d0")))
+            cl.addWidget(_btn("Supprimer", partial(_delete_annee, page, ctx, a),
+                              _simple_btn_style(bg="#fef2f2", fg="#dc2626", border="#fecaca")))
+            table_annees.setCellWidget(i, 4, cell)
+        table_annees.resizeColumnsToContents()
+        lbl_empty_annees.setVisible(not rows)
+        table_annees.setVisible(bool(rows))
+
+    def _set_active(parent, ctx, a):
+        repos.set_annee_active(a["id"])
+        fill_annees()
+
+    def _delete_annee(parent, ctx, a):
+        if QMessageBox.question(parent, "Annee",
+                                f"Supprimer l'annee {a['libelle']} ?") == QMessageBox.Yes:
+            repos.delete_annee_scolaire(a["id"])
+            fill_annees()
+
+    tabs.addTab(page_annees, "Annees Scolaires")
+
+    fill_cycles()
+    fill_annees()
+    page.refresh = lambda: (fill_cycles(), fill_annees())
+
+
+def open_cycle_dialog(parent, ctx, cycle=None, on_created=None):
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Nouveau Cycle" if not cycle else "Modifier le Cycle")
+    dlg.resize(420, 200)
+    lay = QVBoxLayout(dlg)
+    form = QFormLayout()
+    nom = QLineEdit()
+    description = QLineEdit()
+    if cycle:
+        nom.setText(cycle["nom"])
+        description.setText(cycle["description"] or "")
+    form.addRow("Nom :", nom)
+    form.addRow("Description :", description)
+    lay.addLayout(form)
+    buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.accepted.connect(dlg.accept)
+    buttons.rejected.connect(dlg.reject)
+    lay.addWidget(buttons)
+    if dlg.exec_() == QDialog.Accepted:
+        if not nom.text().strip():
+            QMessageBox.warning(dlg, "Cycle", "Le nom du cycle est obligatoire.")
+            return
+        if cycle:
+            repos.update_cycle(cycle["id"], nom.text().strip(), description.text().strip())
+        else:
+            repos.add_cycle(nom.text().strip(), description.text().strip())
+        if on_created:
+            on_created()
+
+
+def open_annee_dialog(parent, ctx, annee=None, on_created=None):
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Nouvelle Annee Scolaire" if not annee else "Modifier l'Annee Scolaire")
+    dlg.resize(420, 260)
+    lay = QVBoxLayout(dlg)
+    form = QFormLayout()
+    libelle = QLineEdit()
+    libelle.setPlaceholderText("Ex: 2025-2026")
+    debut = QDateEdit()
+    debut.setDisplayFormat("dd/MM/yyyy")
+    debut.setCalendarPopup(True)
+    fin = QDateEdit()
+    fin.setDisplayFormat("dd/MM/yyyy")
+    fin.setCalendarPopup(True)
+    active = QCheckBox("Annee scolaire active")
+    if annee:
+        libelle.setText(annee["libelle"])
+        if annee["date_debut"]:
+            debut.setDate(QDate.fromString(annee["date_debut"], "yyyy-MM-dd"))
+        if annee["date_fin"]:
+            fin.setDate(QDate.fromString(annee["date_fin"], "yyyy-MM-dd"))
+        active.setChecked(bool(annee["est_active"]))
+    form.addRow("Libelle :", libelle)
+    form.addRow("Date de debut :", debut)
+    form.addRow("Date de fin :", fin)
+    lay.addLayout(form)
+    lay.addWidget(active)
+    buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.accepted.connect(dlg.accept)
+    buttons.rejected.connect(dlg.reject)
+    lay.addWidget(buttons)
+    if dlg.exec_() == QDialog.Accepted:
+        if not libelle.text().strip():
+            QMessageBox.warning(dlg, "Annee", "Le libelle est obligatoire.")
+            return
+        new_id = repos.add_annee_scolaire(
+            libelle.text().strip(),
+            debut.date().toString("yyyy-MM-dd"),
+            fin.date().toString("yyyy-MM-dd"),
+            active.isChecked())
+        if active.isChecked():
+            repos.set_annee_active(new_id)
+        if on_created:
+            on_created()
+
+
+def tarifs(page, ctx):
+    page.setStyleSheet("background-color: #f8fafc;")
+    lay = QVBoxLayout(page)
+    lay.setContentsMargins(20, 20, 20, 20)
+    lay.setSpacing(16)
+    _page_header(lay, "Tarifs & Scolarite", "Montants des frais par classe et par type")
+
+    filtre = QHBoxLayout()
+    combo_classe = QComboBox()
+    combo_classe.addItem("Toutes les classes", None)
+    for c in repos.classes():
+        combo_classe.addItem(c["nom"], c["id"])
+    filtre.addWidget(QLabel("Classe :"))
+    filtre.addWidget(combo_classe)
+    filtre.addStretch(1)
+    btn_add_tarif = _add_btn("+ Nouveau Tarif", lambda: open_tarif_dialog(page, ctx, refresh))
+    if ctx.can_edit("tarifs"):
+        filtre.addWidget(btn_add_tarif)
+    lay.addLayout(filtre)
+
+    kpi_lay = QHBoxLayout()
+    lbl_kpi_nb = _kpi_card("Nombre de tarifs", "0")
+    lbl_kpi_moy = _kpi_card("Montant moyen", "0 FCFA", "#2563eb")
+    lbl_kpi_min = _kpi_card("Tarif minimum", "0 FCFA", "#d97706")
+    lbl_kpi_max = _kpi_card("Tarif maximum", "0 FCFA", "#dc2626")
+    for w in (lbl_kpi_nb, lbl_kpi_moy, lbl_kpi_min, lbl_kpi_max):
+        kpi_lay.addWidget(w)
+    lay.addLayout(kpi_lay)
+
+    table = _make_table(["Classe", "Type de frais", "Montant", "Annee scolaire", "Actions"])
+    lay.addWidget(table)
+    lbl_empty = QLabel("Aucun tarif enregistre")
+    lbl_empty.setStyleSheet("color: #94a3b8; padding: 30px;")
+    lbl_empty.setAlignment(Qt.AlignCenter)
+    lay.addWidget(lbl_empty)
+
+    def refresh():
+        _reload_combo(combo_classe, _classe_items())
+        classe_id = combo_classe.currentData()
+        rows = repos.tarifs(classe_id=classe_id)
+        table.setRowCount(len(rows))
+        for i, t in enumerate(rows):
+            table.setItem(i, 0, QTableWidgetItem(t["classe_nom"] or "-"))
+            table.setItem(i, 1, QTableWidgetItem(t["type_frais"]))
+            table.setItem(i, 2, QTableWidgetItem(fmt_money(t["montant"])))
+            table.setItem(i, 3, QTableWidgetItem(t["annee_scolaire"] or "-"))
+            cell = QWidget()
+            cl = QHBoxLayout(cell)
+            cl.setContentsMargins(2, 2, 2, 2)
+            if ctx.can_edit("tarifs"):
+                cl.addWidget(_btn("Modifier", partial(open_tarif_dialog, page, ctx, refresh, t),
+                                  _simple_btn_style(bg="#eff6ff", fg="#1d4ed8", border="#bfdbfe")))
+                cl.addWidget(_btn("Supprimer", partial(_delete_tarif, page, ctx, t),
+                                  _simple_btn_style(bg="#fef2f2", fg="#dc2626", border="#fecaca")))
+            table.setCellWidget(i, 4, cell)
+        table.resizeColumnsToContents()
+        lbl_empty.setVisible(not rows)
+        table.setVisible(bool(rows))
+        if rows:
+            montants = [float(t["montant"]) for t in rows]
+            lbl_kpi_nb.findChild(QLabel, "").setText(str(len(rows)))
+            lbl_kpi_moy.findChild(QLabel, "").setText(fmt_money(sum(montants) / len(montants)))
+            lbl_kpi_min.findChild(QLabel, "").setText(fmt_money(min(montants)))
+            lbl_kpi_max.findChild(QLabel, "").setText(fmt_money(max(montants)))
+        else:
+            lbl_kpi_nb.findChild(QLabel, "").setText("0")
+            lbl_kpi_moy.findChild(QLabel, "").setText("0 FCFA")
+            lbl_kpi_min.findChild(QLabel, "").setText("0 FCFA")
+            lbl_kpi_max.findChild(QLabel, "").setText("0 FCFA")
+
+    def _delete_tarif(parent, ctx, t):
+        if QMessageBox.question(parent, "Tarif",
+                                f"Supprimer le tarif {t['type_frais']} ({t['classe_nom']}) ?") \
+                == QMessageBox.Yes:
+            repos.delete_tarif(t["id"])
+            refresh()
+
+    combo_classe.currentIndexChanged.connect(refresh)
+    refresh()
+    page.refresh = refresh
+
+
+def open_tarif_dialog(parent, ctx, on_created, tarif=None):
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Nouveau Tarif" if not tarif else "Modifier le Tarif")
+    dlg.resize(440, 260)
+    lay = QVBoxLayout(dlg)
+    form = QFormLayout()
+    combo_classe = QComboBox()
+    for c in repos.classes():
+        combo_classe.addItem(c["nom"], c["id"])
+    type_frais = QComboBox()
+    type_frais.setEditable(True)
+    type_frais.addItems(["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"])
+    montant = _money_edit(minimum=1)
+    annee = QLineEdit()
+    active = repos.annee_scolaire_active()
+    annee.setText(active["libelle"] if active else "")
+    if tarif:
+        idx = combo_classe.findData(tarif["classe_id"])
+        if idx >= 0:
+            combo_classe.setCurrentIndex(idx)
+        idx = type_frais.findText(tarif["type_frais"])
+        if idx >= 0:
+            type_frais.setCurrentIndex(idx)
+        else:
+            type_frais.setEditText(tarif["type_frais"])
+        montant.setValue(float(tarif["montant"]))
+        annee.setText(tarif["annee_scolaire"] or "")
+    form.addRow("Classe :", combo_classe)
+    form.addRow("Type de frais :", type_frais)
+    form.addRow("Montant :", montant)
+    form.addRow("Annee scolaire :", annee)
+    lay.addLayout(form)
+    buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.accepted.connect(dlg.accept)
+    buttons.rejected.connect(dlg.reject)
+    lay.addWidget(buttons)
+    if dlg.exec_() == QDialog.Accepted:
+        if montant.value() <= 0:
+            QMessageBox.warning(dlg, "Tarif", "Le montant doit etre superieur a 0.")
+            return
+        if tarif:
+            repos.update_tarif(tarif["id"], combo_classe.currentData(),
+                               type_frais.currentText().strip(), montant.value(),
+                               annee.text().strip())
+        else:
+            repos.add_tarif(combo_classe.currentData(),
+                            type_frais.currentText().strip(), montant.value(),
+                            annee.text().strip())
+        if on_created:
+            on_created()
+
+
+def paiements(page, ctx):
+    page.setStyleSheet("background-color: #f8fafc;")
+    lay = QVBoxLayout(page)
+    lay.setContentsMargins(20, 20, 20, 20)
+    lay.setSpacing(16)
+    _page_header(lay, "Paiements, Suivi & Bilans",
+                 "Encaissements, suivi mensuel des eleves et bilans")
+
+    tabs = QTabWidget()
+    lay.addWidget(tabs)
+
+    def _annee_options(combo):
+        combo.clear()
+        combo.addItem("Toutes les annees", None)
+        for a in repos.annees_scolaires():
+            combo.addItem(a["libelle"], a["libelle"])
+
+    def _mode_options(combo):
+        combo.addItem("Tous les modes", None)
+        combo.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement", "Virement", "Cheque"])
+
+    onglet_paiements = QWidget()
+    lay_p = QVBoxLayout(onglet_paiements)
+    filtre_p = QHBoxLayout()
+    combo_classe_p = QComboBox()
+    combo_classe_p.addItem("Toutes les classes", None)
+    for c in repos.classes():
+        combo_classe_p.addItem(c["nom"], c["id"])
+    combo_type_p = QComboBox()
+    combo_type_p.addItem("Tous les types", None)
+    combo_type_p.addItems(["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"])
+    combo_mode_p = QComboBox()
+    _mode_options(combo_mode_p)
+    filtre_p.addWidget(QLabel("Classe :"))
+    filtre_p.addWidget(combo_classe_p)
+    filtre_p.addWidget(QLabel("Type :"))
+    filtre_p.addWidget(combo_type_p)
+    filtre_p.addWidget(QLabel("Mode :"))
+    filtre_p.addWidget(combo_mode_p)
+    filtre_p.addStretch(1)
+    btn_add_paiement = _add_btn("+ Nouveau Paiement", lambda: open_paiement_dialog(page, ctx, refresh_p))
+    if ctx.can_edit("paiements"):
+        filtre_p.addWidget(btn_add_paiement)
+    lay_p.addLayout(filtre_p)
+
+    kpi_p = QHBoxLayout()
+    lbl_p_nb = _kpi_card("Nombre de paiements", "0")
+    lbl_p_total = _kpi_card("Montant total", "0 FCFA", "#2563eb")
+    for w in (lbl_p_nb, lbl_p_total):
+        kpi_p.addWidget(w)
+    lay_p.addLayout(kpi_p)
+
+    table_p = _make_table(["Date", "Matricule", "Eleve", "Classe", "Type frais",
+                           "Montant", "Mode", "Trimestre", "Actions"])
+    lay_p.addWidget(table_p)
+    lbl_empty_p = QLabel("Aucun paiement enregistre")
+    lbl_empty_p.setStyleSheet("color: #94a3b8; padding: 30px;")
+    lbl_empty_p.setAlignment(Qt.AlignCenter)
+    lay_p.addWidget(lbl_empty_p)
+
+    def refresh_p():
+        _reload_combo(combo_classe_p, _classe_items())
+        rows = repos.paiements(
+            classe_id=combo_classe_p.currentData(),
+            type_frais=combo_type_p.currentData() or None,
+            mode=combo_mode_p.currentData() or None)
+        table_p.setRowCount(len(rows))
+        for i, p in enumerate(rows):
+            values = [p["date_paiement"], p["matricule"], f"{p['prenom']} {p['nom']}",
+                      p["classe_nom"] or "-", p["type_frais"] or "-",
+                      fmt_money(p["montant"]), p["mode_reglement"] or "-",
+                      p["trimestre"] or "-"]
+            for j, val in enumerate(values):
+                table_p.setItem(i, j, QTableWidgetItem(str(val)))
+            cell = QWidget()
+            cl = QHBoxLayout(cell)
+            cl.setContentsMargins(2, 2, 2, 2)
+            if ctx.can_edit("paiements"):
+                cl.addWidget(_btn("Supprimer", partial(_delete_paiement, page, ctx, p),
+                                  _simple_btn_style(bg="#fef2f2", fg="#dc2626", border="#fecaca")))
+            table_p.setCellWidget(i, 8, cell)
+        table_p.resizeColumnsToContents()
+        lbl_empty_p.setVisible(not rows)
+        table_p.setVisible(bool(rows))
+        lbl_p_nb.findChild(QLabel, "").setText(str(len(rows)))
+        lbl_p_total.findChild(QLabel, "").setText(
+            fmt_money(sum(float(p["montant"]) for p in rows)))
+
+    def _delete_paiement(parent, ctx, p):
+        if QMessageBox.question(parent, "Paiement",
+                                "Supprimer ce paiement ?") == QMessageBox.Yes:
+            repos.delete_paiement(p["id"])
+            refresh_p()
+
+    combo_classe_p.currentIndexChanged.connect(refresh_p)
+    combo_type_p.currentIndexChanged.connect(refresh_p)
+    combo_mode_p.currentIndexChanged.connect(refresh_p)
+    tabs.addTab(onglet_paiements, "Paiements")
+
+    onglet_suivi = QWidget()
+    lay_s = QVBoxLayout(onglet_suivi)
+    suivi_row = QHBoxLayout()
+    combo_classe_s = QComboBox()
+    combo_classe_s.addItem("Toutes les classes", None)
+    for c in repos.classes():
+        combo_classe_s.addItem(c["nom"], c["id"])
+    combo_eleve_s = QComboBox()
+    suivi_row.addWidget(QLabel("Classe :"))
+    suivi_row.addWidget(combo_classe_s)
+    suivi_row.addWidget(QLabel("Eleve :"))
+    suivi_row.addWidget(combo_eleve_s, 1)
+    lay_s.addLayout(suivi_row)
+
+    solde_lay = QHBoxLayout()
+    lbl_attendu = _kpi_card("Total attendu", "0 FCFA", "#2563eb")
+    lbl_paye = _kpi_card("Total paye", "0 FCFA", "#059669")
+    lbl_solde = _kpi_card("Solde restant", "0 FCFA", "#dc2626")
+    for w in (lbl_attendu, lbl_paye, lbl_solde):
+        solde_lay.addWidget(w)
+    lay_s.addLayout(solde_lay)
+
+    table_suivi = _make_table(["Mois", "Attendu", "Paye"])
+    lay_s.addWidget(table_suivi)
+
+    def fill_eleves():
+        combo_eleve_s.blockSignals(True)
+        combo_eleve_s.clear()
+        for e in repos.eleves(classe_id=combo_classe_s.currentData()):
+            combo_eleve_s.addItem(f"{e['prenom']} {e['nom']} ({e['matricule']})", e["id"])
+        combo_eleve_s.blockSignals(False)
+        refresh_suivi()
+
+    def refresh_suivi():
+        eleve_id = combo_eleve_s.currentData()
+        if not eleve_id:
+            table_suivi.setRowCount(0)
+            for w in (lbl_attendu, lbl_paye, lbl_solde):
+                w.findChild(QLabel, "").setText("0 FCFA")
+            return
+        active = repos.annee_scolaire_active()
+        annee = active["libelle"] if active else ""
+        solde = repos.solde_eleve(eleve_id, annee)
+        lbl_attendu.findChild(QLabel, "").setText(fmt_money(solde["attendu"]))
+        lbl_paye.findChild(QLabel, "").setText(fmt_money(solde["paye"]))
+        lbl_solde.findChild(QLabel, "").setText(fmt_money(solde["solde"]))
+        suivi = repos.suivi_mensuel(eleve_id, annee)
+        table_suivi.setRowCount(len(suivi))
+        for i, m in enumerate(suivi):
+            table_suivi.setItem(i, 0, QTableWidgetItem(m["mois"]))
+            table_suivi.setItem(i, 1, QTableWidgetItem(fmt_money(m["attendu"])))
+            table_suivi.setItem(i, 2, QTableWidgetItem(fmt_money(m["paye"])))
+        table_suivi.resizeColumnsToContents()
+
+    combo_classe_s.currentIndexChanged.connect(fill_eleves)
+    combo_eleve_s.currentIndexChanged.connect(refresh_suivi)
+    fill_eleves()
+    tabs.addTab(onglet_suivi, "Suivi Eleve")
+
+    onglet_bilans = QWidget()
+    lay_b = QVBoxLayout(onglet_bilans)
+    filtre_b = QHBoxLayout()
+    combo_annee_b = QComboBox()
+    _annee_options(combo_annee_b)
+    combo_trimestre_b = QComboBox()
+    combo_trimestre_b.addItem("Tous les trimestres", None)
+    combo_trimestre_b.addItems(list(PERIODES))
+    combo_type_b = QComboBox()
+    combo_type_b.addItem("Tous les types", None)
+    combo_type_b.addItems(["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"])
+    combo_classe_b = QComboBox()
+    combo_classe_b.addItem("Toutes les classes", None)
+    for c in repos.classes():
+        combo_classe_b.addItem(c["nom"], c["id"])
+    combo_mode_b = QComboBox()
+    _mode_options(combo_mode_b)
+    filtre_b.addWidget(QLabel("Annee :"))
+    filtre_b.addWidget(combo_annee_b)
+    filtre_b.addWidget(QLabel("Trimestre :"))
+    filtre_b.addWidget(combo_trimestre_b)
+    filtre_b.addWidget(QLabel("Type :"))
+    filtre_b.addWidget(combo_type_b)
+    filtre_b.addWidget(QLabel("Classe :"))
+    filtre_b.addWidget(combo_classe_b)
+    filtre_b.addWidget(QLabel("Mode :"))
+    filtre_b.addWidget(combo_mode_b)
+    lay_b.addLayout(filtre_b)
+
+    btn_bilan = QPushButton("Generer le Bilan")
+    btn_bilan.setCursor(Qt.PointingHandCursor)
+    btn_bilan.setStyleSheet(
+        "background-color: #047857; color: white; border: none; border-radius: 6px;"
+        " padding: 10px 16px; font-weight: bold;")
+    filtre_b.addWidget(btn_bilan)
+    lbl_bilan_total = QLabel("Total : 0 FCFA")
+    lbl_bilan_total.setStyleSheet("font-size: 18px; font-weight: bold; color: #047857;")
+    lay_b.addWidget(lbl_bilan_total)
+
+    table_b = _make_table(["Date", "Matricule", "Eleve", "Classe", "Type frais",
+                           "Montant", "Mode", "Trimestre"])
+    lay_b.addWidget(table_b)
+
+    def refresh_b():
+        _reload_combo(combo_annee_b, [(a["libelle"], a["libelle"]) for a in repos.annees_scolaires()])
+        _reload_combo(combo_classe_b, _classe_items())
+        rows = repos.paiements(
+            annee_scolaire=combo_annee_b.currentData() or None,
+            trimestre=combo_trimestre_b.currentData() or None,
+            type_frais=combo_type_b.currentData() or None,
+            classe_id=combo_classe_b.currentData(),
+            mode=combo_mode_b.currentData() or None)
+        table_b.setRowCount(len(rows))
+        for i, p in enumerate(rows):
+            values = [p["date_paiement"], p["matricule"], f"{p['prenom']} {p['nom']}",
+                      p["classe_nom"] or "-", p["type_frais"] or "-",
+                      fmt_money(p["montant"]), p["mode_reglement"] or "-",
+                      p["trimestre"] or "-"]
+            for j, val in enumerate(values):
+                table_b.setItem(i, j, QTableWidgetItem(str(val)))
+        table_b.resizeColumnsToContents()
+        lbl_bilan_total.setText(f"Total : {fmt_money(sum(float(p['montant']) for p in rows))}")
+
+    btn_bilan.clicked.connect(refresh_b)
+    combo_annee_b.currentIndexChanged.connect(refresh_b)
+    combo_trimestre_b.currentIndexChanged.connect(refresh_b)
+    combo_type_b.currentIndexChanged.connect(refresh_b)
+    combo_classe_b.currentIndexChanged.connect(refresh_b)
+    combo_mode_b.currentIndexChanged.connect(refresh_b)
+    tabs.addTab(onglet_bilans, "Bilans")
+
+    def page_refresh():
+        _reload_combo(combo_classe_p, _classe_items())
+        _reload_combo(combo_classe_s, _classe_items())
+        _reload_combo(combo_classe_b, _classe_items())
+        fill_eleves()
+        refresh_p()
+        refresh_b()
+
+    refresh_p()
+    refresh_b()
+    page.refresh = page_refresh
+
+
+def open_paiement_dialog(parent, ctx, on_created):
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Nouveau Paiement")
+    dlg.resize(460, 320)
+    lay = QVBoxLayout(dlg)
+    form = QFormLayout()
+    combo_classe = QComboBox()
+    combo_classe.addItem("Toutes les classes", None)
+    for c in repos.classes():
+        combo_classe.addItem(c["nom"], c["id"])
+    combo_eleve = QComboBox()
+    combo_type = QComboBox()
+    combo_type.addItems(["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"])
+    combo_mode = QComboBox()
+    combo_mode.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"])
+    combo_trimestre = QComboBox()
+    combo_trimestre.addItems(list(PERIODES))
+    montant = _money_edit(minimum=1)
+    form.addRow("Classe :", combo_classe)
+    form.addRow("Eleve :", combo_eleve)
+    form.addRow("Montant :", montant)
+    form.addRow("Type de frais :", combo_type)
+    form.addRow("Mode de reglement :", combo_mode)
+    form.addRow("Trimestre :", combo_trimestre)
+    lay.addLayout(form)
+    buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.accepted.connect(dlg.accept)
+    buttons.rejected.connect(dlg.reject)
+    lay.addWidget(buttons)
+
+    def fill_eleves():
+        combo_eleve.clear()
+        for e in repos.eleves(classe_id=combo_classe.currentData()):
+            combo_eleve.addItem(f"{e['prenom']} {e['nom']} ({e['matricule']})", e["id"])
+
+    combo_classe.currentIndexChanged.connect(fill_eleves)
+    fill_eleves()
+
+    if dlg.exec_() == QDialog.Accepted:
+        eleve_id = combo_eleve.currentData()
+        if not eleve_id or montant.value() <= 0:
+            QMessageBox.warning(dlg, "Paiement", "Selectionnez un eleve et un montant valide.")
+            return
+        active = repos.annee_scolaire_active()
+        annee = active["libelle"] if active else ""
+        repos.add_paiement(eleve_id, montant.value(), combo_mode.currentText(),
+                           combo_type.currentText(), annee, combo_trimestre.currentText())
+        QMessageBox.information(dlg, "Paiement",
+                                f"{fmt_money(montant.value())} encaisse.")
+        if on_created:
+            on_created()
+
+
+def programmes(page, ctx):
+    page.setStyleSheet("background-color: #f8fafc;")
+    lay = QVBoxLayout(page)
+    lay.setContentsMargins(20, 20, 20, 20)
+    lay.setSpacing(16)
+    _page_header(lay, "Matieres & Programmes",
+                 "Matieres enseignees et affectations par classe")
+
+    tabs = QTabWidget()
+    lay.addWidget(tabs)
+
+    onglet_matieres = QWidget()
+    lay_m = QVBoxLayout(onglet_matieres)
+    top_m = QHBoxLayout()
+    btn_add_matiere = _add_btn("+ Nouvelle Matiere", lambda: open_matiere_dialog(page, ctx, fill_m))
+    top_m.addStretch(1)
+    if ctx.can_edit("programmes"):
+        top_m.addWidget(btn_add_matiere)
+    lay_m.addLayout(top_m)
+    table_m = _make_table(["Nom", "Coefficient", "Actions"])
+    lay_m.addWidget(table_m)
+    lbl_empty_m = QLabel("Aucune matiere enregistree")
+    lbl_empty_m.setStyleSheet("color: #94a3b8; padding: 30px;")
+    lbl_empty_m.setAlignment(Qt.AlignCenter)
+    lay_m.addWidget(lbl_empty_m)
+
+    def fill_m():
+        rows = repos.matieres()
+        table_m.setRowCount(len(rows))
+        for i, mt in enumerate(rows):
+            table_m.setItem(i, 0, QTableWidgetItem(mt["nom"]))
+            table_m.setItem(i, 1, QTableWidgetItem(str(mt["coefficient"])))
+            cell = QWidget()
+            cl = QHBoxLayout(cell)
+            cl.setContentsMargins(2, 2, 2, 2)
+            if ctx.can_edit("programmes"):
+                cl.addWidget(_btn("Modifier", partial(open_matiere_dialog, page, ctx, fill_m, mt),
+                                  _simple_btn_style(bg="#eff6ff", fg="#1d4ed8", border="#bfdbfe")))
+                cl.addWidget(_btn("Supprimer", partial(_delete_matiere, page, ctx, mt),
+                                  _simple_btn_style(bg="#fef2f2", fg="#dc2626", border="#fecaca")))
+            table_m.setCellWidget(i, 2, cell)
+        table_m.resizeColumnsToContents()
+        lbl_empty_m.setVisible(not rows)
+        table_m.setVisible(bool(rows))
+
+    def _delete_matiere(parent, ctx, mt):
+        if QMessageBox.question(parent, "Matiere",
+                                f"Supprimer la matiere {mt['nom']} ?") == QMessageBox.Yes:
+            repos.delete_matiere(mt["id"])
+            fill_m()
+
+    tabs.addTab(onglet_matieres, "Matieres")
+
+    onglet_affect = QWidget()
+    lay_a = QVBoxLayout(onglet_affect)
+
+    top_a = QHBoxLayout()
+    combo_cycle_a = QComboBox()
+    combo_cycle_a.addItem("Tous les cycles", None)
+    for cyc in repos.cycles():
+        combo_cycle_a.addItem(cyc["nom"], cyc["id"])
+    combo_classe_a = QComboBox()
+    top_a.addWidget(QLabel("Cycle :"))
+    top_a.addWidget(combo_cycle_a)
+    top_a.addWidget(QLabel("Classe :"))
+    top_a.addWidget(combo_classe_a)
+    top_a.addStretch(1)
+    lay_a.addLayout(top_a)
+
+    row_btn = QHBoxLayout()
+    btn_tout_cocher = _btn("Tout cocher", lambda: _set_checks(True),
+                           _simple_btn_style(bg="#eff6ff", fg="#1d4ed8", border="#bfdbfe"))
+    btn_tout_decocher = _btn("Tout decocher", lambda: _set_checks(False),
+                             _simple_btn_style(bg="#f1f5f9", fg="#475569", border="#cbd5e1"))
+    row_btn.addWidget(btn_tout_cocher)
+    row_btn.addWidget(btn_tout_decocher)
+    row_btn.addStretch(1)
+    btn_save_prog = QPushButton("Enregistrer le programme")
+    btn_save_prog.setCursor(Qt.PointingHandCursor)
+    btn_save_prog.setStyleSheet(
+        "background-color: #047857; color: white; border: none; border-radius: 6px;"
+        " padding: 10px 16px; font-weight: bold;")
+    if ctx.can_edit("programmes"):
+        row_btn.addWidget(btn_save_prog)
+    lay_a.addLayout(row_btn)
+
+    table_a = _make_table(["", "Matiere", "Coefficient", "Enseignant"])
+    table_a.setColumnWidth(0, 40)
+    lay_a.addWidget(table_a)
+    lbl_empty_a = QLabel("Aucune matiere enregistree. Ajoutez d'abord des matieres.")
+    lbl_empty_a.setStyleSheet("color: #94a3b8; padding: 30px;")
+    lbl_empty_a.setAlignment(Qt.AlignCenter)
+    lay_a.addWidget(lbl_empty_a)
+
+    lignes = []
+
+    def _fill_classes():
+        _reload_combo(combo_cycle_a,
+                      [("Tous les cycles", None)] + [(c["nom"], c["id"]) for c in repos.cycles()])
+        cycle_id = combo_cycle_a.currentData()
+        combo_classe_a.blockSignals(True)
+        combo_classe_a.clear()
+        for c in repos.classes():
+            if cycle_id is not None and c.get("cycle_id") != cycle_id:
+                continue
+            combo_classe_a.addItem(c["nom"], c["id"])
+        combo_classe_a.blockSignals(False)
+        refresh_a()
+
+    def refresh_a():
+        classe_id = combo_classe_a.currentData()
+        matieres = repos.matieres()
+        existants = {p["matiere_id"]: p for p in repos.programmes(classe_id)} if classe_id else {}
+        table_a.setRowCount(len(matieres))
+        lignes.clear()
+        for i, mt in enumerate(matieres):
+            en_prog = mt["id"] in existants
+            check = QCheckBox()
+            check.setChecked(en_prog)
+            table_a.setCellWidget(i, 0, check)
+            table_a.setItem(i, 1, QTableWidgetItem(mt["nom"]))
+            coeff = QDoubleSpinBox()
+            coeff.setRange(0.5, 10.0)
+            coeff.setDecimals(1)
+            coeff.setValue(float(existants[mt["id"]]["coefficient"]) if en_prog
+                           else float(mt["coefficient"] or 1))
+            coeff.setEnabled(en_prog)
+            table_a.setCellWidget(i, 2, coeff)
+            ens = QComboBox()
+            ens.addItem("-- Non affecte --", None)
+            for p in repos.personnel():
+                ens.addItem(p["nom_complet"], p["id"])
+            if en_prog and existants[mt["id"]].get("enseignant_id"):
+                idx = ens.findData(existants[mt["id"]]["enseignant_id"])
+                if idx >= 0:
+                    ens.setCurrentIndex(idx)
+            ens.setEnabled(en_prog)
+            table_a.setCellWidget(i, 3, ens)
+            check.toggled.connect(lambda on, c=coeff, e=ens: (c.setEnabled(on), e.setEnabled(on)))
+            lignes.append({"id": mt["id"], "check": check, "coeff": coeff, "ens": ens})
+        table_a.resizeColumnsToContents()
+        lbl_empty_a.setVisible(not matieres)
+        table_a.setVisible(bool(matieres))
+
+    def _set_checks(checked):
+        for ligne in lignes:
+            ligne["check"].setChecked(checked)
+
+    def save_prog():
+        classe_id = combo_classe_a.currentData()
+        if not classe_id:
+            QMessageBox.warning(page, "Programme", "Choisissez d'abord une classe.")
+            return
+        existants = {p["matiere_id"]: p for p in repos.programmes(classe_id)}
+        for ligne in lignes:
+            if ligne["check"].isChecked():
+                repos.save_programme(classe_id, ligne["id"],
+                                     ligne["ens"].currentData(), ligne["coeff"].value())
+            elif ligne["id"] in existants:
+                repos.delete_programme(existants[ligne["id"]]["id"])
+        QMessageBox.information(page, "Programme", "Programme de la classe enregistre.")
+        refresh_a()
+
+    combo_cycle_a.currentIndexChanged.connect(_fill_classes)
+    combo_classe_a.currentIndexChanged.connect(refresh_a)
+    btn_save_prog.clicked.connect(save_prog)
+    tabs.addTab(onglet_affect, "Programme par Classe")
+
+    fill_m()
+    _fill_classes()
+    page.refresh = lambda: (fill_m(), _fill_classes())
+
+
+def open_matiere_dialog(parent, ctx, on_created, matiere=None):
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Nouvelle Matiere" if not matiere else "Modifier la Matiere")
+    dlg.resize(380, 180)
+    lay = QVBoxLayout(dlg)
+    form = QFormLayout()
+    nom = QLineEdit()
+    coeff = QDoubleSpinBox()
+    coeff.setRange(0.5, 10.0)
+    coeff.setDecimals(1)
+    coeff.setValue(1.0)
+    if matiere:
+        nom.setText(matiere["nom"])
+        coeff.setValue(float(matiere["coefficient"] or 1))
+    form.addRow("Nom :", nom)
+    form.addRow("Coefficient :", coeff)
+    lay.addLayout(form)
+    buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.accepted.connect(dlg.accept)
+    buttons.rejected.connect(dlg.reject)
+    lay.addWidget(buttons)
+    if dlg.exec_() == QDialog.Accepted:
+        if not nom.text().strip():
+            QMessageBox.warning(dlg, "Matiere", "Le nom est obligatoire.")
+            return
+        if matiere:
+            repos.update_matiere(matiere["id"], nom.text().strip(), coeff.value())
+        else:
+            repos.add_matiere(nom.text().strip(), coeff.value())
+        if on_created:
+            on_created()
+
+
+def presences(page, ctx):
+    page.setStyleSheet("background-color: #f8fafc;")
+    lay = QVBoxLayout(page)
+    lay.setContentsMargins(20, 20, 20, 20)
+    lay.setSpacing(16)
+    _page_header(lay, "Presences", "Feuille de presence par classe et par jour")
+
+    filtre = QHBoxLayout()
+    combo_classe = QComboBox()
+    for c in repos.classes():
+        combo_classe.addItem(c["nom"], c["id"])
+    date_edit = QDateEdit()
+    date_edit.setDisplayFormat("dd/MM/yyyy")
+    date_edit.setCalendarPopup(True)
+    date_edit.setDate(QDate.currentDate())
+    btn_charger = QPushButton("Charger")
+    btn_charger.setCursor(Qt.PointingHandCursor)
+    btn_charger.setStyleSheet(
+        "background-color: #047857; color: white; border: none; border-radius: 6px;"
+        " padding: 10px 16px; font-weight: bold;")
+    filtre.addWidget(QLabel("Classe :"))
+    filtre.addWidget(combo_classe)
+    filtre.addWidget(QLabel("Date :"))
+    filtre.addWidget(date_edit)
+    filtre.addWidget(btn_charger)
+    filtre.addStretch(1)
+    btn_save = QPushButton("Enregistrer les Presences")
+    btn_save.setCursor(Qt.PointingHandCursor)
+    btn_save.setStyleSheet(
+        "background-color: #047857; color: white; border: none; border-radius: 6px;"
+        " padding: 10px 16px; font-weight: bold;")
+    if ctx.can_edit("presences"):
+        filtre.addWidget(btn_save)
+    lay.addLayout(filtre)
+
+    kpi_lay = QHBoxLayout()
+    lbl_presents = _kpi_card("Presents", "0", "#059669")
+    lbl_absents = _kpi_card("Absents", "0", "#dc2626")
+    lbl_retards = _kpi_card("Retards", "0", "#d97706")
+    for w in (lbl_presents, lbl_absents, lbl_retards):
+        kpi_lay.addWidget(w)
+    lay.addLayout(kpi_lay)
+
+    table = _make_table(["Matricule", "Eleve", "Statut", "Motif"])
+    table.setEditTriggers(QTableWidget.NoEditTriggers)
+    lay.addWidget(table)
+    lbl_empty = QLabel("Choisissez une classe et une date")
+    lbl_empty.setStyleSheet("color: #94a3b8; padding: 30px;")
+    lbl_empty.setAlignment(Qt.AlignCenter)
+    lay.addWidget(lbl_empty)
+
+    etats = {}
+
+    def refresh():
+        _reload_combo(combo_classe, _classe_items(avec_toutes=False))
+        classe_id = combo_classe.currentData()
+        date = date_edit.date().toString("yyyy-MM-dd")
+        if not classe_id:
+            table.setRowCount(0)
+            lbl_empty.setVisible(True)
+            table.setVisible(False)
+            return
+        eleves_rows = repos.eleves(classe_id=classe_id)
+        pres_rows = {p["eleve_id"]: p for p in repos.presences(classe_id, date)}
+        etats.clear()
+        table.blockSignals(True)
+        table.setRowCount(len(eleves_rows))
+        for i, e in enumerate(eleves_rows):
+            table.setItem(i, 0, QTableWidgetItem(e["matricule"]))
+            table.setItem(i, 1, QTableWidgetItem(f"{e['prenom']} {e['nom']}"))
+            pres = pres_rows.get(e["id"])
+            statut = pres["statut"] if pres else "Present"
+            motif = pres["motif"] or "" if pres else ""
+            combo = QComboBox()
+            combo.addItems(["Present", "Absent", "Retard"])
+            combo.setCurrentText(statut)
+            table.setCellWidget(i, 2, combo)
+            edit_motif = QLineEdit(motif)
+            edit_motif.setPlaceholderText("Motif (si absent)")
+            table.setCellWidget(i, 3, edit_motif)
+            etats[i] = (e["id"], combo, edit_motif)
+        table.blockSignals(False)
+        table.resizeColumnsToContents()
+        lbl_empty.setVisible(False)
+        table.setVisible(True)
+        _maj_kpi()
+
+    def _maj_kpi():
+        comptes = {"Present": 0, "Absent": 0, "Retard": 0}
+        for _eid, combo, _motif in etats.values():
+            comptes[combo.currentText()] = comptes.get(combo.currentText(), 0) + 1
+        lbl_presents.findChild(QLabel, "").setText(str(comptes["Present"]))
+        lbl_absents.findChild(QLabel, "").setText(str(comptes["Absent"]))
+        lbl_retards.findChild(QLabel, "").setText(str(comptes["Retard"]))
+
+    def save():
+        classe_id = combo_classe.currentData()
+        date = date_edit.date().toString("yyyy-MM-dd")
+        if not etats:
+            QMessageBox.warning(page, "Presences", "Chargez d'abord la feuille de presence.")
+            return
+        for eleve_id, combo, edit_motif in etats.values():
+            repos.save_presence(eleve_id, classe_id, date,
+                                combo.currentText(), edit_motif.text().strip())
+        QMessageBox.information(page, "Presences", "Presences enregistrees.")
+        refresh()
+
+    combo_classe.currentIndexChanged.connect(refresh)
+    btn_charger.clicked.connect(refresh)
+    btn_save.clicked.connect(save)
+    refresh()
+    page.refresh = refresh

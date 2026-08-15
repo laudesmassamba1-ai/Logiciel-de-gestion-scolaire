@@ -79,38 +79,71 @@ class SimpleBarChart(_BaseChart):
         w, h = self.width(), self.height()
         y0 = self._draw_titre(painter, h)
 
-        if not self.labels or not self.values or max(self.values) <= 0:
+        if not self.labels or not self.values:
             self._draw_empty(painter, y0, max(h - y0, 60))
             painter.end()
             return
 
-        max_val = max(self.values) or 1
+        min_val = min(0.0, min(self.values))
+        max_val = max(self.values)
+        if max_val < 0:
+            max_val = 0.0
+        span = max_val - min_val
+        if span <= 0:
+            span = 1.0
         n = len(self.labels)
-        pad = 10
-        chart_top = y0 + 20
-        chart_bottom = h - 26
+        pad = 12
+        chart_top = y0 + 26
+        chart_bottom = h - 32
         chart_h = chart_bottom - chart_top
         if chart_h < 40:
             chart_h = 40
         bar_w = max(6.0, (w - pad * 2) / n * 0.55)
         gap = (w - pad * 2) / n
+        zero_y = chart_top + (max_val / span) * chart_h
 
+        font = QFont()
+        font.setPointSize(8)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
 
         for i, (label, value) in enumerate(zip(self.labels, self.values)):
             x = pad + i * gap + (gap - bar_w) / 2
-            bar_h = (value / max_val) * (chart_h - 10)
-            y = chart_top + (chart_h - 10) - bar_h
+            v = float(value)
+            if v >= 0:
+                bar_h = (v / span) * chart_h
+                y = zero_y - bar_h
+            else:
+                bar_h = (-v / span) * chart_h
+                y = zero_y
             painter.setBrush(_color(i))
             painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(int(x), int(y), int(bar_w), int(bar_h), 4, 4)
+            painter.drawRoundedRect(int(x), int(y), int(bar_w), int(bar_h), 3, 3)
+
             painter.setPen(QColor("#475569"))
-            font = QFont()
-            font.setPointSize(8)
-            painter.setFont(font)
-            painter.drawText(int(x) - 4, int(y) - 12, int(bar_w) + 8, 14,
-                             Qt.AlignHCenter, f"{value:,.0f}".replace(",", " "))
-            painter.drawText(int(x) - 4, chart_bottom + 2, int(bar_w) + 8, 18,
-                             Qt.AlignHCenter, str(label))
+            slot_w = max(6.0, gap * 0.96)
+            label_texte = fm.elidedText(str(label), Qt.ElideRight, int(slot_w))
+            painter.drawText(int(x) - int(slot_w) // 2, chart_bottom + 4,
+                             int(slot_w), 18, Qt.AlignHCenter, label_texte)
+
+            if v != 0:
+                texte = f"{v:,.0f}".replace(",", " ")
+                text_w = fm.width(texte)
+                if v > 0 and text_w <= int(bar_w) - 2 and y - 14 >= y0:
+                    painter.drawText(int(x), int(y) - 14, int(bar_w), 16,
+                                     Qt.AlignHCenter, texte)
+                elif text_w <= int(bar_w) - 4 and bar_h >= 18:
+                    painter.setPen(QColor("#ffffff"))
+                    painter.drawText(int(x), int(y) + 2, int(bar_w), 16,
+                                     Qt.AlignHCenter, texte)
+                elif v < 0 and text_w <= int(bar_w) - 2 and y + bar_h + 18 <= chart_bottom:
+                    painter.drawText(int(x), int(y + bar_h) + 2, int(bar_w), 16,
+                                     Qt.AlignHCenter, texte)
+                painter.setPen(QColor("#475569"))
+
+        if min_val < 0:
+            painter.setPen(QPen(QColor("#94a3b8"), 1, Qt.DashLine))
+            painter.drawLine(pad, int(zero_y), int(w - pad), int(zero_y))
         painter.end()
 
 
@@ -132,16 +165,26 @@ class SimplePieChart(_BaseChart):
             return
 
         total = sum(self.values)
-        legend_w = int(w * 0.32)
-        if legend_w < 120:
-            legend_w = 120
+
+        font = QFont()
+        font.setPointSize(8)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+
+        texte_leg = [f"{label}  ({value / total * 100:.0f}%)"
+                     for label, value in zip(self.labels, self.values)]
+        leg_necessaire = max(fm.width(t) for t in texte_leg) + 24
+        legend_w = max(110, min(int(w * 0.45), leg_necessaire))
         pie_area = w - legend_w - 8
-        center_x = pie_area // 2
+        if pie_area < 70:
+            pie_area = 70
+            legend_w = max(60, w - pie_area - 8)
+            pie_area = max(50, w - legend_w - 8)
+        center_x = max(pie_area // 2, 50)
         center_y = y0 + (h - y0) // 2
         radius = min(pie_area, h - y0) // 2 - 12
         if radius < 10:
             radius = 10
-
 
         start_angle = 0
         for i, value in enumerate(self.values):
@@ -153,24 +196,17 @@ class SimplePieChart(_BaseChart):
                             int(start_angle), int(span_angle))
             start_angle += span_angle
 
-        font = QFont()
-        font.setPointSize(8)
-        painter.setFont(font)
         legend_x = pie_area + 8
-        row_h = max(18, int((h - y0 - 8) / len(self.labels)) if len(self.labels) else 18)
-        if row_h < 16:
-            row_h = 16
-
+        row_h = max(16, int((h - y0 - 8) / len(self.labels)) if len(self.labels) else 16)
+        texte_w = int(legend_w) - 20
         y = y0 + 6
-        for i, (label, value) in enumerate(zip(self.labels, self.values)):
-            pct = (value / total) * 100
+        for i, texte in enumerate(texte_leg):
             painter.setPen(Qt.NoPen)
             painter.setBrush(_color(i))
             painter.drawRoundedRect(int(legend_x), int(y) + 2, 10, 10, 2, 2)
             painter.setPen(QColor("#0f172a"))
-            painter.drawText(int(legend_x) + 16, int(y) - 2,
-                             max(int(legend_w) - 22, 40), 16,
-                             Qt.AlignLeft | Qt.AlignVCenter,
-                             f"{label}  ({pct:.0f}%)")
+            elide = fm.elidedText(texte, Qt.ElideRight, texte_w)
+            painter.drawText(int(legend_x) + 16, int(y), texte_w, 15,
+                             Qt.AlignLeft | Qt.AlignVCenter, elide)
             y += row_h
         painter.end()

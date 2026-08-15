@@ -1,4 +1,6 @@
-from PyQt5.QtWidgets import QLabel, QMainWindow, QMessageBox, QWidget
+from PyQt5.QtCore import QPropertyAnimation
+from PyQt5.QtWidgets import (QLabel, QMainWindow, QMessageBox, QWidget,
+                             QGraphicsOpacityEffect)
 
 from api import api_disponible
 from core.config import APP_NAME, ROLE_LABELS
@@ -8,12 +10,18 @@ from ui.loader import apply_ui
 
 NAV_PAGES = {
     "btn_nav_dashboard": "dashboard",
+    "btn_nav_stats": "stats",
     "btn_nav_eleves": "eleves",
     "btn_nav_caisse": "caisse",
+    "btn_nav_tarifs": "tarifs",
+    "btn_nav_paiements": "paiements",
     "btn_nav_classes": "classes",
+    "btn_nav_cycles": "cycles",
     "btn_nav_notes": "notes",
+    "btn_nav_presences": "presences",
     "btn_nav_planning": "planning",
     "btn_nav_personnel": "personnel",
+    "btn_nav_programmes": "programmes",
     "btn_nav_parametres": "parametres",
     "btn_nav_comptes": "comptes",
 }
@@ -25,12 +33,18 @@ DASHBOARD_BUILDERS = {
 }
 
 BUILDERS = {
+    "stats": pages.statistiques,
     "eleves": pages.eleves,
     "caisse": pages.caisse,
+    "tarifs": pages.tarifs,
+    "paiements": pages.paiements,
     "classes": pages.classes,
+    "cycles": pages.cycles_annees,
     "notes": pages.notes,
+    "presences": pages.presences,
     "planning": pages.planning,
     "personnel": pages.personnel,
+    "programmes": pages.programmes,
     "parametres": pages.parametres,
     "comptes": pages.comptes,
 }
@@ -188,4 +202,16 @@ class MainWindow(QMainWindow):
                 btn.setChecked(True)
             elif btn.isVisible():
                 btn.setChecked(False)
+        self._fade_in(widget)
         self.statusBar().showMessage(f"Page active : {page_name}", 1600)
+
+    def _fade_in(self, widget):
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(200)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.finished.connect(lambda: widget.setGraphicsEffect(None))
+        self._fade_anim = anim
+        anim.start()

@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import sqlite3
 
@@ -24,13 +25,73 @@ CREATE TABLE IF NOT EXISTS classes (
     niveau    TEXT,
     capacite  INTEGER NOT NULL DEFAULT 50,
     salle     TEXT,
-    titulaire TEXT
+    titulaire TEXT,
+    cycle_id  INTEGER,
+    FOREIGN KEY (cycle_id) REFERENCES cycles (id)
 );
 
 CREATE TABLE IF NOT EXISTS matieres (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     nom         TEXT NOT NULL UNIQUE,
     coefficient REAL NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS cycles (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    nom         TEXT NOT NULL UNIQUE,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS annees_scolaires (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    libelle    TEXT NOT NULL,
+    date_debut TEXT,
+    date_fin   TEXT,
+    est_active INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS tarifs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    classe_id     INTEGER,
+    type_frais    TEXT NOT NULL,
+    montant       REAL NOT NULL DEFAULT 0,
+    annee_scolaire TEXT,
+    FOREIGN KEY (classe_id) REFERENCES classes (id)
+);
+
+CREATE TABLE IF NOT EXISTS paiements (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    inscription_id INTEGER,
+    eleve_id       INTEGER NOT NULL,
+    montant        REAL NOT NULL DEFAULT 0,
+    mode_reglement TEXT,
+    type_frais     TEXT,
+    date_paiement  TEXT NOT NULL DEFAULT (date('now', 'localtime')),
+    annee_scolaire TEXT,
+    trimestre      TEXT,
+    FOREIGN KEY (eleve_id) REFERENCES eleves (id)
+);
+
+CREATE TABLE IF NOT EXISTS programmes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    classe_id     INTEGER NOT NULL,
+    matiere_id    INTEGER NOT NULL,
+    enseignant_id INTEGER,
+    coefficient   REAL NOT NULL DEFAULT 1,
+    UNIQUE (classe_id, matiere_id),
+    FOREIGN KEY (classe_id) REFERENCES classes (id),
+    FOREIGN KEY (matiere_id) REFERENCES matieres (id)
+);
+
+CREATE TABLE IF NOT EXISTS presences (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    eleve_id   INTEGER NOT NULL,
+    classe_id  INTEGER,
+    date       TEXT NOT NULL,
+    statut     TEXT NOT NULL DEFAULT 'Present',
+    motif      TEXT,
+    UNIQUE (eleve_id, date),
+    FOREIGN KEY (eleve_id) REFERENCES eleves (id)
 );
 
 CREATE TABLE IF NOT EXISTS eleves (
@@ -159,11 +220,18 @@ class Database:
         conn = self.connect()
         try:
             conn.executescript(SCHEMA)
+            self._migrate(conn)
             self._seed(conn)
             conn.commit()
         finally:
             conn.close()
         self._initialized = True
+
+
+    def _migrate(self, conn):
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(classes)")]
+        if "cycle_id" not in cols:
+            conn.execute("ALTER TABLE classes ADD COLUMN cycle_id INTEGER")
 
 
     def _seed(self, conn):
@@ -208,6 +276,35 @@ class Database:
                     ("M. Aristide Moukala", "Comptable", "+242 06 778 8899", "a.moukala@ecole.cg", 120000, "CDI"),
                 ),
             )
+
+        if conn.execute("SELECT COUNT(*) FROM annees_scolaires").fetchone()[0] == 0:
+            year = datetime.date.today().year
+            conn.execute(
+                """INSERT INTO annees_scolaires (libelle, date_debut, date_fin, est_active)
+                   VALUES (?, ?, ?, 1)""",
+                (f"{year}-{year + 1}", f"{year}-09-01", f"{year + 1}-06-30"))
+
+        def _cycle_id(nom, description):
+            row = conn.execute("SELECT id FROM cycles WHERE nom = ?", (nom,)).fetchone()
+            if row:
+                return row[0]
+            conn.execute("INSERT INTO cycles (nom, description) VALUES (?, ?)",
+                         (nom, description))
+            return conn.execute("SELECT id FROM cycles WHERE nom = ?", (nom,)).fetchone()[0]
+
+        cycles_def = {
+            "Primaire": ("CI", "CP", "CE1", "CE2", "CM1", "CM2"),
+            "College": ("6eme", "5eme", "4eme", "3eme"),
+            "Lycee": ("2nde", "1ere", "Terminale"),
+        }
+        ids = {}
+        for nom, niveaux in cycles_def.items():
+            cid = _cycle_id(nom, f"Cycle {nom}")
+            ids[nom] = cid
+            for niveau in niveaux:
+                conn.execute(
+                    """UPDATE classes SET cycle_id = ?
+                       WHERE niveau = ? AND cycle_id IS NULL""", (cid, niveau))
 
 
     def query(self, sql, params=()):

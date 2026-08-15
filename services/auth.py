@@ -49,9 +49,11 @@ class RoleAuthorizer:
 
     NAV = {
         "admin": ["dashboard", "comptes"],
-        "directeur": ["dashboard", "eleves", "classes", "notes", "planning",
-                      "caisse", "personnel", "parametres"],
-        "gestionnaire": ["dashboard", "eleves", "classes", "notes", "planning", "caisse"],
+        "directeur": ["dashboard", "stats", "eleves", "classes", "cycles", "notes",
+                      "presences", "planning", "caisse", "tarifs", "paiements",
+                      "personnel", "programmes", "parametres"],
+        "gestionnaire": ["dashboard", "eleves", "classes", "notes", "planning",
+                         "caisse", "tarifs", "paiements", "presences"],
     }
 
     def __init__(self, role):
@@ -62,8 +64,6 @@ class RoleAuthorizer:
         return page in self.NAV.get(self.role, [])
 
     def can_edit(self, page):
-        if page in ("comptes",):
+        if page in ("comptes", "parametres"):
             return self.role == "admin"
-        if self.role == "gestionnaire":
-            return True
-        return False
+        return self.role in ("admin", "directeur", "gestionnaire")
