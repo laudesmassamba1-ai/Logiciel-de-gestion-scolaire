@@ -132,7 +132,10 @@ def resource_path(relative: str) -> Path:
 
 
 def data_dir() -> Path:
-    if hasattr(sys, "_MEIPASS"):
+    override = os.environ.get("GS_DATA_DIR")
+    if override:
+        folder = Path(override) / "data"
+    elif hasattr(sys, "_MEIPASS"):
         if sys.platform == "win32":
             base = Path(os.environ.get("APPDATA", str(Path.home()))) / "GestionScolaire"
         elif sys.platform == "darwin":

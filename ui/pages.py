@@ -182,18 +182,7 @@ def dashboard_directeur(page, ctx):
                                  list(fonctions.values())[:6])
             _replace_layout(page.layout_chart_personnel, chart_perso)
 
-        src = repos.personnel()
-        if src:
-            _render_personnel(src)
-        else:
-            def _on_personnel_api(result):
-                if isinstance(result, Exception) or token != tokens["n"]:
-                    return
-                donnees, _ = result if isinstance(result, tuple) else (None, None)
-                if donnees:
-                    _render_personnel(donnees)
-
-            run_async(client.enseignants, _on_personnel_api)
+        _render_personnel(repos.personnel())
 
         classes = repos.classes()
         sans_titulaire = [c for c in classes if not c.get("titulaire")]
@@ -452,15 +441,6 @@ def dashboard_gestionnaire(page, ctx):
             _replace_layout(page.layout_chart_statuts, chart)
 
         _render_statuts(repos.eleves())
-
-        def _on_statuts_api(result):
-            if isinstance(result, Exception) or token != tokens["n"]:
-                return
-            eleves_api, _ = result if isinstance(result, tuple) else (None, None)
-            if eleves_api:
-                _render_statuts(eleves_api)
-
-        run_async(client.eleve_recherche, _on_statuts_api)
 
     page.btn_quick_inscrire.clicked.connect(
         lambda: open_inscription_dialog(page, ctx))

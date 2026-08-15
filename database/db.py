@@ -266,17 +266,6 @@ class Database:
             "INSERT OR IGNORE INTO parametres (cle, valeur) VALUES (?, ?)",
             ("frais_scolarite", "25000"))
 
-        if conn.execute("SELECT COUNT(*) FROM personnel").fetchone()[0] == 0:
-            conn.executemany(
-                """INSERT INTO personnel (nom_complet, fonction, telephone, email, salaire, statut)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    ("M. Jean Makosso", "Enseignant Francais", "+242 06 521 3344", "j.makosso@ecole.cg", 150000, "Contrat"),
-                    ("Mme Clarisse Ngoma", "Enseignante Mathematiques", "+242 05 447 5566", "c.ngoma@ecole.cg", 160000, "Contrat"),
-                    ("M. Aristide Moukala", "Comptable", "+242 06 778 8899", "a.moukala@ecole.cg", 120000, "CDI"),
-                ),
-            )
-
         if conn.execute("SELECT COUNT(*) FROM annees_scolaires").fetchone()[0] == 0:
             year = datetime.date.today().year
             conn.execute(
