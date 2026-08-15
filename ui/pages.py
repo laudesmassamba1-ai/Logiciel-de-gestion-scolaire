@@ -1620,7 +1620,8 @@ def parametres(page, ctx):
         for key, path in images.items():
             if path:
                 import shutil
-                dest = __import__("config").DOCS_DIR / f"{key}_{datetime.date.today():%Y%m%d}{Path(path).suffix}"
+                from core.config import DOCS_DIR
+                dest = DOCS_DIR / f"{key}_{datetime.date.today():%Y%m%d}{Path(path).suffix}"
                 shutil.copy2(path, dest)
                 repos.set_parametre(key, str(dest))
         page.lbl_status.setText("Configuration mise a jour.")

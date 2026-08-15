@@ -133,10 +133,15 @@ def resource_path(relative: str) -> Path:
 
 def data_dir() -> Path:
     if hasattr(sys, "_MEIPASS"):
-        base = Path(sys.executable).resolve().parent
+        if sys.platform == "win32":
+            base = Path(os.environ.get("APPDATA", str(Path.home()))) / "GestionScolaire"
+        elif sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support" / "GestionScolaire"
+        else:
+            base = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))) / "gestion-scolaire"
+        folder = base / "data"
     else:
-        base = PROJECT_ROOT
-    folder = base / "data"
+        folder = PROJECT_ROOT / "data"
     folder.mkdir(parents=True, exist_ok=True)
     return folder
 

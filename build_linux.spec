@@ -1,7 +1,6 @@
 from pathlib import Path
 
 project_root = Path(SPECPATH)
-icon_path = project_root / 'assets' / 'icon.ico'
 
 a = Analysis(
     ['main.py'],
@@ -29,14 +28,12 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='GestionScolaire',
+    name='gestion-scolaire',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     console=False,
-    icon=str(icon_path) if icon_path.exists() else None,
-    manifest=str(project_root / 'win_dpi_manifest.xml'),
 )
 
 coll = COLLECT(
@@ -45,5 +42,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name='GestionScolaire',
+    name='gestion-scolaire',
 )

@@ -1,15 +1,13 @@
-name: Build Windows Executable
+name: Build Windows Installer
 
 on:
-  push:
-    branches: [ exe ]
   workflow_dispatch:
-
-permissions:
-  contents: write
+  push:
+    tags:
+      - 'v*'
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
 
     steps:
@@ -19,33 +17,64 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
-      - run: |
+      - name: Install Python dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
-      - run: pyinstaller --noconfirm --clean build_win.spec
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
 
-      - run: Copy-Item -Force dist/GestionScolaire.exe dist_win/GestionScolaire.exe
-
-      - name: Commit Executable
+      - name: Get version
+        id: version
         shell: bash
+        run: echo "app_version=$(python -c 'import build_app;print(build_app._version())')" >> "$GITHUB_OUTPUT"
+
+      - name: Build application and installer
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python build_app.py
+
+      - name: Prepare signing certificate
+        shell: pwsh
+        env:
+          WIN_SIGN_PFX: ${{ secrets.WIN_SIGN_PFX }}
+          WIN_SIGN_PASSWORD: ${{ secrets.WIN_SIGN_PASSWORD }}
         run: |
-          git lfs install --skip-repo
-          git add dist_win/GestionScolaire.exe
-          if git diff --cached --quiet -- dist_win/GestionScolaire.exe; then
-            echo "executable unchanged"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit --allow-empty-message -m ""
-            git lfs push --all origin
-            git push origin HEAD:exe
-          fi
+          $ErrorActionPreference = "Stop"
+          if ($env:WIN_SIGN_PFX) {
+            if (-not $env:WIN_SIGN_PASSWORD) { throw "WIN_SIGN_PASSWORD manquant" }
+            $password = $env:WIN_SIGN_PASSWORD
+            [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:WIN_SIGN_PFX))
+          } else {
+            $password = "gestion-scolaire-ci"
+            $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Gestion Scolaire, O=Gestion Scolaire" -CertStoreLocation Cert:\CurrentUser\My -KeyExportPolicy Exportable -KeySpec Signature -KeyUsage DigitalSignature -NotAfter (Get-Date).AddYears(3)
+            Export-PfxCertificate -Cert $cert -FilePath "$env:RUNNER_TEMP\cert.pfx" -Password (ConvertTo-SecureString -String $password -Force -AsPlainText) | Out-Null
+            Remove-Item -Path "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force
+          }
+          Write-Output "CERT_PATH=$env:RUNNER_TEMP\cert.pfx" >> $env:GITHUB_ENV
+          Write-Output "CERT_PASSWORD=$password" >> $env:GITHUB_ENV
+
+      - name: Sign binaries and installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe introuvable" }
+          & $signtool.FullName sign /f "$env:CERT_PATH" /p $env:CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\GestionScolaire\GestionScolaire.exe"
+          $setup = Get-ChildItem "installers\GestionScolaire-Setup-*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "installeur introuvable" }
+          & $signtool.FullName sign /f "$env:CERT_PATH" /p $env:CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup.FullName
+          $sig = Get-AuthenticodeSignature "dist\GestionScolaire\GestionScolaire.exe"
+          if ($sig.Status -eq [System.Management.Automation.SignatureStatus]::HashMismatch -or $sig.Status -eq [System.Management.Automation.SignatureStatus]::Invalid) { throw "signature invalide : $($sig.Status)" }
+          Write-Output "Signature verifiee : $($sig.Status)"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GestionScolaire-Windows-x64
-          path: dist/GestionScolaire.exe
+          name: GestionScolaire-Setup-${{ steps.version.outputs.app_version }}
+          path: |
+            installers/GestionScolaire-Setup-*.exe
+            dist/GestionScolaire/GestionScolaire.exe
