@@ -33,18 +33,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer cython
 
-      - name: Decode signing keystore
-        if: ${{ secrets.APK_KEYSTORE_B64 != '' }}
-        run: |
-          echo "${{ secrets.APK_KEYSTORE_B64 }}" | base64 -d > mobile/gestionscolaire-release.keystore
-
       - name: Build signed release APK
         env:
+          APK_KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_B64 }}
           P4A_RELEASE_KEYSTORE: ${{ github.workspace }}/mobile/gestionscolaire-release.keystore
           P4A_RELEASE_KEYSTORE_PASSWD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
           P4A_RELEASE_KEYALIAS: ${{ secrets.APK_KEY_ALIAS }}
           P4A_RELEASE_KEYALIAS_PASSWD: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
+          echo "$APK_KEYSTORE_B64" | base64 -d > "$P4A_RELEASE_KEYSTORE"
           cd mobile
           ./scripts/build_apk.sh release
 
