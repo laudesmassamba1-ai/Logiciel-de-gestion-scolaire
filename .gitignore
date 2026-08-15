@@ -6,7 +6,6 @@ __pycache__/
 *.db-journal
 build/
 dist/
-exe-win/
+dist_win/
 data/
-GestionScolaire.spec
 installers/
