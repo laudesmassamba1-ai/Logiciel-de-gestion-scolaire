@@ -20,6 +20,7 @@ from services import auth, reports
 from services.auth import RoleAuthorizer
 from ui.loader import apply_ui
 from ui.widgets import SimpleBarChart, SimplePieChart, fmt_money
+from ui.workers import run_async
 
 
 class PageContext:
@@ -123,27 +124,43 @@ def dashboard_admin(page, ctx):
 
 def dashboard_directeur(page, ctx):
     apply_ui("dashboards/dashboard_directeur.ui", page)
+    tokens = {"n": 0}
 
     def refresh():
+        tokens["n"] += 1
+        token = tokens["n"]
         masse = repos.masse_salariale()
         enseignants = repos.enseignants()
         page.vk1_val.setText(fmt_money(masse))
-
-        nb_ens_api, _ = client.total_enseignant()
-        page.vk2_val.setText(
-            f"{nb_ens_api} Enseignants" if nb_ens_api is not None
-            else f"{len(enseignants)} Enseignants")
+        page.vk2_val.setText(f"{len(enseignants)} Enseignants")
         page.vk3_val.setText("0 En Attente")
+
+        def _on_enseignants(result):
+            if isinstance(result, Exception) or token != tokens["n"]:
+                return
+            nb_ens_api, _ = result if isinstance(result, tuple) else (None, None)
+            if nb_ens_api is not None:
+                page.vk2_val.setText(f"{nb_ens_api} Enseignants")
+
+        run_async(client.total_enseignant, _on_enseignants)
 
         frais = float(repos.parametres().get("frais_scolarite", "25000") or 0)
         _, _, solde = repos.caisse_totals()
         total_eleves = repos.stats_dashboard()["total_eleves"]
-        encaisse_api, _ = client.total_montant_paiement()
-        if encaisse_api is not None:
-            solde = float(encaisse_api)
         attendu = frais * total_eleves
         taux = min(100.0, solde / attendu * 100) if attendu else 0.0
         page.vk4_val.setText(f"{taux:.1f} %")
+
+        def _on_encaisse(result):
+            if isinstance(result, Exception) or token != tokens["n"]:
+                return
+            encaisse_api, _ = result if isinstance(result, tuple) else (None, None)
+            if encaisse_api is not None:
+                solde_api = float(encaisse_api)
+                taux_api = min(100.0, solde_api / attendu * 100) if attendu else 0.0
+                page.vk4_val.setText(f"{taux_api:.1f} %")
+
+        run_async(client.total_montant_paiement, _on_encaisse)
 
         charts = _directeur_charts()
         chart_fin = SimpleBarChart(titre="Tresorerie sur 6 mois")
@@ -153,22 +170,30 @@ def dashboard_directeur(page, ctx):
         _replace_layout(page.layout_chart_finances, chart_fin)
         _replace_layout(page.layout_chart_scolarite, chart_scol)
 
-        try:
+        def _render_personnel(source):
+            if not hasattr(page, "layout_chart_personnel"):
+                return
             fonctions = {}
-            src = repos.personnel()
-            if not src:
-                enseignants_api, _ = client.enseignants()
-                src = enseignants_api or []
-            for p in src:
+            for p in source:
                 f = p.get("fonction") or p.get("statut") or "Autre"
                 fonctions[f] = fonctions.get(f, 0) + 1
-            if fonctions and hasattr(page, "layout_chart_personnel"):
-                chart_perso = SimplePieChart(titre="Repartition du personnel")
-                chart_perso.set_data(list(fonctions.keys())[:6],
-                                     list(fonctions.values())[:6])
-                _replace_layout(page.layout_chart_personnel, chart_perso)
-        except Exception:
-            pass
+            chart_perso = SimplePieChart(titre="Repartition du personnel")
+            chart_perso.set_data(list(fonctions.keys())[:6],
+                                 list(fonctions.values())[:6])
+            _replace_layout(page.layout_chart_personnel, chart_perso)
+
+        src = repos.personnel()
+        if src:
+            _render_personnel(src)
+        else:
+            def _on_personnel_api(result):
+                if isinstance(result, Exception) or token != tokens["n"]:
+                    return
+                donnees, _ = result if isinstance(result, tuple) else (None, None)
+                if donnees:
+                    _render_personnel(donnees)
+
+            run_async(client.enseignants, _on_personnel_api)
 
         classes = repos.classes()
         sans_titulaire = [c for c in classes if not c.get("titulaire")]
@@ -362,18 +387,35 @@ def statistiques(page, ctx):
 
 def dashboard_gestionnaire(page, ctx):
     apply_ui("dashboards/dashboard_gestionnaire.ui", page)
+    tokens = {"n": 0}
 
     def refresh():
+        tokens["n"] += 1
+        token = tokens["n"]
         page.lbl_date.setText(_today_fr())
         stats = repos.stats_dashboard()
-        total_api, _ = client.total_eleves()
-        page.lbl_kpi1_valeur.setText(
-            str(total_api) if total_api is not None else str(stats["total_eleves"]))
+        page.lbl_kpi1_valeur.setText(str(stats["total_eleves"]))
         page.lbl_kpi2_valeur.setText(str(stats["inscriptions_jour"]))
-        enc_api, _ = client.total_montant_paiement()
-        encaisse = float(enc_api) if enc_api is not None else stats["encaissements_jour"]
-        page.lbl_kpi3_valeur.setText(fmt_money(encaisse))
+        page.lbl_kpi3_valeur.setText(fmt_money(stats["encaissements_jour"]))
         page.lbl_kpi4_valeur.setText(str(stats["dossiers_incomplets"]))
+
+        def _on_eleves(result):
+            if isinstance(result, Exception) or token != tokens["n"]:
+                return
+            total_api, _ = result if isinstance(result, tuple) else (None, None)
+            if total_api is not None:
+                page.lbl_kpi1_valeur.setText(str(total_api))
+
+        run_async(client.total_eleves, _on_eleves)
+
+        def _on_encaisse(result):
+            if isinstance(result, Exception) or token != tokens["n"]:
+                return
+            enc_api, _ = result if isinstance(result, tuple) else (None, None)
+            if enc_api is not None:
+                page.lbl_kpi3_valeur.setText(fmt_money(float(enc_api)))
+
+        run_async(client.total_montant_paiement, _on_encaisse)
 
         actifs = repos.transactions(recherche="")[:8]
         page.list_activite_recente.clear()
@@ -398,19 +440,27 @@ def dashboard_gestionnaire(page, ctx):
             page.list_dossiers_incomplets.addItem(
                 f"{e['prenom']} {e['nom']}  - manque: {', '.join(manque)}")
 
-        try:
+        def _render_statuts(source):
+            if not hasattr(page, "layout_chart_statuts"):
+                return
             statuts = {}
-            eleves_api, _ = client.eleve_recherche()
-            source = eleves_api if eleves_api else repos.eleves()
             for e in source:
                 s = e.get("statut") or "inconnu"
                 statuts[s] = statuts.get(s, 0) + 1
-            if statuts and hasattr(page, "layout_chart_statuts"):
-                chart = SimplePieChart(titre="Repartition des eleves par statut")
-                chart.set_data(list(statuts.keys()), list(statuts.values()))
-                _replace_layout(page.layout_chart_statuts, chart)
-        except Exception:
-            pass
+            chart = SimplePieChart(titre="Repartition des eleves par statut")
+            chart.set_data(list(statuts.keys()), list(statuts.values()))
+            _replace_layout(page.layout_chart_statuts, chart)
+
+        _render_statuts(repos.eleves())
+
+        def _on_statuts_api(result):
+            if isinstance(result, Exception) or token != tokens["n"]:
+                return
+            eleves_api, _ = result if isinstance(result, tuple) else (None, None)
+            if eleves_api:
+                _render_statuts(eleves_api)
+
+        run_async(client.eleve_recherche, _on_statuts_api)
 
     page.btn_quick_inscrire.clicked.connect(
         lambda: open_inscription_dialog(page, ctx))
@@ -1339,9 +1389,9 @@ def open_compte_dialog(parent, ctx, compte=None):
         dlg.input_nom_compte.setText(compte["nom_complet"])
         dlg.input_email_compte.setText(compte["email"] or "")
         dlg.input_telephone_compte.setText(compte["telephone"] or "")
-        idx = dlg.combo_role_compte.findText(
-            ROLE_LABELS.get(compte["role"], "").title() or
-            compte["role"].capitalize())
+        if compte["role"] == "admin":
+            dlg.combo_role_compte.addItem("Administrateur")
+        idx = dlg.combo_role_compte.findText(ROLE_LABELS.get(compte["role"], ""))
         if idx >= 0:
             dlg.combo_role_compte.setCurrentIndex(idx)
         dlg.check_compte_actif.setChecked(bool(compte["actif"]))
@@ -1354,7 +1404,8 @@ def open_compte_dialog(parent, ctx, compte=None):
             QMessageBox.warning(dlg, "Compte",
                                 "Le nom complet et l'email sont obligatoires.")
             return
-        role = dlg.combo_role_compte.currentText().lower()
+        role_label = dlg.combo_role_compte.currentText()
+        role = {v: k for k, v in ROLE_LABELS.items()}.get(role_label, role_label.lower())
         telephone = dlg.input_telephone_compte.text().strip()
         actif = dlg.check_compte_actif.isChecked()
         if compte:
@@ -1415,6 +1466,10 @@ def open_reset_password_dialog(parent, ctx):
         if u["role"] != "admin":
             combo.addItem(f"{u['nom_complet']} ({u['role']})", u["id"])
     new_pwd = QLineEdit(auth.random_password())
+    if combo.count() == 0:
+        QMessageBox.information(dlg, "Mot de passe",
+                                "Aucun compte disponible a reinitialiser.")
+        return
     form.addRow("Compte :", combo)
     form.addRow("Nouveau mot de passe :", new_pwd)
     lay.addLayout(form)
@@ -1867,13 +1922,21 @@ def open_annee_dialog(parent, ctx, annee=None, on_created=None):
         if not libelle.text().strip():
             QMessageBox.warning(dlg, "Annee", "Le libelle est obligatoire.")
             return
-        new_id = repos.add_annee_scolaire(
-            libelle.text().strip(),
-            debut.date().toString("yyyy-MM-dd"),
-            fin.date().toString("yyyy-MM-dd"),
-            active.isChecked())
-        if active.isChecked():
-            repos.set_annee_active(new_id)
+        if annee:
+            repos.update_annee_scolaire(annee["id"], libelle.text().strip(),
+                                        debut.date().toString("yyyy-MM-dd"),
+                                        fin.date().toString("yyyy-MM-dd"),
+                                        active.isChecked())
+            if active.isChecked():
+                repos.set_annee_active(annee["id"])
+        else:
+            new_id = repos.add_annee_scolaire(
+                libelle.text().strip(),
+                debut.date().toString("yyyy-MM-dd"),
+                fin.date().toString("yyyy-MM-dd"),
+                active.isChecked())
+            if active.isChecked():
+                repos.set_annee_active(new_id)
         if on_created:
             on_created()
 
@@ -2031,7 +2094,7 @@ def paiements(page, ctx):
 
     def _mode_options(combo):
         combo.addItem("Tous les modes", None)
-        combo.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement", "Virement", "Cheque"])
+        combo.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"])
 
     onglet_paiements = QWidget()
     lay_p = QVBoxLayout(onglet_paiements)

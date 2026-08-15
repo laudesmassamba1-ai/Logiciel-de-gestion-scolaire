@@ -88,6 +88,16 @@ class ClasseRepository(RepositoryBase):
                VALUES (?, ?, ?, ?)""",
             (libelle, date_debut, date_fin, 1 if est_active else 0))
 
+    def update_annee_scolaire(self, annee_id, libelle, date_debut, date_fin, est_active=False):
+        self._route_write(
+            "PUT", f"/annee_scolaire/{annee_id}",
+            {"libelle": libelle, "date_debut": date_debut,
+             "date_fin": date_fin, "est_active": est_active},
+            db.execute,
+            """UPDATE annees_scolaires SET libelle = ?, date_debut = ?, date_fin = ?, est_active = ?
+               WHERE id = ?""",
+            (libelle, date_debut, date_fin, 1 if est_active else 0, annee_id))
+
     def set_annee_active(self, annee_id):
         db.execute("UPDATE annees_scolaires SET est_active = 0")
         db.execute("UPDATE annees_scolaires SET est_active = 1 WHERE id = ?", (annee_id,))

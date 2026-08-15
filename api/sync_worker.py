@@ -1,4 +1,5 @@
 
+import json
 import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -33,7 +34,17 @@ class SyncWorker(QThread):
 
     def _drain_queue(self):
         rows = db.dequeue_pending()
+        sent = 0
         for row in rows:
-
-
-            pass
+            try:
+                payload = json.loads(row["payload"])
+                _, err = client._request(row["method"], row["endpoint"], json=payload)
+            except Exception:
+                err = "echec envoi"
+            if err:
+                db.mark_queue_failed(row["id"])
+            else:
+                db.mark_queue_done(row["id"])
+                sent += 1
+        if sent:
+            self.sync_done.emit(sent)

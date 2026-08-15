@@ -1,11 +1,12 @@
 from PyQt5.QtCore import QPropertyAnimation
 from PyQt5.QtWidgets import (QLabel, QMainWindow, QMessageBox, QWidget,
-                             QGraphicsOpacityEffect)
+                             QGraphicsOpacityEffect, QVBoxLayout)
 
 from api import api_disponible
 from core.config import APP_NAME, ROLE_LABELS
 from ui import pages
 from ui.loader import apply_ui
+from ui.workers import run_async
 
 
 NAV_PAGES = {
@@ -62,7 +63,7 @@ class MainWindow(QMainWindow):
         self.showMaximized()
         self.setStyleSheet("""
             QMainWindow { background: #f8fafc; }
-            QWidget { color: #0f172a; font-family: 'Segoe UI', 'Helvetica', sans-serif; }
+            QWidget { color: #0f172a; }
             QPushButton {
                 border-radius: 6px;
                 padding: 8px 16px;
@@ -75,7 +76,7 @@ class MainWindow(QMainWindow):
             QPushButton:pressed { background-color: #065f46; }
             QToolButton, QPushButton { border-radius: 8px; }
             QToolButton:checked { background: #d1fae5; border: 1px solid #a7f3d0; }
-            QLabel { color: #334155; font-family: 'Segoe UI', sans-serif; }
+            QLabel { color: #334155; }
             QLineEdit, QComboBox {
                 border: 1px solid #e2e8f0;
                 border-radius: 6px;
@@ -109,30 +110,39 @@ class MainWindow(QMainWindow):
             "padding: 2px 10px; border-radius: 4px; font-weight: bold;")
         self.statusBar().addPermanentWidget(self.lbl_api_status)
         self.btn_logout.clicked.connect(self.logout)
+        self._api_checking = False
         self._refresh_api_status()
 
 
         self._wire_nav()
-        self._build_pages()
         default = "dashboard" if user["role"] in {"admin", "directeur", "gestionnaire"} else "comptes"
         self.navigate(default)
 
     def _refresh_api_status(self):
+        if self._api_checking:
+            return
+        self._api_checking = True
+        self.lbl_api_status.setText("Mode Local")
+        self.lbl_api_status.setStyleSheet(
+            "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
+            " background-color: #fef9c3; color: #854d0e;")
 
-        try:
-            en_ligne = api_disponible()
-        except Exception:
-            en_ligne = False
-        if en_ligne:
-            self.lbl_api_status.setText("🟢 En Ligne")
-            self.lbl_api_status.setStyleSheet(
-                "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
-                " background-color: #dcfce7; color: #166534;")
-        else:
-            self.lbl_api_status.setText("🔴 Mode Local")
-            self.lbl_api_status.setStyleSheet(
-                "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
-                " background-color: #fef9c3; color: #854d0e;")
+        def _check():
+            try:
+                return api_disponible(force=True)
+            except Exception:
+                return False
+
+        def _on(result):
+            self._api_checking = False
+            en_ligne = bool(result) and not isinstance(result, Exception)
+            if en_ligne:
+                self.lbl_api_status.setText("En Ligne")
+                self.lbl_api_status.setStyleSheet(
+                    "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
+                    " background-color: #dcfce7; color: #166534;")
+
+        run_async(_check, _on)
 
     def logout(self):
 
@@ -149,44 +159,35 @@ class MainWindow(QMainWindow):
             else:
                 btn.setVisible(False)
 
-    def _build_pages(self):
+    def _get_page(self, page_name):
 
-        dashboard_builder = DASHBOARD_BUILDERS.get(self.user["role"], pages.dashboard_admin)
-        if self.ctx.authorizer.allowed("dashboard"):
-            widget = QWidget()
-            widget.setObjectName("page_dashboard")
-            try:
-                dashboard_builder(widget, self.ctx)
-            except Exception as exc:
-                from PyQt5.QtWidgets import QLabel, QVBoxLayout
-                lay = QVBoxLayout(widget)
-                label = QLabel(f"Erreur de chargement (dashboard) : {exc}")
-                label.setWordWrap(True)
-                label.setStyleSheet("color: #dc2626; padding: 20px;")
-                lay.addWidget(label)
-            self.stackedWidget.addWidget(widget)
-            self._pages["dashboard"] = widget
-
-        for page_name, builder in BUILDERS.items():
-            if not self.ctx.authorizer.allowed(page_name):
-                continue
-            widget = QWidget()
-            widget.setObjectName(f"page_{page_name}")
-            try:
-                builder(widget, self.ctx)
-            except Exception as exc:
-                from PyQt5.QtWidgets import QLabel, QVBoxLayout
-                lay = QVBoxLayout(widget)
-                label = QLabel(f"Erreur de chargement ({page_name}) : {exc}")
-                label.setWordWrap(True)
-                label.setStyleSheet("color: #dc2626; padding: 20px;")
-                lay.addWidget(label)
-            self.stackedWidget.addWidget(widget)
-            self._pages[page_name] = widget
+        widget = self._pages.get(page_name)
+        if widget is not None:
+            return widget
+        if page_name == "dashboard":
+            builder = DASHBOARD_BUILDERS.get(self.user["role"], pages.dashboard_admin)
+        else:
+            builder = BUILDERS.get(page_name)
+        if builder is None:
+            return None
+        widget = QWidget()
+        widget.setObjectName(f"page_{page_name}")
+        try:
+            builder(widget, self.ctx)
+        except Exception as exc:
+            from PyQt5.QtWidgets import QLabel, QVBoxLayout
+            lay = QVBoxLayout(widget)
+            label = QLabel(f"Erreur de chargement ({page_name}) : {exc}")
+            label.setWordWrap(True)
+            label.setStyleSheet("color: #dc2626; padding: 20px;")
+            lay.addWidget(label)
+        self.stackedWidget.addWidget(widget)
+        self._pages[page_name] = widget
+        return widget
 
     def navigate(self, page_name):
 
-        widget = self._pages.get(page_name)
+        widget = self._get_page(page_name)
         if widget is None:
             return
         self.stackedWidget.setCurrentWidget(widget)

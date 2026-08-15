@@ -17,7 +17,7 @@ APP_FONT_SIZE = 10
 
 
 API_BASE_URL = "http://127.0.0.1:8000"
-API_TIMEOUT = 3.0
+API_TIMEOUT = 2.0
 
 
 PAYS_DEFAUT = "Republique du Congo"

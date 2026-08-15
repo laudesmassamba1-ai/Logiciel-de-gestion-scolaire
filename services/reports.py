@@ -1,7 +1,7 @@
 import datetime
 from pathlib import Path
 
-from core.config import DOCS_DIR
+from core.config import CRENEAUX, DOCS_DIR, JOURS
 from database import db
 from repositories import repos
 from ui.widgets import fmt_money
@@ -164,15 +164,18 @@ def rapport_rh():
 
 def planning(classe):
 
-    entetes = "".join(f"<th>{j}</th>" for j in ["Creneau"] + list(__import__("config").JOURS))
+    entetes = "".join(f"<th>{j}</th>" for j in ["Creneau"] + list(JOURS))
     grid = {row["jour"]: {row["creneau"]: row} for row in
             db.query("SELECT * FROM planning WHERE classe_id = ?", (classe["id"],))}
     lignes = ""
-    for creneau in __import__("config").CRENEAUX:
+    for creneau in CRENEAUX:
         cells = ""
-        for jour in __import__("config").JOURS:
+        for jour in JOURS:
             entree = grid.get(jour, {}).get(creneau)
-            cells += f"<td>{entree['matiere'] or ''}{' (' + entree['salle'] + ')' if entree and entree['salle'] else ''}</td>"
+            if entree:
+                cells += f"<td>{entree['matiere'] or ''}{' (' + entree['salle'] + ')' if entree['salle'] else ''}</td>"
+            else:
+                cells += "<td></td>"
         lignes += f"<tr><td><strong>{creneau}</strong></td>{cells}</tr>"
     corps = f"{_entete_doc()}<h1>Emploi du temps - {classe['nom']}</h1>" \
             f"<table><tr>{entetes}</tr>{lignes}</table>"

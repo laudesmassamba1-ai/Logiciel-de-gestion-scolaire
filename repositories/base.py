@@ -20,8 +20,11 @@ class RepositoryBase:
 
     def _route_write(self, method, endpoint, payload, fn, *args, **kwargs):
         if network.sync_active() and network.is_online():
-
-            pass
+            try:
+                from api.client import _request
+                _request(method, endpoint, json=payload)
+            except Exception:
+                pass
         result = fn(*args, **kwargs)
         if network.sync_active() and not network.is_online():
             self._enqueue(method, endpoint, payload)
