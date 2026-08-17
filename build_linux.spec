@@ -1,6 +1,7 @@
 from pathlib import Path
 
 project_root = Path(SPECPATH)
+icon_path = project_root / 'assets' / 'icon.png'
 
 a = Analysis(
     ['main.py'],
@@ -8,6 +9,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(project_root / 'ui' / 'ui_files'), 'ui/ui_files'),
+        (str(project_root / 'assets' / 'icon.png'), 'assets') if icon_path.exists() else None,
     ],
     hiddenimports=[
         'PyQt5.uic',
@@ -21,6 +23,8 @@ a = Analysis(
     noarchive=False,
 )
 
+a.datas = [d for d in a.datas if d is not None]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -31,16 +35,17 @@ exe = EXE(
     name='gestion-scolaire',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
+    strip=True,
+    upx=True,
     console=False,
+    icon=str(icon_path) if icon_path.exists() else None,
 )
 
 coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
-    strip=False,
-    upx=False,
+    strip=True,
+    upx=True,
     name='gestion-scolaire',
 )

@@ -165,11 +165,23 @@ def _build_deb() -> None:
         'Section: education\n'
         'Priority: optional\n'
         'Architecture: amd64\n'
-        'Depends: libxcb-xinerama0, libxkbcommon-x11-0, libegl1, libxcb-cursor0\n'
+        'Depends: libxcb-xinerama0, libxkbcommon-x11-0, libegl1, libxcb-cursor0,'
+        ' libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0,'
+        ' libxcb-render-util0, libxcb-xfixes0, libxcb-shape0\n'
         'Maintainer: Gestion Scolaire\n'
+        'Homepage: https://github.com/laudesmassamba1-ai/Logiciel-de-gestion-scolaire\n'
         'Description: Application de gestion scolaire\n'
         ' Gestion des eleves, notes, finances, planning et presences.\n'.format(DEB_NAME, version),
         encoding='utf-8')
+    postrm = stage / 'DEBIAN' / 'postrm'
+    _write_script(postrm,
+                  '#!/bin/sh\nset -e\n'
+                  'if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then\n'
+                  '    if command -v update-desktop-database >/dev/null 2>&1; then\n'
+                  '        update-desktop-database /usr/share/applications >/dev/null 2>&1 || true\n'
+                  '    fi\n'
+                  '    rm -rf /opt/gestion-scolaire/data 2>/dev/null || true\n'
+                  'fi\nexit 0\n')
     INSTALLER_DIR.mkdir(parents=True, exist_ok=True)
     deb_path = INSTALLER_DIR / '{}_{}_{}.deb'.format(DEB_NAME, version, 'amd64')
     _run(['dpkg-deb', '--build', '--root-owner-group', str(stage), str(deb_path)])

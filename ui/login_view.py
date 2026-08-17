@@ -5,11 +5,11 @@ from PyQt5.QtWidgets import (
     QPushButton, QVBoxLayout,
 )
 
-from core.config import APP_NAME, APP_VERSION
+from core.config import APP_NAME, APP_VERSION, C_TEXT_SECONDARY, C_PRIMARY, C_PRIMARY_PRESSED
 from services import auth
 
-PRIMARY = "#047857"
-PRIMARY_DARK = "#065f46"
+PRIMARY = C_PRIMARY
+PRIMARY_DARK = C_PRIMARY_PRESSED
 
 
 class _Gradient(QFrame):
@@ -66,12 +66,8 @@ class LoginDialog(QDialog):
         def row(label, field):
             lay = QVBoxLayout()
             lab = QLabel(label)
-            lab.setStyleSheet("color: #334155; font-size: 12px; font-weight: bold;")
-            field.setStyleSheet(
-                "QLineEdit { border: 1px solid #cbd5e1; border-radius: 6px;"
-                " padding: 9px; background-color: #f8fafc; font-size: 13px; }"
-                "QLineEdit:focus { border: 1px solid #047857;"
-                " background-color: #ffffff; }")
+            lab.setStyleSheet(f"color: {C_TEXT_SECONDARY}; font-size: 12px; font-weight: bold;")
+            field.setStyleSheet("")
             lay.addWidget(lab)
             lay.addWidget(field)
             return lay

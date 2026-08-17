@@ -1,9 +1,10 @@
-from PyQt5.QtCore import QPropertyAnimation
+from PyQt5.QtCore import Qt, QPropertyAnimation
 from PyQt5.QtWidgets import (QLabel, QMainWindow, QMessageBox, QWidget,
-                             QGraphicsOpacityEffect, QVBoxLayout)
+                             QGraphicsOpacityEffect, QVBoxLayout,
+                             QStackedWidget)
 
 from api import api_disponible
-from core.config import APP_NAME, ROLE_LABELS
+from core.config import APP_NAME, ROLE_LABELS, QSS_SIDEBAR, C_BG
 from ui import pages
 from ui.loader import apply_ui
 from ui.workers import run_async
@@ -59,50 +60,15 @@ class MainWindow(QMainWindow):
         self.ctx = pages.PageContext(user, self.navigate)
         self._pages = {}
         self._current = None
+        self.setMinimumSize(960, 600)
         self.setWindowTitle(f"{APP_NAME} - {user['nom_complet']}")
-        self.showMaximized()
-        self.setStyleSheet("""
-            QMainWindow { background: #f8fafc; }
-            QWidget { color: #0f172a; }
-            QPushButton {
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 500;
-                border: none;
-                background-color: #047857;
-                color: white;
-            }
-            QPushButton:hover { background-color: #059669; }
-            QPushButton:pressed { background-color: #065f46; }
-            QToolButton, QPushButton { border-radius: 8px; }
-            QToolButton:checked { background: #d1fae5; border: 1px solid #a7f3d0; }
-            QLabel { color: #334155; }
-            QLineEdit, QComboBox {
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                padding: 8px;
-                background-color: #ffffff;
-                color: #0f172a;
-            }
-            QLineEdit:focus, QComboBox:focus {
-                border: 2px solid #047857;
-                background-color: #ffffff;
-            }
-            QTableWidget {
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                gridline-color: #e2e8f0;
-                background-color: #ffffff;
-            }
-            QTableWidget::item { padding: 4px; }
-            QHeaderView::section { background-color: #f1f5f9; border: none; padding: 8px; font-weight: bold; color: #334155; }
-        """)
         apply_ui("main.ui", self)
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C_BG}; }}\n{QSS_SIDEBAR}")
 
         self.lbl_user_name.setText(user["nom_complet"])
         self.lbl_user_role.setText(ROLE_LABELS.get(user["role"], user["role"]))
         self.statusBar().showMessage(
-            f"Connecté comme {user['nom_complet']} ({ROLE_LABELS.get(user['role'], user['role'])})",
+            f"Connecte comme {user['nom_complet']} ({ROLE_LABELS.get(user['role'], user['role'])})",
             2500,
         )
         self.lbl_api_status = QLabel()
@@ -207,12 +173,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Page active : {page_name}", 1600)
 
     def _fade_in(self, widget):
+        if hasattr(self, '_fade_anim') and self._fade_anim is not None:
+            self._fade_anim.stop()
+            prev = getattr(self, '_fade_target', None)
+            if prev:
+                prev.setGraphicsEffect(None)
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
         anim = QPropertyAnimation(effect, b"opacity", self)
         anim.setDuration(200)
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
-        anim.finished.connect(lambda: widget.setGraphicsEffect(None))
+        anim.finished.connect(lambda w=widget: w.setGraphicsEffect(None))
         self._fade_anim = anim
+        self._fade_target = widget
         anim.start()

@@ -14,6 +14,28 @@ class NoteRepository(RepositoryBase):
                ORDER BY e.nom, e.prenom""",
             (classe_id, matiere_id, periode))
 
+    def notes_classe(self, classe_id, periode):
+
+        return db.query(
+            """SELECT n.*, e.matricule, e.nom, e.prenom,
+                      m.nom AS matiere_nom, m.coefficient AS matiere_coeff
+               FROM notes n
+               JOIN eleves e ON e.id = n.eleve_id
+               JOIN matieres m ON m.id = n.matiere_id
+               WHERE e.classe_id = ? AND n.periode = ?
+               ORDER BY e.nom, e.prenom, m.nom""",
+            (classe_id, periode))
+
+    def notes_eleve(self, eleve_id, periode):
+
+        return db.query(
+            """SELECT n.*, m.nom AS matiere_nom, m.coefficient AS matiere_coeff
+               FROM notes n
+               JOIN matieres m ON m.id = n.matiere_id
+               WHERE n.eleve_id = ? AND n.periode = ?
+               ORDER BY m.nom""",
+            (eleve_id, periode))
+
     def save_note(self, eleve_id, matiere_id, periode, devoir1, devoir2, composition):
 
         payload = {"eleve_id": eleve_id, "matiere_id": matiere_id, "periode": periode,

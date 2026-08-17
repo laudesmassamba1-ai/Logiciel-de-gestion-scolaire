@@ -13,11 +13,14 @@ from ui.main_view import MainWindow
 
 
 def _setup_high_dpi():
-    os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
-    os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
-    os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
+    os.environ["QT_USE_PHYSICAL_DPI"] = "0"
+    if hasattr(Qt, "AA_EnableHighDpiScaling"):
+        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    if hasattr(Qt, "AA_UseHighDpiPixmaps"):
+        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
 
 def _pick_base_font() -> QFont:
@@ -27,7 +30,9 @@ def _pick_base_font() -> QFont:
     disponibles = set(QFontDatabase().families())
     for famille in familles:
         if famille in disponibles:
-            return QFont(famille, APP_FONT_SIZE)
+            f = QFont(famille, APP_FONT_SIZE)
+            f.setStyleStrategy(QFont.PreferAntialias)
+            return f
     return QFont("sans-serif", APP_FONT_SIZE)
 
 
@@ -51,12 +56,10 @@ def main():
 
     db.init_db()
 
-
     login = LoginDialog()
     if login.exec_() == LoginDialog.Accepted:
-
         window = MainWindow(login.user)
-        window.show()
+        window.showMaximized()
         sys.exit(app.exec_())
     sys.exit(0)
 
