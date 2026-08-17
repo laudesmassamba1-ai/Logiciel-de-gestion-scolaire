@@ -42,24 +42,52 @@ def get_total_eleves()-> dict:
 
 #affichage du nombre total d'élèves par classe
 @app.get("/total_eleves_par_classe")
-def get_total_eleves_par_classe(recherche: Optional[str]=None)-> dict:
+def get_total_eleves_par_classe(recherche: Optional[str] = None) -> dict:
     conn = get_connection()
     cursor = conn.cursor()
-    if recherche:
-        sql="""SELECT COUNT(*) FROM eleve, classe WHERE eleve.classe_id=classe.id AND classe like %s"""
-        motif=f"%{recherche}%"
-        cursor.execute(sql, (motif,))
+
+    try:
+        if not recherche:
+            return {
+                "message": (
+                    "Veuillez fournir un nom de classe dans le paramètre"
+                    " 'recherche'."
+                )
+            }
+
+        motif = f"%{recherche}%"
+
+        # 1. Compter les élèves (Utilisation de LIKE au lieu de =)
+        sql_count = """
+            SELECT COUNT(*) 
+            FROM eleve 
+            INNER JOIN inscription ON inscription.eleve_id = eleve.id 
+            INNER JOIN classe ON inscription.classe_id = classe.id 
+            WHERE classe.classe LIKE %s
+        """
+        cursor.execute(sql_count, (motif,))
         total_eleves = cursor.fetchone()[0]
-        cursor.execute("SELECT classe FROM classe where classe like %s", (motif,))
-    classe = cursor.fetchone()[0]
-    return {"nombre total d'élèves": {classe: total_eleves}}
+
+        # 2. Récupérer le vrai nom de la classe
+        cursor.execute(
+            "SELECT classe FROM classe WHERE classe LIKE %s LIMIT 1", (motif,)
+        )
+        res_classe = cursor.fetchone()
+
+        nom_classe = res_classe[0] if res_classe else recherche
+
+        return {"nombre total d'élèves": {nom_classe: total_eleves}}
+
+    finally:
+        cursor.close()
+        conn.close()
 
 #affichage de la liste des élèves par classe
 @app.get("/eleve/{classe}")
 def get_all_eleves_par_classe(classe: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nom, prenom, sexe FROM eleve, classe where eleve.classe_id=classe.id and classe.classe = %s and est_supprime = 0",(classe, ))
+    cursor.execute("SELECT nom, prenom, sexe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and  classe.classe = %s and est_supprime = 0",(classe, ))
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -68,7 +96,7 @@ def get_all_eleves_par_classe(classe: str)-> dict:
 def get_all_eleves()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT eleve.id, nom, prenom, sexe, classe FROM eleve, classe where eleve.classe_id=classe.id and est_supprime = false")
+    cursor.execute("SELECT eleve.id, nom, prenom, sexe, classe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime = false")
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -79,7 +107,7 @@ def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[st
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     if recherche:
-        sql="""select eleve.id, nom, prenom, sexe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, statut, numero_parent, classe from eleve, classe where eleve.classe_id=classe.id and nom like  %s and prenom like %s"""
+        sql="""select eleve.id, nom, prenom, sexe,  classe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, eleve.statut, numero_parent from eleve, classe, inscription where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and nom like  %s and prenom like %s"""
         motif=f"%{recherche}%"
         motif1=f"%{recherche1}%"
         cursor.execute(sql, (motif, motif1))
@@ -102,13 +130,13 @@ def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[st
 def get_eleve_total_classe():
     conn= get_connection()
     cursor= conn.cursor(dictionary=True)
-    cursor.execute("select count(*) as 'nombre_eleve', classe from eleve, classe where eleve.classe_id=classe.id and est_supprime=0 group by classe.classe ")
+    cursor.execute("select count(*) as 'nombre_eleve', classe from eleve, classe, inscription where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime=0 group by classe.classe ")
     eleve_total_classe=cursor.fetchall()
     cursor.close()
     conn.close()
     return {"eleve_total_classe": eleve_total_classe}
 
-# 1. Modèles Pydantic ajustés
+# 1. Modèles Pydantic
 class Eleveajouter(BaseModel):
     nom: str
     prenom: str
@@ -119,40 +147,56 @@ class Eleveajouter(BaseModel):
     nom_parent: str
     redoublant: str  # "0" pour Non, "1" pour Oui
     statut: str
-    classe_id: int
+    classe_id: int  # Transmis par le front pour l'inscription !
     telephone_parent: str
+    uuid_client: Optional[str] = None
 
 
-# On ne demande PAS l'inscription_id ici car il sera généré automatiquement
 class paiementAjouter(BaseModel):
     type_frais: str
     montant: float
     mode_paiement: str
     trimestre: Optional[str] = None
     mois: Optional[str] = None
+    uuid_client: Optional[str] = None
 
 
 class RequeteAjoutEleve(BaseModel):
     eleve: Eleveajouter
     paiement: paiementAjouter
+    uuid_client: Optional[str] = None
 
 
-# 2. Route POST corrigée
+# 2. Route POST
 @app.post("/eleve")
 def ajouter_eleve(payload: RequeteAjoutEleve):
     eleve = payload.eleve
     paiement = payload.paiement
+    # On récupère l'UUID du payload global ou de l'élève
+    uuid_client = payload.uuid_client or eleve.uuid_client
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # A. Insertion de l'élève
+        # A. Vérification anti-doublon pour le mode hors-ligne
+        if uuid_client:
+            cursor.execute(
+                "SELECT id FROM eleve WHERE uuid_client = %s", (uuid_client,)
+            )
+            existant = cursor.fetchone()
+            if existant:
+                return {
+                    "message": "Élève déjà enregistré (synchronisé)",
+                    "eleve_id": existant["id"],
+                }
+
+        # B. Insertion de l'élève (SANS classe_id dans la table eleve)
         sql_eleve = """
             INSERT INTO eleve (
                 nom, prenom, sexe, date_naissance,
                 lieu_naissance, adresse, nom_parent,
-                redoublant, statut, classe_id, numero_parent
+                redoublant, statut, numero_parent, uuid_client
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         valeurs_eleve = (
@@ -165,13 +209,13 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
             eleve.nom_parent,
             eleve.redoublant,
             eleve.statut,
-            eleve.classe_id,
             eleve.telephone_parent,
+            uuid_client,
         )
         cursor.execute(sql_eleve, valeurs_eleve)
         eleve_id = cursor.lastrowid
 
-        # B. Récupération de l'année scolaire active
+        # C. Récupération de l'année scolaire active
         cursor.execute(
             "SELECT id FROM annee_scolaire WHERE est_active = TRUE LIMIT 1"
         )
@@ -182,7 +226,7 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
 
         annee_scolaire_id = annee_active["id"]
 
-        # C. Insertion automatique dans la table inscription
+        # D. Insertion dans la table inscription (Utilise eleve.classe_id)
         sql_inscription = """
             INSERT INTO inscription (eleve_id, classe_id, annee_scolaire_id) 
             VALUES (%s, %s, %s)
@@ -190,12 +234,13 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
         cursor.execute(
             sql_inscription, (eleve_id, eleve.classe_id, annee_scolaire_id)
         )
-        inscription_id = cursor.lastrowid  # Récupération immédiate de l'ID !
+        inscription_id = cursor.lastrowid
 
-        # D. Insertion du paiement lié à l'inscription
+        # E. Insertion du paiement lié à l'inscription
         sql_paiement = """
-            INSERT INTO paiement (inscription_id, type_frais, montant, mode_paiement, trimestre, mois) 
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO paiement (
+                inscription_id, type_frais, montant, mode_paiement, trimestre, mois, uuid_client
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         valeurs_paiement = (
             inscription_id,
@@ -204,14 +249,17 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
             paiement.mode_paiement,
             paiement.trimestre,
             paiement.mois,
+            paiement.uuid_client,
         )
         cursor.execute(sql_paiement, valeurs_paiement)
 
-        # E. Une seule validation transactionnelle à la toute fin
+        # F. Validation globale de la transaction
         conn.commit()
 
         return {
-            "message": "Élève, inscription et paiement enregistrés avec succès !",
+            "message": (
+                "Élève, inscription et paiement enregistrés avec succès !"
+            ),
             "eleve_id": eleve_id,
             "inscription_id": inscription_id,
         }
@@ -237,49 +285,77 @@ class EleveModifier(BaseModel):
     nom_parent: Optional[str] = None
     redoublant: Optional[str] = None
     statut: Optional[str] = None
-    classe_id: Optional[int] = None
     numero_parent: Optional[str] = None
+    classe_id: Optional[int] = None  # Permet de modifier la classe si fourni !
 
-## Route pour modifier un élève à partir de son id
-@app.put("/modifierEleve/{id}")
-def put_un_eleve(id: int, eleve: EleveModifier):
-    #Extraire uniquement les champs envoyés
+
+@app.put("/eleve/{eleve_id}")
+def modifier_eleve(eleve_id: int, eleve: EleveModifier):
     nouvelles_donnees = eleve.dict(exclude_unset=True)
 
     if not nouvelles_donnees:
-        raise HTTPException(status_code=400, detail="Aucun champ à modifier n'a été fourni")
+        raise HTTPException(
+            status_code=400, detail="Aucun champ à modifier n'a été fourni"
+        )
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Vérifier si l'élève existe
-    cursor.execute("SELECT id FROM eleve WHERE id=%s", (id,))
-    if cursor.fetchone() is None:
+    try:
+        # 1. Vérifier si l'élève existe
+        cursor.execute("SELECT id FROM eleve WHERE id=%s", (eleve_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Élève non trouvé")
+
+        # 2. Extraire classe_id s'il est présent (géré séparément dans 'inscription')
+        nouvelle_classe_id = nouvelles_donnees.pop("classe_id", None)
+
+        # 3. Mise à jour dynamique de la table 'eleve'
+        if nouvelles_donnees:
+            clauses_set = [f"{cle}=%s" for cle in nouvelles_donnees.keys()]
+            sql = f"UPDATE eleve SET {', '.join(clauses_set)} WHERE id=%s"
+
+            valeurs = list(nouvelles_donnees.values())
+            valeurs.append(eleve_id)
+            cursor.execute(sql, tuple(valeurs))
+
+        # 4. Si classe_id est fourni, mettre à jour dans la table 'inscription'
+        if nouvelle_classe_id is not None:
+            cursor.execute(
+                "SELECT id FROM annee_scolaire WHERE est_active = TRUE LIMIT 1"
+            )
+            annee_active = cursor.fetchone()
+            if annee_active:
+                cursor.execute(
+                    """
+                    UPDATE inscription 
+                    SET classe_id = %s 
+                    WHERE eleve_id = %s AND annee_scolaire_id = %s
+                """,
+                    (nouvelle_classe_id, eleve_id, annee_active["id"]),
+                )
+
+        conn.commit()
+
+        # 5. Récupérer la fiche complète à jour
+        cursor.execute("SELECT * FROM eleve WHERE id=%s", (eleve_id,))
+        eleve_mis_a_jour = cursor.fetchone()
+
+        return {
+            "message": "Élève modifié avec succès",
+            "eleve": eleve_mis_a_jour,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500, detail=f"Erreur lors de la modification : {str(e)}"
+        )
+    finally:
         cursor.close()
         conn.close()
-        raise HTTPException(status_code=404, detail="Élève non trouvé")
-
-    #Construire et exécuter la mise à jour dynamique
-    clauses_set = [f"{cle}=%s" for cle in nouvelles_donnees.keys()]
-    sql = f"UPDATE eleve SET {', '.join(clauses_set)} WHERE id=%s"
-
-    valeurs = list(nouvelles_donnees.values())
-    valeurs.append(id)
-
-    cursor.execute(sql, tuple(valeurs))
-    conn.commit()
-
-    #Récupérer la fiche COMPLÈTE et À JOUR de l'élève
-    cursor.execute("SELECT * FROM eleve WHERE id=%s", (id,))
-    eleve_mis_a_jour = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-
-    return {
-        "message": "Élève modifié avec succès",
-        "eleve": eleve_mis_a_jour
-    }
 
 #route pour supprimer un élève
 @app.delete("/eleve/{id}")
@@ -301,7 +377,7 @@ def supprimer_eleve(id: int):
 def get_eleves_supprimes():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nom, prenom, sexe, classe.classe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, numero_parent FROM eleve, classe  WHERE eleve.classe_id=classe.id and est_supprime = TRUE")
+    cursor.execute("SELECT nom, prenom, sexe, classe.classe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, numero_parent FROM eleve, classe, inscription  WHERE inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime = TRUE")
     eleves_supprimes = cursor.fetchall()
     return {"eleves_supprimes": eleves_supprimes}
 
@@ -326,8 +402,8 @@ def get_parents_par_classe(classe_name: str):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT nom, prenom, nom_parent, numero_parent, classe FROM eleve, classe 
-        WHERE eleve.classe_id = classe.id AND classe.classe LIKE %s
+        SELECT nom, prenom, nom_parent, numero_parent, classe FROM eleve, classe, inscription 
+        WHERE inscription.classe_id = classe.id and inscription.eleve_id=eleve.id AND classe.classe LIKE %s
     """, (f"{classe_name}",))
     parents = cursor.fetchall()
     return {"parents": parents}
@@ -350,13 +426,13 @@ def get_all_classe()-> dict:
     classes = cursor.fetchall()
     return {"classes": classes}
 
-#affichage d'une classe par son id
-@app.get("/classe/{id}")
-def get_classe_par_id(id: int = Path(ge=1))-> dict:
+#affichage d'une classe par son nom
+@app.get("/classe/{classe}")
+def get_classe_par_id(classe: str)-> dict:
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM classe WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM classe WHERE classe = %s", (classe,))
     classe = cursor.fetchone()
     if classe is None:
         raise HTTPException(status_code=404, detail="classe non trouvée")
@@ -366,6 +442,7 @@ def get_classe_par_id(id: int = Path(ge=1))-> dict:
 class classeAjouter(BaseModel):
     classe: str
     cycle_id: int
+    uuid_client: Optional[str] = None
 
 # 2. Route POST pour ajouter une classe
 @app.post("/classe")
@@ -396,69 +473,86 @@ def ajouter_classe(classe: classeAjouter):
         "classe": classe.dict()
     }
 
-class classeModifier(BaseModel):
+class ClasseModifier(BaseModel):
     classe: Optional[str] = None
     cycle_id: Optional[int] = None
-   
 
-#route pour modifier une classe a partir de son id
-@app.put("/modifierClasse/{id}")
-def put_une_classe(id: int, classe: classeModifier):
+#route pour modifier une classe
+@app.put("/classe/{classe_id}")
+def put_une_classe(classe_id: int, classe_data: ClasseModifier):
+    # Récupère UNIQUEMENT les champs envoyés dans Swagger/Postman
+    nouvelles_donnees = classe_data.dict(exclude_unset=True)
+
+    if not nouvelles_donnees:
+        raise HTTPException(
+            status_code=400, detail="Aucun champ à modifier n'a été fourni."
+        )
+
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Récupérer une classe existante
-    cursor.execute("SELECT * FROM classe WHERE id=%s", (id,))
-    existant = cursor.fetchone()
-    if existant is None:
+    try:
+        # 1. Vérifier si la classe existe
+        cursor.execute("SELECT id FROM classe WHERE id = %s", (classe_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Classe introuvable.")
+
+        # 2. Construction dynamique de la requête UPDATE
+        clauses_set = [f"{cle} = %s" for cle in nouvelles_donnees.keys()]
+        sql = f"UPDATE classe SET {', '.join(clauses_set)} WHERE id = %s"
+
+        valeurs = list(nouvelles_donnees.values())
+        valeurs.append(classe_id)
+
+        cursor.execute(sql, tuple(valeurs))
+        conn.commit()
+
+        return {
+            "message": "Classe mise à jour avec succès !",
+            "champs_modifies": nouvelles_donnees,
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500, detail=f"Erreur lors de la modification : {str(e)}"
+        )
+    finally:
+        cursor.close()
         conn.close()
-        raise HTTPException(status_code=404, detail="classe non trouvée")
-
-    colonnes = [d[0] for d in cursor.description]
-    donnees_actuelles = dict(zip(colonnes, existant))
-
-    # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
-    nouvelles_donnees = classe.dict(exclude_unset=True)
-    donnees_actuelles.update(nouvelles_donnees)
-
-    # Mettre à jour avec les valeurs fusionnées
-    sql = """
-        UPDATE classe
-        SET  classe=%s, cycle_id=%s
-        WHERE id=%s
-    """
-    valeurs = (
-        donnees_actuelles["classe"],
-        donnees_actuelles["cycle_id"],
-        id,
-    )
-    cursor.execute(sql, valeurs)
-    conn.commit()
-    conn.close()
-
-    return {"message": "classe modifiée avec succès", "classe": donnees_actuelles}
 
 #route pour supprimer une classe
-@app.delete("/supprimerClasse/{id}")
-def delete_un_classe(id: int = Path(ge=1)):
+@app.delete("/supprimerClasse/{classe}")
+def delete_un_classe(classe: str):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("DELETE FROM classe WHERE id = %s", (id,))
+    cursor = conn.cursor(buffered=True)
 
-    if cursor.rowcount == 0:
+    try:
+        # 1. Récupérer l'élève / vérifier existence
+        cursor.execute("SELECT id FROM classe WHERE classe = %s", (classe,))
+        resultat = cursor.fetchone()
+
+        # Si fetchone() vaut None, on gère l'erreur 404 tout de suite
+        if resultat is None:
+            raise HTTPException(status_code=404, detail="Classe non trouvée")
+
+        id_classe = resultat[0]
+
+        # 2. Supprimer par ID
+        cursor.execute("DELETE FROM classe WHERE id = %s", (id_classe,))
+        conn.commit()
+
+        return {"message": "Classe supprimée avec succès"}
+
+    finally:
+        cursor.close()
         conn.close()
-        raise HTTPException(status_code=404, detail="classee non trouvée")
-
-    conn.commit()
-    conn.close()
-
-    return {"message": "classe supprimée avec succès"}
 
 #route pour afficher le total des cycles
 @app.get("/total_cycle")
 def get_total_cycle()-> dict:
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM cycle")
     total_cycle = cursor.fetchone()[0]
     return {"total_cycle": total_cycle}
@@ -486,8 +580,7 @@ def get_cycle_par_id(id: int = Path(ge=1))-> dict:
 
 # Modèle des données attendues dans le corps de la requête (JSON)
 class cycleAjouter(BaseModel):
-    nom: str
-   
+    nom: str   
 
 # 2. Route POST pour ajouter l'élève
 @app.post("/cycle")
@@ -517,46 +610,41 @@ def ajouter_cycle(cycle: cycleAjouter):
         "cycle": cycle.dict()
     }
 
-class cycleModifier(BaseModel):
-    nom: Optional[str] = None
-   
-   
 
-#route pour modifier un cycle a partir de son id
-@app.put("/modifierCycle/{id}")
-def put_un_cycle(id: int, cycle: cycleModifier):
+class CycleModifier(BaseModel):
+    nom: Optional[str] = None
+
+#route pour modifier un cycle
+@app.put("/modifierCycle/{cycle_id}")
+def put_un_cycle(cycle_id: int, cycle: CycleModifier):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Récupérer un cycle existant
-    cursor.execute("SELECT * FROM cycle WHERE id=%s", (id,))
-    existant = cursor.fetchone()
-    if existant is None:
+    try:
+        # 1. Vérifier si le cycle existe
+        cursor.execute("SELECT id FROM cycle WHERE id = %s", (cycle_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Cycle non trouvé")
+
+        # 2. Mise à jour
+        if cycle.nom:
+            cursor.execute(
+                "UPDATE cycle SET nom = %s WHERE id = %s", (cycle.nom, cycle_id)
+            )
+            conn.commit()
+
+        # 3. Renvoyer la donnée avec la variable 'cycle_id' (sans guillemets)
+        return {
+            "message": "cycle modifié avec succès",
+            "cycle": {
+                "id": cycle_id,  # <-- Variable dynamique, pas la chaîne "id"
+                "nom": cycle.nom,
+            },
+        }
+
+    finally:
+        cursor.close()
         conn.close()
-        raise HTTPException(status_code=404, detail="cycle non trouvé")
-
-    colonnes = [d[0] for d in cursor.description]
-    donnees_actuelles = dict(zip(colonnes, existant))
-
-    # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
-    nouvelles_donnees = cycle.dict(exclude_unset=True)
-    donnees_actuelles.update(nouvelles_donnees)
-
-    # Mettre à jour avec les valeurs fusionnées
-    sql = """
-        UPDATE cycle
-        SET  nom=%s
-        WHERE id=%s
-    """
-    valeurs = (
-        donnees_actuelles["nom"],
-        id,
-    )
-    cursor.execute(sql, valeurs)
-    conn.commit()
-    conn.close()
-
-    return {"message": "cycle modifié avec succès", "cycle": donnees_actuelles}
 
 #route pour supprimer un cycle
 @app.delete("/supprimerCycle/{id}")
@@ -578,7 +666,7 @@ def delete_un_cycle(id: int = Path(ge=1)):
 @app.get("/total_enseignant")
 def get_total_enseignant()-> dict:
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM enseignant")
     total_enseignant = cursor.fetchone()[0]
     return {"total_enseignant": total_enseignant}
@@ -593,12 +681,12 @@ def get_all_enseignant()-> dict:
     return {"enseignant": enseignant}
 
 #affichage d'un enseignant par son id
-@app.get("/enseignant/{id}")
-def get_enseignant_par_id(id: int = Path(ge=1))-> dict:
+@app.get("/enseignant/{nom}/{prenom}")
+def get_enseignant_par_id(nom: str, prenom: str)-> dict:
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM enseignant WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM enseignant WHERE nom = %s and prenom =%s", (nom, prenom))
     enseignant = cursor.fetchone()
     if enseignant is None:
         raise HTTPException(status_code=404, detail="enseignant non trouvé")
@@ -709,13 +797,18 @@ def put_un_enseignant(id: int, enseignant: enseignantModifier):
     return {"message": "enseignant modifié avec succès", "enseignant": enseignant_mis_a_jour}
 
 #route pour supprimer un enseignant
-@app.delete("/supprimerEnseignant/{id}")
-def delete_un_enseignant(id: int = Path(ge=1)):
+@app.delete("/supprimerEnseignant/{nom}/{prenom}")
+def delete_un_enseignant(nom: str, prenom: str):
     conn=get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("DELETE FROM enseignant WHERE id = %s", (id,))
+    cursor = conn.cursor(buffered=True)
 
-    if cursor.rowcount == 0:
+    #recuperer l'id de l'enseignant
+    cursor.execute("select id from enseignant where nom=%s and prenom=%s", (nom, prenom))
+    id_enseignant=cursor.fetchone()[0]
+
+    cursor.execute("DELETE FROM enseignant WHERE id = %s", (id_enseignant,))
+
+    if id_enseignant == 0:
         conn.close()
         raise HTTPException(status_code=404, detail="enseignant non trouvé")
 
@@ -753,12 +846,34 @@ def get_all_paiement()-> dict:
     paiement = cursor.fetchall()
     return {"paiement": paiement}
 
+# Affichage du bilan des paiements par type de frais
+@app.get("/paiement/bilan/type_frais")
+def get_bilan_paiement_par_type() -> dict:
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        sql = """
+            SELECT 
+                type_frais, 
+                SUM(montant) AS total_montant
+            FROM paiement 
+            GROUP BY type_frais
+        """
+        cursor.execute(sql)
+        bilan = cursor.fetchall()
+        return {"bilan": bilan}
+
+    finally:
+        cursor.close()
+        conn.close()
+
 #affichage du bilan des paiements par annee scolaire
 @app.get("/paiement/bilan/{annee_scolaire}")
 def get_bilan_paiement_par_annee(annee_scolaire: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT type_frais, SUM(montant) FROM paiement WHERE annee_scolaire = %s GROUP BY type_frais", (annee_scolaire,))
+    cursor.execute("SELECT type_frais, SUM(montant) FROM paiement, inscription, annee_scolaire WHERE paiement.inscription_id=inscription.id and inscription.annee_scolaire_id=annee_scolaire.id and  annee_scolaire.libelle like %s GROUP BY type_frais", (annee_scolaire,))
     paiement = cursor.fetchall()
     return {"paiement": paiement}
 
@@ -768,18 +883,6 @@ def get_bilan_paiement_par_trimestre(trimestre: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT type_frais, SUM(montant) FROM paiement WHERE trimestre = %s GROUP BY type_frais", (trimestre,))
-    paiement = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return {"paiement": paiement}
-
-#affichage du bilan des paiements par type de frais
-@app.get("/paiement/bilan/type_frais/{type_frais}")
-def get_bilan_paiement_par_type(type_frais: str)-> dict:
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    sql = """SELECT eleve.nom, eleve.prenom, paiement.* FROM paiement JOIN eleve ON paiement.eleve_id = eleve.id WHERE paiement.type_frais = %s"""
-    cursor.execute(sql, (type_frais,))
     paiement = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -798,11 +901,11 @@ def get_bilan_paiement_par_eleve(nom: str, prenom: str) -> dict:
             paiement.type_frais, 
             SUM(paiement.montant) AS total_montant, 
             MAX(paiement.date_paiement) AS derniere_date_paiement, 
-            paiement.annee_scolaire 
-        FROM paiement 
-        JOIN eleve ON paiement.eleve_id = eleve.id 
-        WHERE LOWER(eleve.nom) = LOWER(%s) AND LOWER(eleve.prenom) = LOWER(%s) 
-        GROUP BY eleve.nom, eleve.prenom, paiement.type_frais, paiement.annee_scolaire
+            annee_scolaire.libelle
+        FROM paiement, inscription, eleve, annee_scolaire
+        WHERE paiement.inscription_id=inscription.id and inscription.eleve_id=eleve.id and inscription.annee_scolaire_id=annee_scolaire.id 
+        and LOWER(eleve.nom) = LOWER(%s) AND LOWER(eleve.prenom) = LOWER(%s) 
+        GROUP BY eleve.nom, eleve.prenom, paiement.type_frais, annee_scolaire.libelle;
     """
     cursor.execute(sql, (nom, prenom))
     paiement = cursor.fetchall()
@@ -820,7 +923,7 @@ def get_bilan_paiement_par_eleve(nom: str, prenom: str) -> dict:
 def get_bilan_paiement_par_classe(classe: int)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT type_frais, SUM(montant) as total_montant, classe FROM paiement, classe WHERE paiement.classe_id = classe.id AND classe.id = %s GROUP BY type_frais", (classe,))
+    cursor.execute("SELECT type_frais, SUM(montant) as total_montant, classe.classe FROM paiement, classe, inscription WHERE paiement.inscription_id = inscription.id and inscription.classe_id=classe.id AND classe.id = %s GROUP BY type_frais", (classe,))
     paiement = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -877,27 +980,36 @@ def get_total_paiement_par_classe(classe: int)-> dict:
     conn.close()
     return {"total": total}
 
+# Classe dédiée aux versements et mensualités
+class PaiementVersement(BaseModel):
+    inscription_id: int
+    type_frais: str  # Ex: "Scolarité", "Cantine", "Transport"
+    montant: float
+    mode_paiement: str  # Ex: "Espèces", "Mobile Money"
+    trimestre: Optional[str] = None  # Ex: "1er Trimestre"
+    mois: Optional[str] = None  # Ex: "Octobre"
+    uuid_client: str
 
 # 2. Route POST pour ajouter un paiement
 @app.post("/paiement")
-def ajouter_paiement(paiement: paiementAjouter):
+def ajouter_paiement(paiement: PaiementVersement):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
     sql = """
         INSERT INTO paiement (
-            eleve_id, type_frais, montant, mode_paiement, trimestre, classe_id, mois
+            inscription_id, type_frais, montant, mode_paiement, trimestre, mois, uuid_client
         ) VALUES ( %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
-        paiement.eleve_id,
+        paiement.inscription_id,
         paiement.type_frais,
         paiement.montant,
         paiement.mode_paiement,
         paiement.trimestre,
-        paiement.classe_id,
-        paiement.mois
+        paiement.mois,
+        paiement.uuid_client
     )
 
     cursor.execute(sql, valeurs)
@@ -1025,6 +1137,7 @@ class noteAjouter(BaseModel):
     note_sur: int
     date_evaluation: str
     trimestre: str
+    uuid_client: Optional[str] = None
 
 # 2. Route POST pour ajouter une note
 @app.post("/note")
@@ -1301,6 +1414,7 @@ class PresenceAjouter(BaseModel):
     statut: str  
     justifie: Optional[str] = None
     classe_id: int
+    uuid_client: Optional[str] = None
 
 @app.post("/presence")
 def ajouter_presence(presence: PresenceAjouter):
@@ -1399,6 +1513,7 @@ def supprimer_presence(id: int = Path(ge=1)):
 #route ajouter une matiere
 class matiereAjouter(BaseModel):
     nom: str
+    uuid_client: Optional[str] = None
 
 @app.post("/matiere")
 def ajouter_matiere(matiere: matiereAjouter):
@@ -1639,6 +1754,7 @@ class AnneeScolaireAjouter(BaseModel):
     date_debut: date
     date_fin: date
     est_active: bool = False
+    uuid_client: Optional[str] = None
 
 @app.post("/ajouter_annee_scolaire")
 def ajouter_annee_scolaire(annee_scolaire: AnneeScolaireAjouter):
@@ -2010,58 +2126,54 @@ class UtilisateurCreate(BaseModel):
     identifiant: Optional[str] = None
     mot_de_passe: str
     role: str = "gestionnaire"
-
+    uuid_client: Optional[str] = None
 
 class ConnexionDemande(BaseModel):
     identifiant: str  # Accepte le téléphone, l'email ou un identifiant
     mot_de_passe: str
 
 
-# ---------------------------------------------------------
-# ROUTES FASTAPI
-# ---------------------------------------------------------
-
-
 # 1. Créer un compte utilisateur
 @app.post("/utilisateurs")
-def creer_utilisateur(user: UtilisateurCreate):
+def creer_utilisateur(data: UtilisateurCreate):
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
-    try:
-        mdp_hache = hacher_mot_de_passe(user.mot_de_passe)
+    # A. Si un uuid_client est fourni, on vérifie s'il existe déjà
+    if data.uuid_client:
+        cursor.execute(
+            "SELECT * FROM utilisateurs WHERE uuid_client = %s",
+            (data.uuid_client,),
+        )
+        existant = cursor.fetchone()
+        if existant:
+            cursor.close()
+            conn.close()
+            # On renvoie la donnée existante sans créer de doublon
+            return existant
 
-        sql = """
-            INSERT INTO utilisateur (nom, prenom, telephone, email, identifiant, mot_de_passe, role)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+    # B. Sinon, on fait l'insertion classique
+    mot_de_passe_hache = hacher_mot_de_passe(data.mot_de_passe)
+
+    cursor.execute(
         """
-        valeurs = (
-            user.nom,
-            user.prenom,
-            user.telephone,
-            user.email,
-            user.identifiant,
-            mdp_hache,
-            user.role,
-        )
-        cursor.execute(sql, valeurs)
-        conn.commit()
+        INSERT INTO utilisateur (nom, prenom, telephone, email, mot_de_passe, uuid_client)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            data.nom,
+            data.prenom,
+            data.telephone,
+            data.email,
+            mot_de_passe_hache,
+            data.uuid_client,
+        ),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
 
-        return {
-            "message": "Compte utilisateur créé avec succès",
-            "id": cursor.lastrowid,
-        }
-
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Erreur lors de la création du compte (Vérifiez le téléphone/email/identifiant) : {str(e)}",
-        )
-    finally:
-        cursor.close()
-        conn.close()
-
+    return {"message": "Utilisateur créé avec succès"}
 
 # 2. Se connecter (Login)
 @app.post("/login")
@@ -2143,3 +2255,8 @@ def lister_utilisateurs():
     finally:
         cursor.close()
         conn.close()
+
+#route pour savoir si le pc1 ou 2 est connecte au reseau
+@app.get("/ping")
+def ping():
+    return {"status": "online"}
