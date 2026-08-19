@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Path, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import date
 from pydantic import BaseModel
 from typing import Optional
@@ -11,6 +12,15 @@ import bcrypt
 from passlib.context import CryptContext
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 def get_connection():
     return mysql.connector.connect(
         host="localhost",
@@ -953,10 +963,9 @@ def get_paiement_par_eleve(nom: str, prenom: str) -> dict:
             paiement.type_frais, 
             paiement.montant , 
             paiement.date_paiement , 
-            paiement.mode_paiement , 
-        FROM paiement 
-        JOIN eleve ON paiement.eleve_id = eleve.id 
-        WHERE eleve.nom = %s AND eleve.prenom = %s 
+            paiement.mode_paiement
+        FROM paiement, inscription, eleve
+        WHERE paiement.inscription_id=inscription.id and inscription.eleve_id=eleve.id and eleve.nom = %s AND eleve.prenom = %s 
     """
     cursor.execute(sql, (nom, prenom))
     paiement = cursor.fetchall()
@@ -974,7 +983,7 @@ def get_paiement_par_eleve(nom: str, prenom: str) -> dict:
 def get_total_paiement_par_classe(classe: int)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT SUM(montant) as total FROM paiement WHERE classe_id = %s", (classe,))
+    cursor.execute("SELECT SUM(montant) as total FROM paiement, inscription, classe WHERE paiement.inscription_id=inscription.id and inscription.classe_id=classe.id and classe_id = %s", (classe,))
     total = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -1025,12 +1034,11 @@ def ajouter_paiement(paiement: PaiementVersement):
     }
 
 class paiementModifier(BaseModel):
-    eleve_id: Optional[int] = None
+    inscription_id: Optional[int] = None
     type_frais: Optional[str] = None
     montant: Optional[float] = None
     mode_paiement: Optional[str] = None
     trimestre: Optional[str] = None
-    classe_id: Optional[int] = None
     mois: Optional[str] = None
 
 
@@ -1055,22 +1063,20 @@ def put_un_paiement(id: int, paiement: paiementModifier):
     # Mettre à jour la table
     sql = """
         UPDATE paiement
-        SET eleve_id = %s,
+        SET inscription_id = %s,
             type_frais = %s,
             montant = %s,
             mode_paiement = %s,
             trimestre = %s,
-            classe_id = %s,
             mois = %s
         WHERE id = %s
     """
     valeurs = (
-        existant["eleve_id"],
+        existant["inscription_id"],
         existant["type_frais"],
         existant["montant"],
         existant["mode_paiement"],
         existant["trimestre"],
-        existant["classe_id"],
         existant["mois"],
         id,
     )
@@ -1122,7 +1128,7 @@ def get_all_note()-> dict:
 def get_note_par_eleve(nom: str, prenom: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nom, prenom, sexe, classe, matiere, note, nom_parent, numero_parent FROM note, eleve, classe WHERE note.eleve_id = eleve.id and eleve.classe_id=classe.id and eleve.nom = %s AND eleve.prenom = %s", (nom, prenom))
+    cursor.execute("SELECT eleve.nom, eleve.prenom, eleve.sexe, classe.classe, matiere.nom, note.note, eleve.nom_parent, eleve.numero_parent FROM note, inscription, classe, eleve, matiere WHERE inscription.eleve_id = eleve.id and inscription.classe_id=classe.id and note.inscription_id=inscription.id and note.matiere_id=matiere.id and eleve.nom = %s AND eleve.prenom = %s", (nom, prenom))
     note = cursor.fetchall()
     if not note:
         raise HTTPException(status_code=404, detail="notes non trouvées")
@@ -1135,7 +1141,7 @@ class noteAjouter(BaseModel):
     type_evaluation: str
     note: float
     note_sur: int
-    date_evaluation: str
+    date_evaluation: date
     trimestre: str
     uuid_client: Optional[str] = None
 
@@ -1147,18 +1153,19 @@ def ajouter_note(note: noteAjouter):
 
     sql = """
         INSERT INTO note (
-            inscription_id, type_evaluation, note, note_sur, date_evaluation, trimestre, matiere_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            inscription_id, matiere_id, type_evaluation, note, note_sur, date_evaluation, trimestre, uuid_client
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     valeurs = (
-        note.inscription_id,        
+        note.inscription_id,  
+        note.matiere_id,      
         note.type_evaluation,
         note.note,
         note.note_sur,
         note.date_evaluation,
         note.trimestre,
-        note.matiere_id
+        note.uuid_client
     )
 
     cursor.execute(sql, valeurs)
@@ -1247,7 +1254,7 @@ def get_moyenne_par_type_evaluation(nom: str, prenom: str, type_evaluation: str)
     cursor = conn.cursor( buffered=True)
 
     #Vérifier que l'élève existe, et le récupérer proprement
-    cursor.execute("SELECT nom, prenom, sexe, classe, type_evaluation, nom_parent, numero_parent  FROM eleve, classe, note WHERE eleve.classe_id = classe.id and note.eleve_id = eleve.id AND nom = %s AND prenom = %s AND note.type_evaluation = %s", (nom, prenom, type_evaluation))
+    cursor.execute("SELECT nom, prenom, sexe, classe, type_evaluation, nom_parent, numero_parent  FROM eleve, classe, inscription, note WHERE inscription.classe_id = classe.id and inscription.eleve_id = eleve.id AND note.inscription_id=inscription.id and nom = %s AND prenom = %s AND note.type_evaluation = %s", (nom, prenom, type_evaluation))
     ligne = cursor.fetchone()
     if ligne is None:
         conn.close()
@@ -1258,9 +1265,9 @@ def get_moyenne_par_type_evaluation(nom: str, prenom: str, type_evaluation: str)
 
     #Moyenne pondérée par les coefficients
     cursor.execute("""
-        SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient)
-        FROM note, eleve, programme
-        WHERE note.eleve_id = eleve.id AND programme.id = note.programme_id AND eleve.nom = %s AND eleve.prenom = %s AND note.type_evaluation = %s
+       SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient)
+        FROM note, eleve, programme, inscription, matiere
+        WHERE inscription.eleve_id = eleve.id AND note.inscription_id=inscription.id and note.matiere_id = matiere.id and programme.matiere_id=matiere.id AND eleve.nom = %s AND eleve.prenom = %s AND note.type_evaluation = %s;
     """, (nom, prenom, type_evaluation))
     resultat = cursor.fetchone()
     moyenne = resultat[0] if resultat else None
@@ -1281,9 +1288,8 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
     # Récupérer l'élève, avec son ID cette fois
     cursor.execute("""
         SELECT eleve.id, eleve.nom, eleve.prenom, eleve.sexe, classe.classe AS classe
-        FROM eleve
-        JOIN classe ON eleve.classe_id = classe.id
-        WHERE eleve.nom = %s AND eleve.prenom = %s
+        FROM eleve, inscription, classe
+        WHERE inscription.eleve_id=eleve.id and inscription.classe_id=classe.id and eleve.nom = %s AND eleve.prenom = %s
     """, (nom, prenom))
     eleve = cursor.fetchone()
     if eleve is None:
@@ -1294,10 +1300,9 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
 
     # Notes du trimestre
     cursor.execute("""
-        SELECT matiere, type_evaluation, note, note_sur, coefficient
-        FROM note
-        JOIN programme ON note.programme_id = programme.id
-        WHERE eleve_id = %s AND trimestre = %s
+        SELECT matiere.nom, type_evaluation, note, note_sur, coefficient
+        FROM note, matiere, programme, inscription, eleve
+        WHERE inscription.eleve_id=eleve.id and note.inscription_id=inscription.id and note.matiere_id=matiere.id and programme.matiere_id=matiere.id and eleve_id = %s AND trimestre = %s
     """, (eleve_id, trimestre))
     notes = cursor.fetchall()
 
@@ -1513,7 +1518,6 @@ def supprimer_presence(id: int = Path(ge=1)):
 #route ajouter une matiere
 class matiereAjouter(BaseModel):
     nom: str
-    uuid_client: Optional[str] = None
 
 @app.post("/matiere")
 def ajouter_matiere(matiere: matiereAjouter):
@@ -1754,7 +1758,6 @@ class AnneeScolaireAjouter(BaseModel):
     date_debut: date
     date_fin: date
     est_active: bool = False
-    uuid_client: Optional[str] = None
 
 @app.post("/ajouter_annee_scolaire")
 def ajouter_annee_scolaire(annee_scolaire: AnneeScolaireAjouter):
@@ -1822,7 +1825,7 @@ def creer_tarif_scolarite(tarif: TarifScolariteCreate):
 
         #recuperer l'annee scolaire en cours
         cursor.execute("select id from annee_scolaire where est_active= true")
-        annee_scolaire=cursor.fetchone()
+        annee_scolaire=cursor.fetchone()[0]
 
         if not annee_scolaire:
             raise HTTPException(
@@ -1841,7 +1844,7 @@ def creer_tarif_scolarite(tarif: TarifScolariteCreate):
                 annee_scolaire,
                 tarif.frais_inscription,
                 tarif.montant_pension,
-            ),
+            )
         )
         conn.commit()
         tarif_id = cursor.lastrowid
@@ -2126,7 +2129,6 @@ class UtilisateurCreate(BaseModel):
     identifiant: Optional[str] = None
     mot_de_passe: str
     role: str = "gestionnaire"
-    uuid_client: Optional[str] = None
 
 class ConnexionDemande(BaseModel):
     identifiant: str  # Accepte le téléphone, l'email ou un identifiant
@@ -2139,25 +2141,12 @@ def creer_utilisateur(data: UtilisateurCreate):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # A. Si un uuid_client est fourni, on vérifie s'il existe déjà
-    if data.uuid_client:
-        cursor.execute(
-            "SELECT * FROM utilisateurs WHERE uuid_client = %s",
-            (data.uuid_client,),
-        )
-        existant = cursor.fetchone()
-        if existant:
-            cursor.close()
-            conn.close()
-            # On renvoie la donnée existante sans créer de doublon
-            return existant
-
-    # B. Sinon, on fait l'insertion classique
+    # on fait l'insertion classique
     mot_de_passe_hache = hacher_mot_de_passe(data.mot_de_passe)
 
     cursor.execute(
         """
-        INSERT INTO utilisateur (nom, prenom, telephone, email, mot_de_passe, uuid_client)
+        INSERT INTO utilisateur (nom, prenom, telephone, email, mot_de_passe, role)
         VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (
@@ -2166,7 +2155,7 @@ def creer_utilisateur(data: UtilisateurCreate):
             data.telephone,
             data.email,
             mot_de_passe_hache,
-            data.uuid_client,
+            data.role,
         ),
     )
     conn.commit()
