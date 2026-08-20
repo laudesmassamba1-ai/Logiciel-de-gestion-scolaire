@@ -49,6 +49,8 @@ jobs:
         run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
 
       - name: Generate icon
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           import sys
           sys.path.insert(0, ".")

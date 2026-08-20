@@ -35,6 +35,8 @@ jobs:
 
       - name: Generate icon
         shell: python
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           import sys
           sys.path.insert(0, ".")
