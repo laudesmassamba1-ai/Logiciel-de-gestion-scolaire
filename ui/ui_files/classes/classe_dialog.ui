@@ -15,16 +15,16 @@
   </property>
   <property name="styleSheet">
    <string>
-    QDialog { background-color: #ffffff; font-family: 'Segoe UI', sans-serif; }
+    QDialog { background-color: #FFFFFF; font-family: 'Segoe UI', sans-serif; }
     QLineEdit, QComboBox, QSpinBox {
-        border: 1px solid #cbd5e1;
+        border: 1px solid #D5D2CB;
         border-radius: 6px;
         padding: 8px;
-        background-color: #f8fafc;
+        background-color: #EDEAE4;
     }
     QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
-        border: 1px solid #047857;
-        background-color: #ffffff;
+        border: 1px solid #C8960C;
+        background-color: #FFFFFF;
     }
    </string>
   </property>
@@ -48,7 +48,7 @@
    <item>
     <widget class="QLabel" name="lbl_dialog_title">
      <property name="styleSheet">
-      <string>color: #0f172a; font-size: 16px; font-weight: bold;</string>
+      <string>color: #000000; font-size: 16px; font-weight: bold;</string>
      </property>
      <property name="text">
       <string>Nouvelle Classe</string>
@@ -59,7 +59,7 @@
    <item>
     <widget class="QLabel" name="lbl_field1">
      <property name="styleSheet">
-      <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+      <string>color: #111111; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Nom de la classe :</string>
@@ -77,7 +77,7 @@
    <item>
     <widget class="QLabel" name="lbl_field2">
      <property name="styleSheet">
-      <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+      <string>color: #111111; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Niveau :</string>
@@ -164,7 +164,7 @@
        <item>
         <widget class="QLabel" name="lbl_field3">
          <property name="styleSheet">
-          <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+          <string>color: #111111; font-weight: bold; font-size: 12px;</string>
          </property>
          <property name="text">
           <string>Capacite maximale :</string>
@@ -191,7 +191,7 @@
        <item>
         <widget class="QLabel" name="lbl_field4">
          <property name="styleSheet">
-          <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+          <string>color: #111111; font-weight: bold; font-size: 12px;</string>
          </property>
          <property name="text">
           <string>Salle :</string>
@@ -213,7 +213,7 @@
    <item>
     <widget class="QLabel" name="lbl_field5">
      <property name="styleSheet">
-      <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+      <string>color: #111111; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Titulaire / Professeur principal :</string>
@@ -262,7 +262,7 @@
      <item>
       <widget class="QPushButton" name="btn_cancel">
        <property name="styleSheet">
-        <string>background-color: #f1f5f9; color: #334155; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
+        <string>background-color: #EDEAE4; color: #111111; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Annuler</string>
@@ -275,7 +275,7 @@
         <cursorShape>PointingHandCursor</cursorShape>
        </property>
        <property name="styleSheet">
-        <string>background-color: #047857; color: white; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
+        <string>background-color: #C8960C; color: #000000; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Enregistrer la classe</string>

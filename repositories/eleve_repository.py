@@ -1,4 +1,5 @@
 
+import uuid as _uuid
 from database import db
 from repositories.base import RepositoryBase
 
@@ -30,7 +31,6 @@ class EleveRepository(RepositoryBase):
         return db.query_one("SELECT * FROM eleves WHERE matricule = ?", (matricule,))
 
     def add_eleve(self, data):
-
         if not data.get("matricule"):
             data["matricule"] = self.next_matricule()
         data = dict(data)
@@ -38,11 +38,14 @@ class EleveRepository(RepositoryBase):
         data.setdefault("check_photos", 0)
         data.setdefault("check_bulletin", 0)
         data.setdefault("statut", "Inscrit")
+        data.setdefault("redoublant", 0)
+        if not data.get("uuid_client"):
+            data["uuid_client"] = str(_uuid.uuid4())
         cols = [
             "matricule", "nom", "prenom", "sexe", "date_naissance", "lieu_naissance",
             "classe_id", "ecole_provenance", "pere_nom", "pere_tel", "mere_nom",
-            "mere_tel", "tuteur_nom", "tuteur_tel", "adresse", "check_acte",
-            "check_photos", "check_bulletin", "statut",
+            "mere_tel", "tuteur_nom", "tuteur_tel", "adresse", "redoublant",
+            "check_acte", "check_photos", "check_bulletin", "statut", "uuid_client",
         ]
         sql = "INSERT INTO eleves (" + ", ".join(cols) + ") VALUES (" + ", ".join("?" for _ in cols) + ")"
         return self._route_write("POST", "/eleve", data,
@@ -52,8 +55,8 @@ class EleveRepository(RepositoryBase):
         cols = [
             "matricule", "nom", "prenom", "sexe", "date_naissance", "lieu_naissance",
             "classe_id", "ecole_provenance", "pere_nom", "pere_tel", "mere_nom",
-            "mere_tel", "tuteur_nom", "tuteur_tel", "adresse", "check_acte",
-            "check_photos", "check_bulletin", "statut",
+            "mere_tel", "tuteur_nom", "tuteur_tel", "adresse", "redoublant",
+            "check_acte", "check_photos", "check_bulletin", "statut",
         ]
         set_clause = ", ".join(f"{c} = ?" for c in cols)
         self._route_write("PUT", f"/modifierEleve/{eleve_id}", data,
@@ -62,22 +65,25 @@ class EleveRepository(RepositoryBase):
                           tuple(data.get(c) for c in cols) + (eleve_id,))
 
     def delete_eleve(self, eleve_id):
-        db.execute("DELETE FROM notes WHERE eleve_id = ?", (eleve_id,))
+        self._route_write("DELETE", f"/eleve/{eleve_id}/notes", {},
+                          db.execute, "DELETE FROM notes WHERE eleve_id = ?", (eleve_id,))
+        self._route_write("DELETE", f"/eleve/{eleve_id}/presences", {},
+                          db.execute, "DELETE FROM presences WHERE eleve_id = ?", (eleve_id,))
+        self._route_write("DELETE", f"/eleve/{eleve_id}/paiements", {},
+                          db.execute, "DELETE FROM paiements WHERE eleve_id = ?", (eleve_id,))
         self._route_write("DELETE", f"/eleve/{eleve_id}", {},
                           db.execute, "DELETE FROM eleves WHERE id = ?", (eleve_id,))
 
     def next_matricule(self):
-
         year = __import__("datetime").date.today().year
         prefix = f"ELEV{year}"
-        row = db.query_one(
-            "SELECT matricule FROM eleves WHERE matricule LIKE ? ORDER BY matricule DESC LIMIT 1",
-            (f"{prefix}%",))
-        if row:
-            try:
-                num = int(row["matricule"].replace(prefix, "")) + 1
-            except ValueError:
-                num = 1
-        else:
-            num = 1
-        return f"{prefix}{num:04d}"
+        conn = db.connect()
+        try:
+            cur = conn.execute(
+                "SELECT MAX(CAST(SUBSTR(matricule, ?) AS INTEGER)) AS max_num FROM eleves WHERE matricule LIKE ?",
+                (len(prefix) + 1, f"{prefix}%"))
+            row = cur.fetchone()
+            num = (row["max_num"] or 0) + 1
+            return f"{prefix}{num:04d}"
+        finally:
+            conn.close()

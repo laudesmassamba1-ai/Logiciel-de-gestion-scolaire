@@ -5,9 +5,15 @@ from PyQt5.QtGui import QColor, QFont, QPainter, QPen
 from PyQt5.QtWidgets import QSizePolicy, QWidget
 
 
+from core.config import (
+    C_GOLD, C_BLUE, C_RED, C_WARNING,
+    C_BORDER_STRONG, C_TEXT_MUTED, C_TEXT_LIGHT, C_TEXT, C_CARD,
+    C_EMPTY_STATE,
+)
+
 CHART_COLORS = [
-    "#047857", "#2563eb", "#d97706", "#dc2626",
-    "#8b5cf6", "#ec4899", "#0891b2", "#65a30d",
+    C_GOLD, C_BLUE, C_RED, C_WARNING,
+    C_BORDER_STRONG, C_TEXT_MUTED, C_TEXT_LIGHT, C_TEXT,
 ]
 
 def _color(i):
@@ -50,7 +56,7 @@ class _BaseChart(QWidget):
     def _draw_titre(self, painter, h):
         if not self.titre:
             return 0
-        painter.setPen(QColor("#0f172a"))
+        painter.setPen(QColor(C_TEXT))
         font = QFont()
         font.setPointSize(10)
         font.setBold(True)
@@ -59,7 +65,7 @@ class _BaseChart(QWidget):
         return 26
 
     def _draw_empty(self, painter, y, hauteur):
-        painter.setPen(QColor("#94a3b8"))
+        painter.setPen(QColor(C_EMPTY_STATE))
         font = QFont()
         font.setPointSize(9)
         painter.setFont(font)
@@ -120,7 +126,7 @@ class SimpleBarChart(_BaseChart):
             painter.setPen(Qt.NoPen)
             painter.drawRoundedRect(int(x), int(y), int(bar_w), int(bar_h), 3, 3)
 
-            painter.setPen(QColor("#475569"))
+            painter.setPen(QColor(C_TEXT_MUTED))
             slot_w = max(6.0, gap * 0.96)
             label_texte = fm.elidedText(str(label), Qt.ElideRight, int(slot_w))
             painter.drawText(int(x) - int(slot_w) // 2, chart_bottom + 4,
@@ -128,21 +134,21 @@ class SimpleBarChart(_BaseChart):
 
             if v != 0:
                 texte = f"{v:,.0f}".replace(",", " ")
-                text_w = fm.width(texte)
+                text_w = fm.horizontalAdvance(texte)
                 if v > 0 and text_w <= int(bar_w) - 2 and y - 14 >= y0:
                     painter.drawText(int(x), int(y) - 14, int(bar_w), 16,
                                      Qt.AlignHCenter, texte)
                 elif text_w <= int(bar_w) - 4 and bar_h >= 18:
-                    painter.setPen(QColor("#ffffff"))
+                    painter.setPen(QColor(C_CARD))
                     painter.drawText(int(x), int(y) + 2, int(bar_w), 16,
                                      Qt.AlignHCenter, texte)
                 elif v < 0 and text_w <= int(bar_w) - 2 and y + bar_h + 18 <= chart_bottom:
                     painter.drawText(int(x), int(y + bar_h) + 2, int(bar_w), 16,
                                      Qt.AlignHCenter, texte)
-                painter.setPen(QColor("#475569"))
+            painter.setPen(QColor(C_TEXT_MUTED))
 
         if min_val < 0:
-            painter.setPen(QPen(QColor("#94a3b8"), 1, Qt.DashLine))
+            painter.setPen(QPen(QColor(C_EMPTY_STATE), 1, Qt.DashLine))
             painter.drawLine(pad, int(zero_y), int(w - pad), int(zero_y))
         painter.end()
 
@@ -173,7 +179,7 @@ class SimplePieChart(_BaseChart):
 
         texte_leg = [f"{label}  ({value / total * 100:.0f}%)"
                      for label, value in zip(self.labels, self.values)]
-        leg_necessaire = max(fm.width(t) for t in texte_leg) + 24
+        leg_necessaire = max(fm.horizontalAdvance(t) for t in texte_leg) + 24
         legend_w = max(110, min(int(w * 0.45), leg_necessaire))
         pie_area = w - legend_w - 8
         if pie_area < 70:
@@ -190,7 +196,7 @@ class SimplePieChart(_BaseChart):
         for i, value in enumerate(self.values):
             span_angle = (value / total) * 360 * 16
             painter.setBrush(_color(i))
-            painter.setPen(QPen(QColor("#ffffff"), 2))
+            painter.setPen(QPen(QColor(C_CARD), 2))
             painter.drawPie(center_x - radius, center_y - radius,
                             radius * 2, radius * 2,
                             int(start_angle), int(span_angle))
@@ -204,7 +210,7 @@ class SimplePieChart(_BaseChart):
             painter.setPen(Qt.NoPen)
             painter.setBrush(_color(i))
             painter.drawRoundedRect(int(legend_x), int(y) + 2, 10, 10, 2, 2)
-            painter.setPen(QColor("#0f172a"))
+            painter.setPen(QColor(C_TEXT))
             elide = fm.elidedText(texte, Qt.ElideRight, texte_w)
             painter.drawText(int(legend_x) + 16, int(y), texte_w, 15,
                              Qt.AlignLeft | Qt.AlignVCenter, elide)

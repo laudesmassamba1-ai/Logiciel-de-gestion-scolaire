@@ -12,7 +12,13 @@ class PlanningRepository(RepositoryBase):
         return {(r["jour"], r["creneau"]): r for r in rows}
 
     def save_planning(self, classe_id, entries):
-        db.execute("DELETE FROM planning WHERE classe_id = ?", (classe_id,))
-        db.executemany(
-            "INSERT INTO planning (classe_id, jour, creneau, matiere, salle) VALUES (?, ?, ?, ?, ?)",
-            [(classe_id, jour, creneau, matiere, salle) for (jour, creneau, matiere, salle) in entries])
+        self._route_write("DELETE", f"/planning/{classe_id}", {},
+                          db.execute, "DELETE FROM planning WHERE classe_id = ?", (classe_id,))
+        for jour, creneau, matiere, salle in entries:
+            self._route_write(
+                "POST", "/planning",
+                {"classe_id": classe_id, "jour": jour, "creneau": creneau,
+                 "matiere": matiere, "salle": salle},
+                db.execute,
+                "INSERT INTO planning (classe_id, jour, creneau, matiere, salle) VALUES (?, ?, ?, ?, ?)",
+                (classe_id, jour, creneau, matiere, salle))

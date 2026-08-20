@@ -21,6 +21,11 @@ class CompteRepository(RepositoryBase):
 
     def add_compte(self, nom, email, telephone, role, password_hash, actif):
         username = email.split("@")[0] if email else nom.lower().replace(" ", ".")
+        base = username
+        counter = 1
+        while db.query_one("SELECT 1 FROM utilisateurs WHERE username = ?", (username,)):
+            username = f"{base}{counter}"
+            counter += 1
         return db.execute(
             """INSERT INTO utilisateurs (nom_complet, username, email, telephone, password, role, actif)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",

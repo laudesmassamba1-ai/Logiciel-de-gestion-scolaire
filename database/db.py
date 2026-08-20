@@ -1,8 +1,10 @@
 import datetime
 import hashlib
+import hmac
+import os
 import sqlite3
 
-from core.config import DB_PATH, DEFAULT_ACCOUNTS, DEFAULT_MATIERES, DOCS_DIR, VILLE_DEFAUT, PAYS_DEFAUT
+from core.config import DB_PATH, DEFAULT_MATIERES, DOCS_DIR, VILLE_DEFAUT, PAYS_DEFAUT
 
 
 SCHEMA = """
@@ -96,6 +98,7 @@ CREATE TABLE IF NOT EXISTS presences (
 
 CREATE TABLE IF NOT EXISTS eleves (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid_client        TEXT UNIQUE,
     matricule          TEXT NOT NULL UNIQUE,
     nom                TEXT NOT NULL,
     prenom             TEXT NOT NULL,
@@ -111,6 +114,7 @@ CREATE TABLE IF NOT EXISTS eleves (
     tuteur_nom         TEXT,
     tuteur_tel         TEXT,
     adresse            TEXT,
+    redoublant         INTEGER NOT NULL DEFAULT 0,
     check_acte         INTEGER NOT NULL DEFAULT 0,
     check_photos       INTEGER NOT NULL DEFAULT 0,
     check_bulletin     INTEGER NOT NULL DEFAULT 0,
@@ -178,18 +182,30 @@ CREATE TABLE IF NOT EXISTS parametres (
 );
 
 CREATE TABLE IF NOT EXISTS file_attente_synchro (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    endpoint   TEXT NOT NULL,
-    method     TEXT NOT NULL,
-    payload    TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-    status     TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'FAILED'))
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    endpoint     TEXT NOT NULL,
+    method       TEXT NOT NULL,
+    payload      TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    status       TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'FAILED')),
+    uuid_client  TEXT
 );
 """
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    salt = os.urandom(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    return salt.hex() + ":" + h.hex()
+
+
+def verify_password(password: str, stored: str) -> bool:
+    if ":" in stored:
+        salt_hex, h_hex = stored.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+        return hmac.compare_digest(h.hex(), h_hex)
+    return hmac.compare_digest(hashlib.sha256(password.encode("utf-8")).hexdigest(), stored)
 
 class Database:
 
@@ -208,9 +224,10 @@ class Database:
 
     def connect(self):
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(str(DB_PATH), timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
         return conn
 
 
@@ -233,19 +250,18 @@ class Database:
         if "cycle_id" not in cols:
             conn.execute("ALTER TABLE classes ADD COLUMN cycle_id INTEGER")
 
+        eleve_cols = [r[1] for r in conn.execute("PRAGMA table_info(eleves)")]
+        if "uuid_client" not in eleve_cols:
+            conn.execute("ALTER TABLE eleves ADD COLUMN uuid_client TEXT")
+        if "redoublant" not in eleve_cols:
+            conn.execute("ALTER TABLE eleves ADD COLUMN redoublant INTEGER NOT NULL DEFAULT 0")
+
+        queue_cols = [r[1] for r in conn.execute("PRAGMA table_info(file_attente_synchro)")]
+        if "uuid_client" not in queue_cols:
+            conn.execute("ALTER TABLE file_attente_synchro ADD COLUMN uuid_client TEXT")
+
 
     def _seed(self, conn):
-        cur = conn.execute("SELECT COUNT(*) FROM utilisateurs")
-        if cur.fetchone()[0] == 0:
-            for acc in DEFAULT_ACCOUNTS:
-                conn.execute(
-                    """INSERT INTO utilisateurs
-                       (nom_complet, username, email, telephone, password, role, actif)
-                       VALUES (?, ?, ?, ?, ?, ?, 1)""",
-                    (acc["nom_complet"], acc["username"], acc["email"],
-                     acc["telephone"], hash_password(acc["password"]), acc["role"]),
-                )
-
         for nom in DEFAULT_MATIERES:
             conn.execute(
                 "INSERT OR IGNORE INTO matieres (nom) VALUES (?)", (nom,))
@@ -265,6 +281,9 @@ class Database:
         conn.execute(
             "INSERT OR IGNORE INTO parametres (cle, valeur) VALUES (?, ?)",
             ("frais_scolarite", "25000"))
+        conn.execute(
+            "INSERT OR IGNORE INTO parametres (cle, valeur) VALUES (?, ?)",
+            ("dernier_utilisateur_id", ""))
 
         if conn.execute("SELECT COUNT(*) FROM annees_scolaires").fetchone()[0] == 0:
             year = datetime.date.today().year
@@ -281,19 +300,32 @@ class Database:
                          (nom, description))
             return conn.execute("SELECT id FROM cycles WHERE nom = ?", (nom,)).fetchone()[0]
 
-        cycles_def = {
-            "Primaire": ("CI", "CP", "CE1", "CE2", "CM1", "CM2"),
-            "College": ("6eme", "5eme", "4eme", "3eme"),
-            "Lycee": ("2nde", "1ere", "Terminale"),
-        }
-        ids = {}
-        for nom, niveaux in cycles_def.items():
-            cid = _cycle_id(nom, f"Cycle {nom}")
-            ids[nom] = cid
-            for niveau in niveaux:
+        for nom, description in [("Prescolaire", "Cycle Prescolaire"),
+                                  ("Primaire", "Cycle Primaire"),
+                                  ("College", "Cycle College"),
+                                  ("Lycee", "Cycle Lycee")]:
+            _cycle_id(nom, description)
+
+        if conn.execute("SELECT COUNT(*) FROM classes").fetchone()[0] == 0:
+            cycle_ids = {}
+            for nom in ("Prescolaire", "Primaire", "College", "Lycee"):
+                row = conn.execute("SELECT id FROM cycles WHERE nom = ?", (nom,)).fetchone()
+                if row:
+                    cycle_ids[nom] = row[0]
+            classes_def = [
+                ("P1", "Prescolaire"), ("P2", "Prescolaire"), ("P3", "Prescolaire"),
+                ("CP1", "Primaire"), ("CP2", "Primaire"),
+                ("CE1", "Primaire"), ("CE2", "Primaire"),
+                ("CM1", "Primaire"), ("CM2", "Primaire"),
+                ("6eme", "College"), ("5eme", "College"),
+                ("4eme", "College"), ("3eme", "College"),
+                ("2nde", "Lycee"), ("1ere", "Lycee"), ("Terminale", "Lycee"),
+            ]
+            for nom_classe, cycle_nom in classes_def:
+                cid = cycle_ids.get(cycle_nom)
                 conn.execute(
-                    """UPDATE classes SET cycle_id = ?
-                       WHERE niveau = ? AND cycle_id IS NULL""", (cid, niveau))
+                    "INSERT INTO classes (nom, cycle_id) VALUES (?, ?)",
+                    (nom_classe, cid))
 
 
     def query(self, sql, params=()):
@@ -329,11 +361,11 @@ class Database:
             conn.close()
 
 
-    def enqueue(self, method, endpoint, payload):
+    def enqueue(self, method, endpoint, payload, uuid_client=None):
         return self.execute(
-            """INSERT INTO file_attente_synchro (endpoint, method, payload, status)
-               VALUES (?, ?, ?, 'PENDING')""",
-            (endpoint, method, payload))
+            """INSERT INTO file_attente_synchro (endpoint, method, payload, status, uuid_client)
+               VALUES (?, ?, ?, 'PENDING', ?)""",
+            (endpoint, method, payload, uuid_client))
 
 
     def dequeue_pending(self, limit=50):

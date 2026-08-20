@@ -15,16 +15,16 @@
   </property>
   <property name="styleSheet">
    <string>
-    QDialog { background-color: #ffffff; font-family: 'Segoe UI', sans-serif; }
+    QDialog { background-color: #FFFFFF; font-family: 'Segoe UI', sans-serif; }
     QLineEdit, QComboBox {
-        border: 1px solid #cbd5e1;
+        border: 1px solid #D5D2CB;
         border-radius: 6px;
         padding: 8px;
-        background-color: #f8fafc;
+        background-color: #EDEAE4;
     }
     QLineEdit:focus, QComboBox:focus {
-        border: 1px solid #047857;
-        background-color: #ffffff;
+        border: 1px solid #C8960C;
+        background-color: #FFFFFF;
     }
    </string>
   </property>
@@ -48,7 +48,7 @@
    <item>
     <widget class="QLabel" name="lbl_dialog_title">
      <property name="styleSheet">
-      <string>color: #0f172a; font-size: 16px; font-weight: bold;</string>
+      <string>color: #000000; font-size: 16px; font-weight: bold;</string>
      </property>
      <property name="text">
       <string>Nouveau Compte</string>
@@ -58,7 +58,7 @@
    <item>
     <widget class="QLabel" name="lbl_dialog_subtitle">
      <property name="styleSheet">
-      <string>color: #64748b; font-size: 12px;</string>
+      <string>color: #333333; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Un mot de passe temporaire sera envoye a la personne</string>
@@ -69,7 +69,7 @@
    <item>
     <widget class="QLabel" name="lbl_field1">
      <property name="styleSheet">
-      <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+      <string>color: #111111; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Nom complet :</string>
@@ -87,7 +87,7 @@
    <item>
     <widget class="QLabel" name="lbl_field2">
      <property name="styleSheet">
-      <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+      <string>color: #111111; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Adresse email :</string>
@@ -105,7 +105,7 @@
    <item>
     <widget class="QLabel" name="lbl_field3">
      <property name="styleSheet">
-      <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+      <string>color: #111111; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Telephone :</string>
@@ -123,7 +123,7 @@
    <item>
     <widget class="QLabel" name="lbl_field4">
      <property name="styleSheet">
-      <string>color: #334155; font-weight: bold; font-size: 12px;</string>
+      <string>color: #111111; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Role :</string>
@@ -134,12 +134,12 @@
     <widget class="QComboBox" name="combo_role_compte">
      <item>
       <property name="text">
-       <string>Gestionnaire</string>
+       <string>Directeur</string>
       </property>
      </item>
      <item>
       <property name="text">
-       <string>Directeur</string>
+       <string>Gestionnaire</string>
       </property>
      </item>
     </widget>
@@ -148,7 +148,7 @@
    <item>
     <widget class="QCheckBox" name="check_compte_actif">
      <property name="styleSheet">
-      <string>color: #334155; font-size: 12px;</string>
+      <string>color: #111111; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Compte actif des la creation</string>
@@ -191,7 +191,7 @@
      <item>
       <widget class="QPushButton" name="btn_cancel">
        <property name="styleSheet">
-        <string>background-color: #f1f5f9; color: #334155; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
+        <string>background-color: #EDEAE4; color: #111111; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Annuler</string>
@@ -204,7 +204,7 @@
         <cursorShape>PointingHandCursor</cursorShape>
        </property>
        <property name="styleSheet">
-        <string>background-color: #047857; color: white; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
+        <string>background-color: #C8960C; color: #000000; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Creer le compte</string>

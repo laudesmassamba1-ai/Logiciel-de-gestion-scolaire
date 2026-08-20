@@ -1,3 +1,4 @@
+import uuid as _uuid
 from dataclasses import asdict, dataclass
 
 
@@ -18,14 +19,19 @@ class Eleve:
     tuteur_nom: str = ""
     tuteur_tel: str = ""
     adresse: str = ""
+    redoublant: int = 0
     check_acte: int = 0
     check_photos: int = 0
     check_bulletin: int = 0
     statut: str = "Inscrit"
     date_inscription: str = ""
+    uuid_client: str = ""
 
     def to_dict(self):
-        return asdict(self)
+        d = asdict(self)
+        if not d["uuid_client"]:
+            d["uuid_client"] = str(_uuid.uuid4())
+        return d
 
 
 @dataclass

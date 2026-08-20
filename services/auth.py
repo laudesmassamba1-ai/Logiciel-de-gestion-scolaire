@@ -1,40 +1,63 @@
 import secrets
 
 from database import db
-from database.db import hash_password
+from database.db import hash_password, verify_password
 from core.config import ROLES
+
 
 class AuthService:
 
+    def has_accounts(self):
+        count = db.query_one("SELECT COUNT(*) AS c FROM utilisateurs")
+        return count and count["c"] > 0
 
     def login(self, username, password):
-
         user = db.query_one(
             "SELECT * FROM utilisateurs WHERE username = ? OR email = ?",
             (username, username))
         if not user:
             return None, "Identifiant ou mot de passe incorrect."
         if not user["actif"]:
-            return None, "Ce compte est desactive. Contactez l'administrateur."
-
-        if user["password"] != hash_password(password):
+            return None, "Ce compte est desactive."
+        if not verify_password(password, user["password"]):
             return None, "Identifiant ou mot de passe incorrect."
         db.execute("UPDATE utilisateurs SET last_login = datetime('now', 'localtime') WHERE id = ?",
                    (user["id"],))
         db.execute("INSERT INTO connexions (utilisateur_id) VALUES (?)", (user["id"],))
         return user, None
 
-    def change_password(self, user_id, old_password, new_password):
+    def get_saved_user(self):
+        params = db.query_one(
+            "SELECT valeur FROM parametres WHERE cle = 'dernier_utilisateur_id'")
+        if params and params["valeur"]:
+            user = db.query_one(
+                "SELECT * FROM utilisateurs WHERE id = ? AND actif = 1",
+                (int(params["valeur"]),))
+            if user:
+                return user
+        return None
 
+    def save_session(self, user_id):
+        db.execute(
+            "INSERT INTO parametres (cle, valeur) VALUES (?, ?) "
+            "ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur",
+            ("dernier_utilisateur_id", str(user_id)))
+
+    def clear_session(self):
+        db.execute(
+            "INSERT INTO parametres (cle, valeur) VALUES (?, ?) "
+            "ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur",
+            ("dernier_utilisateur_id", ""))
+
+    def change_password(self, user_id, old_password, new_password):
         user = db.query_one("SELECT * FROM utilisateurs WHERE id = ?", (user_id,))
-        if not user or user["password"] != hash_password(old_password):
+        if not user or not verify_password(old_password, user["password"]):
             return False, "Ancien mot de passe incorrect."
         db.execute("UPDATE utilisateurs SET password = ? WHERE id = ?",
                    (hash_password(new_password), user_id))
         return True, "Mot de passe mis a jour."
 
     def random_password(self):
-
         return secrets.token_hex(6)
 
     def derniere_connexions(self, limit=20):
@@ -44,26 +67,27 @@ class AuthService:
                ORDER BY c.date_connexion DESC LIMIT ?""", (limit,))
         return rows
 
+
 class RoleAuthorizer:
 
-
     NAV = {
-        "admin": ["dashboard", "comptes"],
-        "directeur": ["dashboard", "stats", "eleves", "classes", "cycles", "notes",
-                      "presences", "planning", "caisse", "tarifs", "paiements",
-                      "personnel", "programmes", "parametres"],
-        "gestionnaire": ["dashboard", "eleves", "classes", "notes", "planning",
-                         "caisse", "tarifs", "paiements", "presences"],
+        "directeur": ["dashboard", "comptes", "stats", "eleves", "classes", "cycles",
+                       "notes", "presences", "planning", "caisse", "tarifs",
+                       "paiements", "personnel", "programmes", "parametres"],
+        "gestionnaire": ["dashboard", "stats", "eleves", "classes", "cycles", "notes",
+                         "presences", "planning", "caisse", "tarifs", "paiements",
+                         "personnel", "programmes", "parametres"],
     }
 
     def __init__(self, role):
         self.role = role if role in ROLES else "gestionnaire"
 
     def allowed(self, page):
-
         return page in self.NAV.get(self.role, [])
 
     def can_edit(self, page):
-        if page in ("comptes", "parametres"):
-            return self.role == "admin"
-        return self.role in ("admin", "directeur", "gestionnaire")
+        if page == "comptes":
+            return self.role == "directeur"
+        if page == "parametres":
+            return self.role == "directeur"
+        return self.role in ("directeur", "gestionnaire")

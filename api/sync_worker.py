@@ -4,7 +4,7 @@ import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from api import client
+from api.client import _request, api_disponible
 from core import network
 from database import db
 
@@ -22,7 +22,7 @@ class SyncWorker(QThread):
 
     def run(self):
         while not self.isInterruptionRequested():
-            if client.api_disponible(force=True):
+            if api_disponible(force=True):
                 network.set_online()
                 self.status_changed.emit("online")
                 self._drain_queue()
@@ -38,7 +38,10 @@ class SyncWorker(QThread):
         for row in rows:
             try:
                 payload = json.loads(row["payload"])
-                _, err = client._request(row["method"], row["endpoint"], json=payload)
+                uuid_client = row["uuid_client"] if row["uuid_client"] else payload.get("uuid_client")
+                if uuid_client and "/eleve" in row["endpoint"]:
+                    payload = {"uuid_client": uuid_client, "eleve": payload}
+                _, err = _request(row["method"], row["endpoint"], json=payload)
             except Exception:
                 err = "echec envoi"
             if err:

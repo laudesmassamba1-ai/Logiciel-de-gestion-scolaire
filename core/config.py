@@ -16,8 +16,10 @@ APP_FONT_FALLBACK = ("Segoe UI", "Calibri", "Lato", "DejaVu Sans", "Noto Sans", 
 APP_FONT_SIZE = 11
 
 
-API_BASE_URL = "http://127.0.0.1:8000"
-API_TIMEOUT = 2.0
+import os as _os
+API_BASE_URL = _os.environ.get("GS_API_URL", "http://127.0.0.1:8000")
+API_TIMEOUT = float(_os.environ.get("GS_API_TIMEOUT", "2.0"))
+SYNC_ACTIVE = _os.environ.get("GS_SYNC_ACTIVE", "false").lower() in ("true", "1", "yes")
 
 
 PAYS_DEFAUT = "Republique du Congo"
@@ -26,34 +28,52 @@ INDICATIF_TEL = "+242"
 DEVISE = "FCFA"
 
 
-C_TEXT = "#1e293b"
-C_TEXT_SECONDARY = "#334155"
-C_TEXT_MUTED = "#475569"
-C_TEXT_LIGHT = "#64748b"
-C_EMPTY_STATE = "#64748b"
+C_TEXT = "#000000"
+C_TEXT_SECONDARY = "#111111"
+C_TEXT_MUTED = "#333333"
+C_TEXT_LIGHT = "#555555"
+C_EMPTY_STATE = "#333333"
 
-C_PRIMARY = "#047857"
-C_PRIMARY_HOVER = "#059669"
-C_PRIMARY_PRESSED = "#065f46"
-C_PRIMARY_LIGHT = "#d1fae5"
-C_PRIMARY_BG = "#ecfdf5"
+C_GOLD = "#C8960C"
+C_GOLD_HOVER = "#DAA520"
+C_GOLD_PRESSED = "#A67B0A"
+C_GOLD_LIGHT = "#FEF3C7"
+C_GOLD_BG = "#FFFBEB"
+C_GOLD_BORDER = "#FDE68A"
 
-C_BG = "#f8fafc"
-C_BG_ALT = "#f1f5f9"
-C_CARD = "#ffffff"
-C_BORDER = "#e2e8f0"
-C_BORDER_STRONG = "#d1d5db"
+C_BLUE = "#1E40AF"
+C_BLUE_LIGHT = "#EFF6FF"
+C_BLUE_BORDER = "#BFDBFE"
 
-C_SUCCESS = "#10b981"
-C_SUCCESS_DARK = "#059669"
-C_DANGER = "#dc2626"
-C_DANGER_BG = "#fef2f2"
-C_DANGER_BORDER = "#fecaca"
-C_WARNING = "#d97706"
-C_INFO = "#2563eb"
+C_RED = "#B91C1C"
+C_RED_BG = "#FEF2F2"
+C_RED_BORDER = "#FECACA"
+
+C_BG = "#F5F3EF"
+C_BG_ALT = "#EDEAE4"
+C_CARD = "#FFFFFF"
+C_BORDER = "#D5D2CB"
+C_BORDER_STRONG = "#B5B2AB"
+
+C_SUCCESS = C_GOLD
+C_SUCCESS_DARK = C_GOLD_PRESSED
+C_DANGER = C_RED
+C_DANGER_BG = C_RED_BG
+C_DANGER_BORDER = C_RED_BORDER
+C_WARNING = "#D97706"
+C_INFO = C_BLUE
+
+C_ACTION_BLUE = C_BLUE
+C_ACTION_BLUE_LIGHT = C_BLUE_LIGHT
+C_ACTION_BLUE_BORDER = C_BLUE_BORDER
+C_PRIMARY = C_GOLD
+C_PRIMARY_HOVER = C_GOLD_HOVER
+C_PRIMARY_PRESSED = C_GOLD_PRESSED
+C_PRIMARY_LIGHT = C_GOLD_LIGHT
+C_PRIMARY_BG = C_GOLD_BG
 
 STYLE_BTN_PRIMARY = (
-    f"background-color: {C_PRIMARY}; color: white; border: none;"
+    f"background-color: {C_PRIMARY}; color: #000000; border: none;"
     f" border-radius: 8px; padding: 10px 22px; font-weight: 700; font-size: 13px;"
 )
 STYLE_BTN_SECONDARY = (
@@ -61,7 +81,7 @@ STYLE_BTN_SECONDARY = (
     f" border-radius: 8px; padding: 10px 22px; font-weight: 600; font-size: 13px;"
 )
 STYLE_BTN_SUCCESS = (
-    f"background-color: {C_SUCCESS}; color: white; border: none;"
+    f"background-color: {C_PRIMARY}; color: #000000; border: none;"
     f" border-radius: 8px; padding: 10px 22px; font-weight: 700; font-size: 13px;"
 )
 STYLE_BTN_DANGER = (
@@ -69,7 +89,7 @@ STYLE_BTN_DANGER = (
     f" border-radius: 8px; padding: 10px 22px; font-weight: 700; font-size: 13px;"
 )
 STYLE_BTN_ADD = (
-    f"background-color: {C_PRIMARY_BG}; color: {C_PRIMARY}; border: 1px solid #a7f3d0;"
+    f"background-color: {C_PRIMARY_BG}; color: {C_PRIMARY}; border: 1px solid {C_GOLD_BORDER};"
     f" border-radius: 8px; padding: 10px 22px; font-weight: 700; font-size: 13px;"
 )
 STYLE_CARD = (
@@ -88,11 +108,12 @@ STYLE_STATUS = f"color: {C_TEXT_MUTED}; font-size: 12px; padding: 4px;"
 
 STYLE_TABLE = (
     f"QTableWidget {{ background: {C_CARD}; border: 1px solid {C_BORDER};"
-    f" border-radius: 10px; gridline-color: #f1f5f9; font-size: 13px; }}"
-    f"QTableWidget::item {{ padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }}"
-    f"QTableWidget::item:selected {{ background: {C_PRIMARY_LIGHT}; color: #064e3b; }}"
-    f"QTableWidget::item:hover {{ background: #f0fdf4; }}"
-    f"QHeaderView::section {{ background: #f8fafc; color: {C_TEXT_MUTED};"
+    f" border-radius: 10px; gridline-color: {C_BORDER}; font-size: 13px;"
+    f" alternate-background-color: {C_BG_ALT}; }}"
+    f"QTableWidget::item {{ padding: 4px 8px; border-bottom: 1px solid {C_BORDER}; }}"
+    f"QTableWidget::item:selected {{ background: {C_PRIMARY_LIGHT}; color: {C_PRIMARY_PRESSED}; }}"
+    f"QTableWidget::item:hover {{ background: {C_PRIMARY_BG}; }}"
+    f"QHeaderView::section {{ background: {C_BG}; color: {C_TEXT_MUTED};"
     f" font-weight: 700; font-size: 12px; padding: 10px 8px; border: none;"
     f" border-bottom: 2px solid {C_BORDER}; }}"
 )
@@ -106,24 +127,25 @@ QMainWindow, QDialog, QWidget {{
 QMainWindow {{ background-color: {C_BG}; }}
 
 QToolTip {{
-    background-color: #0f172a; color: #ffffff; border: none;
+    background-color: {C_CARD}; color: {C_TEXT_SECONDARY};
     padding: 6px 10px; border-radius: 6px; font-size: 12px;
+    border: 1px solid {C_BORDER};
 }}
 
 QPushButton {{
-    background-color: {C_PRIMARY}; color: white; border: none;
+    background-color: {C_PRIMARY}; color: #000000; border: none;
     border-radius: 8px; padding: 10px 22px; font-weight: 700; font-size: 13px;
 }}
 QPushButton:hover {{ background-color: {C_PRIMARY_HOVER}; }}
 QPushButton:pressed {{ background-color: {C_PRIMARY_PRESSED}; }}
-QPushButton:disabled {{ background-color: #cbd5e1; color: #f8fafc; }}
+QPushButton:disabled {{ background-color: {C_BORDER}; color: {C_TEXT_MUTED}; }}
 
 QScrollBar:vertical {{ background: transparent; width: 8px; margin: 0; }}
-QScrollBar::handle:vertical {{ background: #cbd5e1; border-radius: 4px; min-height: 32px; }}
-QScrollBar::handle:vertical:hover {{ background: #94a3b8; }}
+QScrollBar::handle:vertical {{ background: {C_BORDER_STRONG}; border-radius: 4px; min-height: 30px; }}
+QScrollBar::handle:vertical:hover {{ background: {C_TEXT_MUTED}; }}
 QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 0; }}
-QScrollBar::handle:horizontal {{ background: #cbd5e1; border-radius: 4px; min-width: 32px; }}
-QScrollBar::handle:horizontal:hover {{ background: #94a3b8; }}
+QScrollBar::handle:horizontal {{ background: {C_BORDER_STRONG}; border-radius: 4px; min-width: 30px; }}
+QScrollBar::handle:horizontal:hover {{ background: {C_TEXT_MUTED}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 
 {STYLE_TABLE}
@@ -133,7 +155,7 @@ QMenu {{
     border-radius: 8px; padding: 6px;
 }}
 QMenu::item {{ padding: 8px 24px 8px 12px; border-radius: 6px; color: {C_TEXT_SECONDARY}; }}
-QMenu::item:selected {{ background-color: {C_PRIMARY_LIGHT}; color: #064e3b; }}
+QMenu::item:selected {{ background-color: {C_PRIMARY_LIGHT}; color: {C_PRIMARY}; }}
 
 QStatusBar {{
     background: {C_CARD}; color: {C_TEXT_MUTED};
@@ -144,7 +166,7 @@ QMessageBox QPushButton, QDialog QPushButton {{
 }}
 
 QListWidget::item {{ padding: 8px 6px; border-radius: 6px; color: {C_TEXT_SECONDARY}; }}
-QListWidget::item:selected {{ background-color: {C_PRIMARY_LIGHT}; color: #064e3b; }}
+QListWidget::item:selected {{ background-color: {C_PRIMARY_LIGHT}; color: {C_PRIMARY}; }}
 
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit {{
     border: 1px solid {C_BORDER_STRONG}; border-radius: 8px; padding: 8px 12px;
@@ -162,7 +184,7 @@ QComboBox::down-arrow {{
 }}
 QComboBox QAbstractItemView {{
     background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 8px;
-    selection-background-color: {C_PRIMARY_LIGHT}; selection-color: #064e3b;
+    selection-background-color: {C_PRIMARY_LIGHT}; selection-color: {C_PRIMARY};
     padding: 4px; color: {C_TEXT_SECONDARY};
 }}
 
@@ -172,7 +194,7 @@ QTabBar::tab {{
     margin-right: 2px; border: none; font-weight: 600; font-size: 13px;
     border-top-left-radius: 8px; border-top-right-radius: 8px;
 }}
-QTabBar::tab:hover {{ background: #e2e8f0; color: {C_TEXT_SECONDARY}; }}
+QTabBar::tab:hover {{ background: {C_PRIMARY_BG}; }}
 QTabBar::tab:selected {{
     background: {C_CARD}; color: {C_PRIMARY}; font-weight: 700;
     border-bottom: 2px solid {C_SUCCESS};
@@ -183,30 +205,25 @@ QLabel {{ color: {C_TEXT_SECONDARY}; }}
 
 
 QSS_SIDEBAR = f"""
-#sidebar {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #047857, stop:1 #065f46); border: none; }}
-#lbl_logo {{ color: #ffffff; font-size: 17px; font-weight: 700; padding: 8px 20px 16px 20px; letter-spacing: 0.5px; }}
-#sidebar QPushButton {{
-    color: #d1fae5; text-align: left; padding: 12px 22px; border: none; margin: 1px 12px;
+QPushButton {{
+    color: {C_TEXT_SECONDARY};
     border-radius: 10px; font-size: 13px; font-weight: 500; background: transparent;
+    text-align: left; padding: 10px 16px; border: none;
 }}
-#sidebar QPushButton:hover {{ background-color: rgba(255,255,255,0.10); color: #ffffff; }}
-#sidebar QPushButton:pressed {{ background-color: rgba(255,255,255,0.18); }}
-#sidebar QPushButton:checked {{
-    background-color: #ffffff; color: #047857; font-weight: 700;
-    border-left: 3px solid #34d399;
+QPushButton:hover {{
+    background-color: {C_BG_ALT};
 }}
-#userBox {{ background-color: rgba(255,255,255,0.08); border-top: 1px solid rgba(255,255,255,0.15); border-radius: 12px; margin: 8px 12px; }}
-#lbl_user_name {{ color: #ffffff; font-size: 13px; font-weight: 700; }}
-#lbl_user_role {{ color: #6ee7b7; font-size: 11px; font-weight: 600; }}
-#btn_logout {{ color: #fca5a5; text-align: left; border: none; font-size: 12px; padding: 6px 0px; background: transparent; border-radius: 8px; }}
-#btn_logout:hover {{ color: #ffffff; background-color: rgba(255,255,255,0.10); }}
+QPushButton:checked {{
+    background-color: {C_PRIMARY_LIGHT};
+    border-left: 3px solid {C_PRIMARY};
+    color: {C_PRIMARY};
+}}
 """
 
 
-ROLES = ("admin", "directeur", "gestionnaire")
+ROLES = ("directeur", "gestionnaire")
 
 ROLE_LABELS = {
-    "admin": "Administrateur",
     "directeur": "Directeur",
     "gestionnaire": "Gestionnaire",
 }
@@ -257,19 +274,6 @@ def data_dir() -> Path:
 UI_DIR = resource_path("ui/ui_files")
 DB_PATH = data_dir() / "ecole.db"
 DOCS_DIR = data_dir() / "documents"
-
-
-DEFAULT_ACCOUNTS = (
-    {"nom_complet": "Administrateur Systeme", "username": "admin",
-     "email": "admin@ecole.cg", "telephone": "+242 06 000 0000",
-     "password": "admin123", "role": "admin"},
-    {"nom_complet": "Directeur de l'Ecole", "username": "directeur",
-     "email": "directeur@ecole.cg", "telephone": "+242 06 000 0001",
-     "password": "directeur123", "role": "directeur"},
-    {"nom_complet": "Gestionnaire Scolaire", "username": "gestionnaire",
-     "email": "gestionnaire@ecole.cg", "telephone": "+242 06 000 0002",
-     "password": "gestionnaire123", "role": "gestionnaire"},
-)
 
 
 DEFAULT_MATIERES = (

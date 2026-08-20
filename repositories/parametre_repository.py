@@ -11,13 +11,20 @@ class ParametreRepository(RepositoryBase):
         return {r["cle"]: r["valeur"] for r in rows}
 
     def set_parametre(self, cle, valeur):
-        db.execute(
+        self._route_write(
+            "POST", "/parametre",
+            {"cle": cle, "valeur": valeur},
+            db.execute,
             "INSERT INTO parametres (cle, valeur) VALUES (?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur",
             (cle, valeur))
 
     def delete_parametres(self):
-        for cle in ("signataire_nom", "signataire_titre", "ville"):
-            db.execute("DELETE FROM parametres WHERE cle = ?", (cle,))
+        for cle in ("signataire_nom", "signataire_titre", "ville", "pays"):
+            self._route_write(
+                "DELETE", f"/parametre/{cle}",
+                {"cle": cle},
+                db.execute,
+                "DELETE FROM parametres WHERE cle = ?", (cle,))
             db.execute("INSERT INTO parametres (cle, valeur) VALUES (?, '')", (cle,))
 
     def stats_dashboard(self):

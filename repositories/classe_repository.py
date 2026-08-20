@@ -35,7 +35,12 @@ class ClasseRepository(RepositoryBase):
             (nom, niveau, capacite, salle, titulaire, cycle_id, classe_id))
 
     def delete_classe(self, classe_id):
-
+        eleves = db.query("SELECT id FROM eleves WHERE classe_id = ?", (classe_id,))
+        eleve_ids = [e["id"] for e in eleves]
+        for eid in eleve_ids:
+            db.execute("DELETE FROM notes WHERE eleve_id = ?", (eid,))
+            db.execute("DELETE FROM presences WHERE eleve_id = ?", (eid,))
+            db.execute("DELETE FROM paiements WHERE eleve_id = ?", (eid,))
         db.execute("DELETE FROM eleves WHERE classe_id = ?", (classe_id,))
         db.execute("DELETE FROM planning WHERE classe_id = ?", (classe_id,))
         db.execute("DELETE FROM tarifs WHERE classe_id = ?", (classe_id,))
@@ -99,8 +104,17 @@ class ClasseRepository(RepositoryBase):
             (libelle, date_debut, date_fin, 1 if est_active else 0, annee_id))
 
     def set_annee_active(self, annee_id):
-        db.execute("UPDATE annees_scolaires SET est_active = 0")
-        db.execute("UPDATE annees_scolaires SET est_active = 1 WHERE id = ?", (annee_id,))
+        def _update():
+            conn = db.connect()
+            try:
+                conn.execute("UPDATE annees_scolaires SET est_active = 0")
+                conn.execute("UPDATE annees_scolaires SET est_active = 1 WHERE id = ?", (annee_id,))
+                conn.commit()
+            finally:
+                conn.close()
+        self._route_write("PUT", f"/annee_scolaire/{annee_id}/actif",
+                          {"est_active": True}, _update)
 
     def delete_annee_scolaire(self, annee_id):
-        db.execute("DELETE FROM annees_scolaires WHERE id = ?", (annee_id,))
+        self._route_write("DELETE", f"/annee_scolaire/{annee_id}", {},
+                          db.execute, "DELETE FROM annees_scolaires WHERE id = ?", (annee_id,))

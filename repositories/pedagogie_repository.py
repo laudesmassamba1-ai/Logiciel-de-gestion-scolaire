@@ -7,6 +7,9 @@ class PedagogieRepository(RepositoryBase):
     def matieres(self):
         return db.query("SELECT * FROM matieres ORDER BY nom")
 
+    def matiere_by_id(self, matiere_id):
+        return db.query_one("SELECT * FROM matieres WHERE id = ?", (matiere_id,))
+
     def add_matiere(self, nom, coefficient=1):
         return self._route_write("POST", "/matiere", {"nom": nom, "coefficient": coefficient},
                                  db.execute,
@@ -28,7 +31,7 @@ class PedagogieRepository(RepositoryBase):
 
     def enseignants(self):
         return db.query(
-            "SELECT * FROM personnel WHERE fonction LIKE '%Enseignant%' ORDER BY nom_complet")
+            "SELECT * FROM personnel WHERE fonction LIKE '%Enseignant%' OR fonction LIKE '%Professeur%' OR fonction LIKE '%Instituteur%' ORDER BY nom_complet")
 
     def programmes(self, classe_id=None):
         sql = """SELECT p.*, m.nom AS matiere_nom, m.coefficient AS matiere_coeff,

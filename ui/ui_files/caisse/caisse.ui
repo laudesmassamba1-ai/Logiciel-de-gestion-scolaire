@@ -14,11 +14,11 @@
    <string>Gestion de la Caisse</string>
   </property>
   <property name="styleSheet">
-   <string>background-color: #f8fafc; font-family: 'Segoe UI', sans-serif;</string>
+   <string>background-color: #EDEAE4; font-family: 'Segoe UI', sans-serif;</string>
   </property>
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
-    <number>20</number>
+    <number>16</number>
    </property>
    <property name="leftMargin">
     <number>20</number>
@@ -39,7 +39,7 @@
        <item>
         <widget class="QLabel" name="lbl_page_title">
          <property name="styleSheet">
-          <string>color: #0f172a; font-size: 24px; font-weight: bold;</string>
+          <string>color: #000000; font-size: 24px; font-weight: bold;</string>
          </property>
          <property name="text">
           <string>Gestion de la Caisse</string>
@@ -49,10 +49,10 @@
        <item>
         <widget class="QLabel" name="lbl_page_subtitle">
          <property name="styleSheet">
-          <string>color: #64748b; font-size: 13px;</string>
+          <string>color: #333333; font-size: 13px;</string>
          </property>
          <property name="text">
-          <string>Historique complet des encaissements et decaissements</string>
+          <string>Suivi des recettes et depenses</string>
          </property>
         </widget>
        </item>
@@ -73,8 +73,11 @@
      </item>
      <item>
       <widget class="QPushButton" name="btn_export">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
        <property name="styleSheet">
-        <string>background-color: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+        <string>background-color: #EDEAE4; color: #111111; border: 1px solid #D5D2CB; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Exporter CSV</string>
@@ -83,21 +86,27 @@
      </item>
      <item>
       <widget class="QPushButton" name="btn_add_expense">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
        <property name="styleSheet">
-        <string>background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+        <string>background-color: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
        </property>
        <property name="text">
-        <string>Nouvelle Depense</string>
+        <string>+ Depense</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QPushButton" name="btn_add_income">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
        <property name="styleSheet">
-        <string>background-color: #047857; color: white; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+        <string>background-color: #C8960C; color: #000000; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
        </property>
        <property name="text">
-        <string>Nouvelle Recette</string>
+        <string>+ Recette</string>
        </property>
       </widget>
      </item>
@@ -106,18 +115,30 @@
    <item>
     <layout class="QHBoxLayout" name="kpiLayout">
      <property name="spacing">
-      <number>20</number>
+      <number>15</number>
      </property>
      <item>
       <widget class="QFrame" name="card_incomes">
        <property name="styleSheet">
-        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
        </property>
        <layout class="QVBoxLayout" name="vbox_kpi1">
+        <property name="leftMargin">
+         <number>16</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>16</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
         <item>
          <widget class="QLabel" name="lbl_kpi1_title">
           <property name="styleSheet">
-           <string>color: #64748b; font-size: 12px; font-weight: bold; text-transform: uppercase;</string>
+           <string>color: #333333; font-size: 11px; font-weight: bold; border: none;</string>
           </property>
           <property name="text">
            <string>Total des Entrees</string>
@@ -127,10 +148,10 @@
         <item>
          <widget class="QLabel" name="val_total_incomes">
           <property name="styleSheet">
-           <string>color: #059669; font-size: 24px; font-weight: bold;</string>
+           <string>color: #C8960C; font-size: 22px; font-weight: bold; border: none;</string>
           </property>
           <property name="text">
-           <string>31 451,57 FCFA</string>
+           <string>0 FCFA</string>
           </property>
          </widget>
         </item>
@@ -140,13 +161,25 @@
      <item>
       <widget class="QFrame" name="card_expenses">
        <property name="styleSheet">
-        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
        </property>
        <layout class="QVBoxLayout" name="vbox_kpi2">
+        <property name="leftMargin">
+         <number>16</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>16</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
         <item>
          <widget class="QLabel" name="lbl_kpi2_title">
           <property name="styleSheet">
-           <string>color: #64748b; font-size: 12px; font-weight: bold; text-transform: uppercase;</string>
+           <string>color: #333333; font-size: 11px; font-weight: bold; border: none;</string>
           </property>
           <property name="text">
            <string>Total des Sorties</string>
@@ -156,10 +189,10 @@
         <item>
          <widget class="QLabel" name="val_total_expenses">
           <property name="styleSheet">
-           <string>color: #e11d48; font-size: 24px; font-weight: bold;</string>
+           <string>color: #e11d48; font-size: 22px; font-weight: bold; border: none;</string>
           </property>
           <property name="text">
-           <string>12 929,40 FCFA</string>
+           <string>0 FCFA</string>
           </property>
          </widget>
         </item>
@@ -169,13 +202,25 @@
      <item>
       <widget class="QFrame" name="card_balance">
        <property name="styleSheet">
-        <string>background-color: #0f172a; border-radius: 8px; padding: 16px;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
        </property>
        <layout class="QVBoxLayout" name="vbox_kpi3">
+        <property name="leftMargin">
+         <number>16</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>16</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
         <item>
          <widget class="QLabel" name="lbl_kpi3_title">
           <property name="styleSheet">
-           <string>color: #94a3b8; font-size: 12px; font-weight: bold; text-transform: uppercase;</string>
+           <string>color: #333333; font-size: 11px; font-weight: bold; border: none;</string>
           </property>
           <property name="text">
            <string>Solde Actuel Caisse</string>
@@ -185,10 +230,10 @@
         <item>
          <widget class="QLabel" name="val_current_balance">
           <property name="styleSheet">
-           <string>color: #ffffff; font-size: 24px; font-weight: bold;</string>
+           <string>color: #000000; font-size: 22px; font-weight: bold; border: none;</string>
           </property>
           <property name="text">
-           <string>18 522,17 FCFA</string>
+           <string>0 FCFA</string>
           </property>
          </widget>
         </item>
@@ -200,92 +245,28 @@
    <item>
     <widget class="QFrame" name="filterFrame">
      <property name="styleSheet">
-      <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;</string>
+      <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
      </property>
      <layout class="QHBoxLayout" name="filterLayout">
-      <item>
-       <widget class="QTableWidget" name="table_transactions">
-        <property name="styleSheet">
-         <string>
-       QTableWidget {
-           background-color: #ffffff;
-           border: 1px solid #e2e8f0;
-           border-radius: 8px;
-           gridline-color: #f1f5f9;
-           font-size: 13px;
-       }
-       QHeaderView::section {
-           background-color: #f8fafc;
-           color: #475569;
-           font-weight: bold;
-           padding: 10px;
-           border: none;
-           border-bottom: 1px solid #e2e8f0;
-       }
-       QTableWidget::item {
-           padding: 0px 8px;
-           border-bottom: 1px solid #f1f5f9;
-       }
-      </string>
-        </property>
-        <property name="editTriggers">
-         <set>QAbstractItemView::NoEditTriggers</set>
-        </property>
-        <property name="alternatingRowColors">
-         <bool>true</bool>
-        </property>
-        <property name="selectionBehavior">
-         <enum>QAbstractItemView::SelectRows</enum>
-        </property>
-        <property name="showGrid">
-         <bool>false</bool>
-        </property>
-        <column>
-         <property name="text">
-          <string>Date</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Reference</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Beneficiaire / Eleve</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Motif / Libelle</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Categorie</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Entree</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Sortie</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Actions</string>
-         </property>
-        </column>
-       </widget>
-      </item>
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <property name="spacing">
+       <number>10</number>
+      </property>
       <item>
        <widget class="QLineEdit" name="search_input">
         <property name="styleSheet">
-         <string>padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;</string>
+         <string>padding: 8px; border: 1px solid #D5D2CB; border-radius: 6px;</string>
         </property>
         <property name="placeholderText">
          <string>Rechercher un eleve, un motif, une reference...</string>
@@ -295,7 +276,7 @@
       <item>
        <widget class="QComboBox" name="combo_type">
         <property name="styleSheet">
-         <string>padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;</string>
+         <string>padding: 8px; border: 1px solid #D5D2CB; border-radius: 6px;</string>
         </property>
         <item>
          <property name="text">
@@ -316,6 +297,9 @@
       </item>
       <item>
        <widget class="QLabel" name="lbl_date_start">
+        <property name="styleSheet">
+         <string>color: #333333; font-size: 12px; font-weight: bold; border: none;</string>
+        </property>
         <property name="text">
          <string>Du :</string>
         </property>
@@ -324,7 +308,7 @@
       <item>
        <widget class="QDateEdit" name="date_start">
         <property name="styleSheet">
-         <string>padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;</string>
+         <string>padding: 8px; border: 1px solid #D5D2CB; border-radius: 6px;</string>
         </property>
         <property name="calendarPopup">
          <bool>true</bool>
@@ -333,6 +317,9 @@
       </item>
       <item>
        <widget class="QLabel" name="lbl_date_end">
+        <property name="styleSheet">
+         <string>color: #333333; font-size: 12px; font-weight: bold; border: none;</string>
+        </property>
         <property name="text">
          <string>Au :</string>
         </property>
@@ -341,7 +328,7 @@
       <item>
        <widget class="QDateEdit" name="date_end">
         <property name="styleSheet">
-         <string>padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;</string>
+         <string>padding: 8px; border: 1px solid #D5D2CB; border-radius: 6px;</string>
         </property>
         <property name="calendarPopup">
          <bool>true</bool>
@@ -351,7 +338,7 @@
       <item>
        <widget class="QPushButton" name="btn_apply_filter">
         <property name="styleSheet">
-         <string>background-color: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 16px; font-weight: bold;</string>
+         <string>background-color: #EDEAE4; color: #000000; border: 1px solid #D5D2CB; border-radius: 6px; padding: 8px 16px; font-weight: bold;</string>
         </property>
         <property name="text">
          <string>Filtrer</string>
@@ -359,6 +346,91 @@
        </widget>
       </item>
      </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTableWidget" name="table_transactions">
+     <property name="styleSheet">
+      <string>
+       QTableWidget {
+           background-color: #FFFFFF;
+           border: 1px solid #D5D2CB;
+           border-radius: 8px;
+           gridline-color: #EDEAE4;
+           font-size: 13px;
+       }
+       QHeaderView::section {
+           background-color: #EDEAE4;
+           color: #333333;
+           font-weight: bold;
+           padding: 10px;
+           border: none;
+           border-bottom: 1px solid #D5D2CB;
+       }
+       QTableWidget::item {
+           padding: 0px 8px;
+           border-bottom: 1px solid #EDEAE4;
+       }
+      </string>
+     </property>
+     <property name="editTriggers">
+      <set>QAbstractItemView::NoEditTriggers</set>
+     </property>
+     <property name="alternatingRowColors">
+      <bool>true</bool>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectRows</enum>
+     </property>
+     <property name="showGrid">
+      <bool>false</bool>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>300</height>
+      </size>
+     </property>
+     <column>
+      <property name="text">
+       <string>Date</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Reference</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Beneficiaire</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Motif</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Categorie</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Entree</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Sortie</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Actions</string>
+      </property>
+     </column>
     </widget>
    </item>
   </layout>

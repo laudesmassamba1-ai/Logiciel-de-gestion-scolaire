@@ -3,12 +3,13 @@ import sys
 import traceback
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QFontDatabase
+from PyQt5.QtGui import QFont, QFontDatabase, QIcon
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from core.config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE
 from database import db
-from ui.login_view import LoginDialog
+from services import auth
+from ui.login_view import FirstSetupDialog
 from ui.main_view import MainWindow
 
 
@@ -45,6 +46,7 @@ def _excepthook(exc_type, exc_value, exc_tb):
     msg.setDetailedText(details)
     msg.exec_()
 
+
 def main():
     sys.excepthook = _excepthook
     _setup_high_dpi()
@@ -53,15 +55,37 @@ def main():
     app.setOrganizationName(APP_NAME)
     app.setFont(_pick_base_font())
     app.setStyleSheet(APP_STYLESHEET)
+    icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     db.init_db()
 
-    login = LoginDialog()
-    if login.exec_() == LoginDialog.Accepted:
-        window = MainWindow(login.user)
-        window.showMaximized()
-        sys.exit(app.exec_())
-    sys.exit(0)
+    user = None
+
+    if not auth.has_accounts():
+        setup = FirstSetupDialog()
+        if setup.exec_() == FirstSetupDialog.Accepted:
+            user = setup.user
+            auth.save_session(user["id"])
+        else:
+            sys.exit(0)
+    else:
+        user = auth.get_saved_user()
+        if user is None:
+            setup = FirstSetupDialog()
+            if setup.exec_() == FirstSetupDialog.Accepted:
+                user = setup.user
+                auth.save_session(user["id"])
+            else:
+                sys.exit(0)
+
+    if user is None:
+        sys.exit(0)
+
+    window = MainWindow(user)
+    window.showMaximized()
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":

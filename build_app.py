@@ -1,3 +1,4 @@
+import datetime
 import os
 import shutil
 import subprocess
@@ -116,6 +117,77 @@ def _sign_target(path: Path, signtool: Path) -> None:
     _run(cmd)
 
 
+def sign_with_signpath(path: Path, signpath_token: str, certificate_profile_id: str) -> None:
+    import base64
+    import json
+    import urllib.request
+    import time
+
+    api_url = "https://app.signpath.io/api/v1/signing/submit"
+    headers = {
+        "Authorization": f"Bearer {signpath_token}",
+        "Content-Type": "application/json",
+    }
+
+    file_content = base64.b64encode(path.read_bytes()).decode("utf-8")
+    payload = json.dumps({
+        "certificateProfileId": certificate_profile_id,
+        "sourceFile": {
+            "fileName": path.name,
+            "fileContent": file_content,
+        },
+        "outputFile": {
+            "fileName": path.name,
+        },
+    }).encode("utf-8")
+
+    req = urllib.request.Request(api_url, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            print(f"SignPath: demande de signature soumise : {result.get('id')}")
+            return result.get('id')
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"SignPath HTTP {exc.code}: {body}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"SignPath: erreur lors de la soumission: {exc}") from exc
+
+
+def wait_for_signpath_completion(signpath_token: str, signing_id: str, timeout: int = 600) -> None:
+    import json
+    import urllib.request
+    import time
+
+    api_url = f"https://app.signpath.io/api/v1/signing/{signing_id}"
+    headers = {
+        "Authorization": f"Bearer {signpath_token}",
+        "Accept": "application/json",
+    }
+    deadline = time.time() + timeout
+    last_status = None
+    while time.time() < deadline:
+        req = urllib.request.Request(api_url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                status = data.get("status")
+                if status != last_status:
+                    print(f"SignPath: statut = {status}")
+                    last_status = status
+                if status == "Completed":
+                    return
+                if status in ("Failed", "Canceled"):
+                    raise RuntimeError(f"SignPath: signature echouee ({status})")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                time.sleep(5)
+                continue
+            raise
+        time.sleep(10)
+    raise RuntimeError("SignPath: delai depasse pour la signature")
+
+
 def _build_installer() -> None:
     iscc = _find_iscc()
     if not iscc:
@@ -197,12 +269,35 @@ def _build_windows() -> None:
     _pyinstaller(SPEC_PATH)
     exe = DIST_DIR / APP_DIR_NAME / EXE_NAME
     signtool = _find_signtool()
+    signed = False
     if signtool:
-        _sign_target(exe, signtool)
+        pfx = os.environ.get('SIGN_PFX')
+        password = os.environ.get('SIGN_PASSWORD')
+        if pfx and password and Path(pfx).exists():
+            try:
+                _sign_target(exe, signtool)
+                signed = True
+            except Exception as exc:
+                print(f"Signature locale echouee: {exc}")
+    signpath_token = os.environ.get('SIGNPATH_API_TOKEN')
+    signpath_profile = os.environ.get('SIGNPATH_CERTIFICATE_PROFILE_ID')
+    if signpath_token and signpath_profile:
+        try:
+            signing_id = sign_with_signpath(exe, signpath_token, signpath_profile)
+            if signing_id:
+                wait_for_signpath_completion(signpath_token, signing_id)
+                signed = True
+        except Exception as exc:
+            print(f"SignPath: signature echouee: {exc}")
+    if not signed:
+        print('Aucune signature appliquee: definissez SIGN_PFX/SIGN_PASSWORD ou SIGNPATH_API_TOKEN/SIGNPATH_CERTIFICATE_PROFILE_ID')
     _build_installer()
     setup = next(INSTALLER_DIR.glob('*.exe'), None) if INSTALLER_DIR.exists() else None
     if setup and signtool:
-        _sign_target(setup, signtool)
+        try:
+            _sign_target(setup, signtool)
+        except Exception as exc:
+            print(f"Signature installeur locale echouee: {exc}")
 
 
 def _build_linux() -> None:

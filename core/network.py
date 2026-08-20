@@ -1,26 +1,21 @@
 
 
-
-SYNC_ACTIVE = False
+from core.config import SYNC_ACTIVE as _cfg_sync
 
 _state = "offline"
 
 
-
 def sync_active():
-    return SYNC_ACTIVE
-
+    return _cfg_sync
 
 
 def is_online():
-    return SYNC_ACTIVE and _state == "online"
-
+    return _cfg_sync and _state == "online"
 
 
 def set_online():
     global _state
     _state = "online"
-
 
 
 def set_offline():

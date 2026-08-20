@@ -14,7 +14,7 @@
    <string>Emploi du Temps</string>
   </property>
   <property name="styleSheet">
-   <string>background-color: #f8fafc; font-family: 'Segoe UI', sans-serif;</string>
+   <string>background-color: #EDEAE4; font-family: 'Segoe UI', sans-serif;</string>
   </property>
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
@@ -39,7 +39,7 @@
        <item>
         <widget class="QLabel" name="lbl_page_title">
          <property name="styleSheet">
-          <string>color: #0f172a; font-size: 24px; font-weight: bold;</string>
+          <string>color: #000000; font-size: 24px; font-weight: bold;</string>
          </property>
          <property name="text">
           <string>Emploi du Temps</string>
@@ -49,7 +49,7 @@
        <item>
         <widget class="QLabel" name="lbl_page_subtitle">
          <property name="styleSheet">
-          <string>color: #64748b; font-size: 13px;</string>
+          <string>color: #333333; font-size: 13px;</string>
          </property>
          <property name="text">
           <string>Planning hebdomadaire par classe</string>
@@ -77,7 +77,7 @@
         <cursorShape>PointingHandCursor</cursorShape>
        </property>
        <property name="styleSheet">
-        <string>background-color: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Modifier</string>
@@ -90,7 +90,7 @@
         <cursorShape>PointingHandCursor</cursorShape>
        </property>
        <property name="styleSheet">
-        <string>background-color: #047857; color: white; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+        <string>background-color: #C8960C; color: #000000; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Imprimer</string>
@@ -102,7 +102,7 @@
    <item>
     <widget class="QFrame" name="selectorBar">
      <property name="styleSheet">
-      <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;</string>
+      <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
      </property>
      <layout class="QHBoxLayout" name="selectorLayout">
       <property name="leftMargin">
@@ -123,7 +123,7 @@
       <item>
        <widget class="QLabel" name="lbl_selector">
         <property name="styleSheet">
-         <string>color: #334155; font-weight: bold;</string>
+         <string>color: #111111; font-weight: bold;</string>
         </property>
         <property name="text">
          <string>Classe :</string>
@@ -139,7 +139,7 @@
          </size>
         </property>
         <property name="styleSheet">
-         <string>border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px;</string>
+         <string>border: 1px solid #D5D2CB; border-radius: 6px; padding: 8px;</string>
         </property>
         <item>
          <property name="text">
@@ -164,7 +164,7 @@
       <item>
        <widget class="QLabel" name="lbl_legend_libre">
         <property name="styleSheet">
-         <string>color: #94a3b8; font-size: 11px;</string>
+         <string>color: #333333; font-size: 11px;</string>
         </property>
         <property name="text">
          <string>Case vide = creneau libre</string>
@@ -179,23 +179,23 @@
      <property name="styleSheet">
       <string>
        QTableWidget {
-           background-color: #ffffff;
-           border: 1px solid #e2e8f0;
+           background-color: #FFFFFF;
+           border: 1px solid #D5D2CB;
            border-radius: 8px;
-           gridline-color: #f1f5f9;
+           gridline-color: #EDEAE4;
            font-size: 12px;
        }
        QHeaderView::section {
-           background-color: #f8fafc;
-           color: #475569;
+           background-color: #EDEAE4;
+           color: #333333;
            font-weight: bold;
            padding: 8px;
            border: none;
-           border-bottom: 1px solid #e2e8f0;
+           border-bottom: 1px solid #D5D2CB;
        }
        QTableWidget::item {
            padding: 0px 8px;
-           border-bottom: 1px solid #f1f5f9;
+           border-bottom: 1px solid #EDEAE4;
        }
       </string>
      </property>
@@ -283,7 +283,7 @@
    <item>
     <widget class="QLabel" name="lbl_empty_state_planning">
      <property name="styleSheet">
-      <string>color: #94a3b8; font-size: 13px; padding: 30px; qproperty-alignment: AlignCenter;</string>
+      <string>color: #333333; font-size: 13px; padding: 30px; qproperty-alignment: AlignCenter;</string>
      </property>
      <property name="text">
       <string>Selectionnez une classe pour afficher son emploi du temps.</string>

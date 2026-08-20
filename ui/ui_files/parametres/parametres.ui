@@ -14,7 +14,7 @@
    <string>Parametres de l'Etablissement</string>
   </property>
   <property name="styleSheet">
-   <string>background-color: #f4f6f9;</string>
+   <string>background-color: #EDEAE4;</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
        <property name="spacing">
@@ -37,7 +37,7 @@
          <item>
           <widget class="QLabel" name="lbl_title">
            <property name="styleSheet">
-            <string>color: #1f2937; font-size: 16px; font-weight: bold;</string>
+            <string>color: #111111; font-size: 16px; font-weight: bold;</string>
            </property>
            <property name="text">
             <string>Parametres de l'Etablissement</string>
@@ -110,7 +110,7 @@
              <item>
               <widget class="QFrame" name="card1">
                <property name="styleSheet">
-                <string>background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px;</string>
+                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
                </property>
                <layout class="QHBoxLayout" name="horizontalLayout_Card1">
                 <item>
@@ -139,7 +139,7 @@
                 <item>
                  <widget class="QPushButton" name="btn_upload1">
                   <property name="styleSheet">
-                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 14px;</string>
+                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #D5D2CB; border-radius: 4px; padding: 6px 14px;</string>
                   </property>
                   <property name="text">
                    <string>Televerser</string>
@@ -152,7 +152,7 @@
              <item>
               <widget class="QFrame" name="card2">
                <property name="styleSheet">
-                <string>background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px;</string>
+                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
                </property>
                <layout class="QHBoxLayout" name="horizontalLayout_Card2">
                 <item>
@@ -181,7 +181,7 @@
                 <item>
                  <widget class="QPushButton" name="btn_upload2">
                   <property name="styleSheet">
-                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 14px;</string>
+                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #D5D2CB; border-radius: 4px; padding: 6px 14px;</string>
                   </property>
                   <property name="text">
                    <string>Televerser</string>
@@ -194,7 +194,7 @@
              <item>
               <widget class="QFrame" name="card3">
                <property name="styleSheet">
-                <string>background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px;</string>
+                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
                </property>
                <layout class="QHBoxLayout" name="horizontalLayout_Card3">
                 <item>
@@ -223,7 +223,7 @@
                 <item>
                  <widget class="QPushButton" name="btn_upload3">
                   <property name="styleSheet">
-                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 14px;</string>
+                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #D5D2CB; border-radius: 4px; padding: 6px 14px;</string>
                   </property>
                   <property name="text">
                    <string>Televerser</string>
@@ -236,7 +236,7 @@
              <item>
               <widget class="QFrame" name="card_inputs">
                <property name="styleSheet">
-                <string>background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px;</string>
+                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
                </property>
                <layout class="QVBoxLayout" name="verticalLayout_Inputs">
                 <property name="spacing">
@@ -245,7 +245,7 @@
                 <item>
                  <widget class="QLineEdit" name="input_signer_name">
                   <property name="styleSheet">
-                   <string>border: 1px solid #d1d5db; border-radius: 4px; padding: 8px; background: #ffffff; color: #1f2937;</string>
+                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
                   </property>
                   <property name="placeholderText">
                    <string>Nom du signataire</string>
@@ -255,7 +255,7 @@
                 <item>
                  <widget class="QLineEdit" name="input_signer_title">
                   <property name="styleSheet">
-                   <string>border: 1px solid #d1d5db; border-radius: 4px; padding: 8px; background: #ffffff; color: #1f2937;</string>
+                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
                   </property>
                   <property name="placeholderText">
                    <string>Titre du signataire</string>
@@ -265,7 +265,7 @@
                 <item>
                  <widget class="QLineEdit" name="input_city">
                   <property name="styleSheet">
-                   <string>border: 1px solid #d1d5db; border-radius: 4px; padding: 8px; background: #ffffff; color: #1f2937;</string>
+                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
                   </property>
                   <property name="placeholderText">
                    <string>Ville de la lettre (ex. Brazzaville)</string>
@@ -275,7 +275,7 @@
                 <item>
                  <widget class="QLineEdit" name="input_country">
                   <property name="styleSheet">
-                   <string>border: 1px solid #d1d5db; border-radius: 4px; padding: 8px; background: #ffffff; color: #1f2937;</string>
+                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
                   </property>
                   <property name="placeholderText">
                    <string>Pays (ex. Republique du Congo)</string>
@@ -311,7 +311,7 @@
             </size>
            </property>
            <property name="styleSheet">
-            <string>background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px;</string>
+            <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_Preview">
             <item>
@@ -327,7 +327,7 @@
             <item>
              <widget class="QLabel" name="lbl_progression">
               <property name="styleSheet">
-               <string>color: #059669; font-weight: bold; border: none;</string>
+               <string>color: #C8960C; font-weight: bold; border: none;</string>
               </property>
               <property name="text">
                <string>Progression de la configuration: 100%</string>
@@ -380,7 +380,7 @@
          <item>
           <widget class="QPushButton" name="btn_delete">
            <property name="styleSheet">
-            <string>color: #dc2626; background: transparent; border: 1px solid #dc2626; border-radius: 4px; padding: 8px 14px;</string>
+            <string>color: #B91C1C; background: transparent; border: 1px solid #B91C1C; border-radius: 4px; padding: 8px 14px;</string>
            </property>
            <property name="text">
             <string>Supprimer la configuration</string>
@@ -390,7 +390,7 @@
          <item>
           <widget class="QPushButton" name="btn_update">
            <property name="styleSheet">
-            <string>color: #ffffff; background-color: #047857; border-radius: 4px; padding: 8px 14px; font-weight: bold;</string>
+            <string>color: #000000; background-color: #C8960C; border-radius: 4px; padding: 8px 14px; font-weight: bold;</string>
            </property>
            <property name="text">
             <string>Mettre a jour la configuration</string>

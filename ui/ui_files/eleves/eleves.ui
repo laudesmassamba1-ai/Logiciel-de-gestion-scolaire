@@ -14,7 +14,7 @@
    <string>Gestion des Eleves</string>
   </property>
   <property name="styleSheet">
-   <string>background-color: #f8fafc; font-family: 'Segoe UI', sans-serif;</string>
+   <string>background-color: #EDEAE4; font-family: 'Segoe UI', sans-serif;</string>
   </property>
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
@@ -39,7 +39,7 @@
        <item>
         <widget class="QLabel" name="lbl_page_title">
          <property name="styleSheet">
-          <string>color: #0f172a; font-size: 24px; font-weight: bold;</string>
+          <string>color: #000000; font-size: 24px; font-weight: bold;</string>
          </property>
          <property name="text">
           <string>Gestion des Eleves</string>
@@ -49,7 +49,7 @@
        <item>
         <widget class="QLabel" name="lbl_page_subtitle">
          <property name="styleSheet">
-          <string>color: #64748b; font-size: 13px;</string>
+          <string>color: #333333; font-size: 13px;</string>
          </property>
          <property name="text">
           <string>Liste des effectifs, inscriptions et suivis scolaires</string>
@@ -74,7 +74,7 @@
      <item>
       <widget class="QPushButton" name="btn_export_eleves">
        <property name="styleSheet">
-        <string>background-color: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Exporter la Liste</string>
@@ -84,7 +84,7 @@
      <item>
       <widget class="QPushButton" name="btn_add_eleve">
        <property name="styleSheet">
-        <string>background-color: #047857; color: white; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
+        <string>background-color: #C8960C; color: #000000; border: none; border-radius: 6px; padding: 10px 16px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Inscrire un Eleve</string>
@@ -101,13 +101,13 @@
      <item>
       <widget class="QFrame" name="card_total">
        <property name="styleSheet">
-        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px; padding: 14px;</string>
        </property>
        <layout class="QVBoxLayout" name="v1">
         <item>
          <widget class="QLabel" name="t1">
           <property name="styleSheet">
-           <string>color: #64748b; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
+           <string>color: #333333; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
           </property>
           <property name="text">
            <string>Total Eleves</string>
@@ -117,7 +117,7 @@
         <item>
          <widget class="QLabel" name="v1_val">
           <property name="styleSheet">
-           <string>color: #1d4ed8; font-size: 22px; font-weight: bold;</string>
+           <string>color: #1E40AF; font-size: 22px; font-weight: bold;</string>
           </property>
           <property name="text">
            <string>103</string>
@@ -130,13 +130,13 @@
      <item>
       <widget class="QFrame" name="card_preins">
        <property name="styleSheet">
-        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px; padding: 14px;</string>
        </property>
        <layout class="QVBoxLayout" name="v2">
         <item>
          <widget class="QLabel" name="t2">
           <property name="styleSheet">
-           <string>color: #64748b; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
+           <string>color: #333333; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
           </property>
           <property name="text">
            <string>Pre-inscriptions</string>
@@ -159,13 +159,13 @@
      <item>
       <widget class="QFrame" name="card_actifs">
        <property name="styleSheet">
-        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px; padding: 14px;</string>
        </property>
        <layout class="QVBoxLayout" name="v3">
         <item>
          <widget class="QLabel" name="t3">
           <property name="styleSheet">
-           <string>color: #64748b; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
+           <string>color: #333333; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
           </property>
           <property name="text">
            <string>Eleves Actifs</string>
@@ -175,7 +175,7 @@
         <item>
          <widget class="QLabel" name="v3_val">
           <property name="styleSheet">
-           <string>color: #059669; font-size: 22px; font-weight: bold;</string>
+           <string>color: #C8960C; font-size: 22px; font-weight: bold;</string>
           </property>
           <property name="text">
            <string>103</string>
@@ -188,13 +188,13 @@
      <item>
       <widget class="QFrame" name="card_inactifs">
        <property name="styleSheet">
-        <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;</string>
+        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px; padding: 14px;</string>
        </property>
        <layout class="QVBoxLayout" name="v4">
         <item>
          <widget class="QLabel" name="t4">
           <property name="styleSheet">
-           <string>color: #64748b; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
+           <string>color: #333333; font-size: 11px; font-weight: bold; text-transform: uppercase;</string>
           </property>
           <property name="text">
            <string>Eleves Inactifs</string>
@@ -204,7 +204,7 @@
         <item>
          <widget class="QLabel" name="v4_val">
           <property name="styleSheet">
-           <string>color: #64748b; font-size: 22px; font-weight: bold;</string>
+           <string>color: #333333; font-size: 22px; font-weight: bold;</string>
           </property>
           <property name="text">
            <string>0</string>
@@ -219,13 +219,13 @@
    <item>
     <widget class="QFrame" name="filterFrame">
      <property name="styleSheet">
-      <string>background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;</string>
+      <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px; padding: 10px;</string>
      </property>
      <layout class="QHBoxLayout" name="filterLayout">
       <item>
        <widget class="QLineEdit" name="search_eleve">
         <property name="styleSheet">
-         <string>padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;</string>
+         <string>padding: 8px; border: 1px solid #D5D2CB; border-radius: 4px;</string>
         </property>
         <property name="placeholderText">
          <string>Rechercher par nom, prenom ou matricule...</string>
@@ -235,7 +235,7 @@
       <item>
        <widget class="QComboBox" name="combo_classe">
         <property name="styleSheet">
-         <string>padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;</string>
+         <string>padding: 8px; border: 1px solid #D5D2CB; border-radius: 4px;</string>
         </property>
         <item>
          <property name="text">
@@ -292,7 +292,7 @@
       <item>
        <widget class="QComboBox" name="combo_statut">
         <property name="styleSheet">
-         <string>padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;</string>
+         <string>padding: 8px; border: 1px solid #D5D2CB; border-radius: 4px;</string>
         </property>
         <item>
          <property name="text">
@@ -319,7 +319,7 @@
       <item>
        <widget class="QPushButton" name="btn_apply_filter_eleves">
         <property name="styleSheet">
-         <string>background-color: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 16px; font-weight: bold;</string>
+         <string>background-color: #EDEAE4; color: #000000; border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px 16px; font-weight: bold;</string>
         </property>
         <property name="text">
          <string>Filtrer</string>
@@ -334,23 +334,23 @@
      <property name="styleSheet">
       <string>
        QTableWidget {
-           background-color: #ffffff;
-           border: 1px solid #e2e8f0;
+           background-color: #FFFFFF;
+           border: 1px solid #D5D2CB;
            border-radius: 8px;
-           gridline-color: #f1f5f9;
+           gridline-color: #EDEAE4;
            font-size: 13px;
        }
        QHeaderView::section {
-           background-color: #f8fafc;
-           color: #475569;
+           background-color: #EDEAE4;
+           color: #333333;
            font-weight: bold;
            padding: 10px;
            border: none;
-           border-bottom: 1px solid #e2e8f0;
+           border-bottom: 1px solid #D5D2CB;
        }
        QTableWidget::item {
            padding: 0px 8px;
-           border-bottom: 1px solid #f1f5f9;
+           border-bottom: 1px solid #EDEAE4;
        }
       </string>
      </property>
@@ -411,7 +411,7 @@
    <item>
     <widget class="QLabel" name="lbl_empty_state">
      <property name="styleSheet">
-      <string>color: #94a3b8; font-size: 13px; padding: 30px; qproperty-alignment: AlignCenter;</string>
+      <string>color: #333333; font-size: 13px; padding: 30px; qproperty-alignment: AlignCenter;</string>
      </property>
      <property name="text">
       <string>Aucun eleve ne correspond a cette recherche.</string>

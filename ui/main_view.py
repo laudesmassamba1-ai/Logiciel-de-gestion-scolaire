@@ -1,10 +1,10 @@
 from PyQt5.QtCore import Qt, QPropertyAnimation
 from PyQt5.QtWidgets import (QLabel, QMainWindow, QMessageBox, QWidget,
                              QGraphicsOpacityEffect, QVBoxLayout,
-                             QStackedWidget)
+                             QStackedWidget, QFrame)
 
 from api import api_disponible
-from core.config import APP_NAME, ROLE_LABELS, QSS_SIDEBAR, C_BG
+from core.config import APP_NAME, ROLE_LABELS, C_BG, C_GOLD_LIGHT, C_GOLD_PRESSED, C_BLUE_LIGHT, C_BLUE, C_RED
 from ui import pages
 from ui.loader import apply_ui
 from ui.workers import run_async
@@ -29,7 +29,6 @@ NAV_PAGES = {
 }
 
 DASHBOARD_BUILDERS = {
-    "admin": pages.dashboard_admin,
     "directeur": pages.dashboard_directeur,
     "gestionnaire": pages.dashboard_gestionnaire,
 }
@@ -63,7 +62,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 600)
         self.setWindowTitle(f"{APP_NAME} - {user['nom_complet']}")
         apply_ui("main.ui", self)
-        self.setStyleSheet(f"QMainWindow {{ background-color: {C_BG}; }}\n{QSS_SIDEBAR}")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C_BG}; }}")
 
         self.lbl_user_name.setText(user["nom_complet"])
         self.lbl_user_role.setText(ROLE_LABELS.get(user["role"], user["role"]))
@@ -81,7 +80,7 @@ class MainWindow(QMainWindow):
 
 
         self._wire_nav()
-        default = "dashboard" if user["role"] in {"admin", "directeur", "gestionnaire"} else "comptes"
+        default = "dashboard" if user["role"] in {"directeur", "gestionnaire"} else "dashboard"
         self.navigate(default)
 
     def _refresh_api_status(self):
@@ -91,7 +90,7 @@ class MainWindow(QMainWindow):
         self.lbl_api_status.setText("Mode Local")
         self.lbl_api_status.setStyleSheet(
             "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
-            " background-color: #fef9c3; color: #854d0e;")
+            f" background-color: {C_GOLD_LIGHT}; color: {C_GOLD_PRESSED};")
 
         def _check():
             try:
@@ -106,7 +105,7 @@ class MainWindow(QMainWindow):
                 self.lbl_api_status.setText("En Ligne")
                 self.lbl_api_status.setStyleSheet(
                     "padding: 2px 10px; border-radius: 4px; font-weight: bold;"
-                    " background-color: #dcfce7; color: #166534;")
+                    f" background-color: {C_BLUE_LIGHT}; color: {C_BLUE};")
 
         run_async(_check, _on)
 
@@ -126,12 +125,11 @@ class MainWindow(QMainWindow):
                 btn.setVisible(False)
 
     def _get_page(self, page_name):
-
         widget = self._pages.get(page_name)
         if widget is not None:
             return widget
         if page_name == "dashboard":
-            builder = DASHBOARD_BUILDERS.get(self.user["role"], pages.dashboard_admin)
+            builder = DASHBOARD_BUILDERS.get(self.user["role"], pages.dashboard_directeur)
         else:
             builder = BUILDERS.get(page_name)
         if builder is None:
@@ -142,10 +140,18 @@ class MainWindow(QMainWindow):
             builder(widget, self.ctx)
         except Exception as exc:
             from PyQt5.QtWidgets import QLabel, QVBoxLayout
+            old = widget.layout()
+            if old is not None:
+                while old.count():
+                    item = old.takeAt(0)
+                    w = item.widget()
+                    if w:
+                        w.setParent(None)
+                old.setParent(None)
             lay = QVBoxLayout(widget)
             label = QLabel(f"Erreur de chargement ({page_name}) : {exc}")
             label.setWordWrap(True)
-            label.setStyleSheet("color: #dc2626; padding: 20px;")
+            label.setStyleSheet(f"color: {C_RED}; padding: 20px;")
             lay.addWidget(label)
         self.stackedWidget.addWidget(widget)
         self._pages[page_name] = widget

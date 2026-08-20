@@ -1,19 +1,23 @@
 import datetime
 from pathlib import Path
 
-from core.config import CRENEAUX, DOCS_DIR, JOURS
+from core.config import CRENEAUX, DOCS_DIR, JOURS, VILLE_DEFAUT
 from database import db
 from repositories import repos
 from ui.widgets import fmt_money
 
 STYLE = """
-body { font-family: 'Segoe UI', sans-serif; margin: 40px; color: #0f172a; }
-h1 { color: #047857; }
+body { font-family: 'Inter', 'Segoe UI', sans-serif; margin: 40px; color: #1e293b; }
+h1 { color: #047857; font-size: 22px; }
+h2 { color: #1e293b; font-size: 18px; }
+h3 { color: #334155; font-size: 15px; }
 table { border-collapse: collapse; width: 100%; margin-top: 16px; }
-th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-size: 13px; }
-th { background-color: #f8fafc; }
-.header { display: flex; justify-content: space-between; border-bottom: 2px solid #047857; padding-bottom: 8px; }
-.meta { color: #64748b; font-size: 12px; margin-top: 4px; }
+th, td { border: 1px solid #e2e8f0; padding: 10px 14px; text-align: left; font-size: 13px; }
+th { background-color: #f8fafc; color: #475569; font-weight: 700; }
+.header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 20px; }
+.meta { color: #64748b; font-size: 12px; }
+p { color: #334155; }
+strong { color: #1e293b; }
 """
 
 def _open_in_browser(path: Path):
@@ -57,19 +61,23 @@ def export_eleves_csv(eleves):
     _open_in_browser(path)
 
 def bulletins(classe_id, periode):
-
     classe = repos.classe_by_id(classe_id)
     nom_classe = classe["nom"] if classe else "?"
     eleves = repos.eleves(classe_id=classe_id)
-    matieres = repos.matieres()
+    progs = repos.programmes(classe_id=classe_id)
+    matieres = [repos.matiere_by_id(p["matiere_id"]) for p in progs if p.get("matiere_id")]
+    all_notes = repos.notes_classe(classe_id, periode)
+    notes_index = {}
+    for n in all_notes:
+        key = (n["eleve_id"], n["matiere_id"])
+        notes_index[key] = n
     corps = [f"<h1>Bulletins - {nom_classe}</h1>", f"<p class='meta'>Periode : {periode} - Effectif : {len(eleves)}</p>"]
     for eleve in eleves:
         lignes = ""
         total = 0.0
         coefs = 0.0
         for m in matieres:
-            note = repos.notes_for(classe_id, m["id"], periode)
-            row = next((n for n in note if n["eleve_id"] == eleve["id"]), None)
+            row = notes_index.get((eleve["id"], m["id"]))
             if row and (row["devoir1"] is not None or row["devoir2"] is not None or row["composition"] is not None):
                 d1 = row["devoir1"] or 0
                 d2 = row["devoir2"] or 0
@@ -99,7 +107,7 @@ def recu_paiement(eleve, montant, mode, reference):
 
     date = datetime.datetime.now().strftime("%d/%m/%Y")
     params = repos.parametres()
-    ville = params.get("ville", "") or "Abidjan"
+    ville = params.get("ville", "") or VILLE_DEFAUT
     corps = f"""
     {_entete_doc()}
     <h2 style="text-align:center;">RECU DE PAIEMENT</h2>
@@ -117,7 +125,7 @@ def recu_paiement(eleve, montant, mode, reference):
 def certificat_scolarite(eleve, params):
 
     date = datetime.datetime.now().strftime("%d/%m/%Y")
-    ville = params.get("ville", "") or "Abidjan"
+    ville = params.get("ville", "") or VILLE_DEFAUT
     signataire = params.get("signataire_nom", "")
     titre = params.get("signataire_titre", "")
     corps = f"""

@@ -15,24 +15,24 @@
   </property>
   <property name="styleSheet">
    <string>
-    QMainWindow { background-color: #f1f5f9; }
-    #sidebar { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #047857, stop:1 #065f46); border: none; }
-    #lbl_logo { color: #ffffff; font-size: 17px; font-weight: 700; padding: 8px 20px 16px 20px; letter-spacing: 0.5px; }
-    #sidebar QPushButton {
-        color: #d1fae5; text-align: left; padding: 12px 22px; border: none; margin: 1px 12px;
-        border-radius: 10px; font-size: 13px; font-weight: 500; background: transparent;
-    }
-    #sidebar QPushButton:hover { background-color: rgba(255,255,255,0.10); color: #ffffff; }
-    #sidebar QPushButton:pressed { background-color: rgba(255,255,255,0.18); }
-    #sidebar QPushButton:checked {
-        background-color: #ffffff; color: #047857; font-weight: 700;
-        border-left: 3px solid #34d399;
-    }
-    #userBox { background-color: rgba(255,255,255,0.08); border-top: 1px solid rgba(255,255,255,0.15); border-radius: 12px; margin: 8px 12px; }
-    #lbl_user_name { color: #ffffff; font-size: 13px; font-weight: 700; }
-    #lbl_user_role { color: #a7f3d0; font-size: 11px; }
-    #btn_logout { color: #fca5a5; text-align: left; border: none; font-size: 12px; padding: 6px 0px; background: transparent; border-radius: 8px; }
-    #btn_logout:hover { color: #ffffff; background-color: rgba(255,255,255,0.10); }
+    QMainWindow { background-color: #EDEAE4; }
+    #sidebar { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #C8960C, stop:1 #A67B0A); border: none; }
+    #lbl_logo { color: #000000; font-size: 17px; font-weight: 700; padding: 8px 20px 16px 20px; letter-spacing: 0.5px; }
+     #sidebar QPushButton {
+         color: #000000; text-align: left; padding: 12px 22px; border: none; margin: 1px 12px;
+         border-radius: 10px; font-size: 13px; font-weight: 500; background: transparent;
+     }
+     #sidebar QPushButton:hover { background-color: rgba(255,255,255,0.10); color: #000000; }
+     #sidebar QPushButton:pressed { background-color: rgba(255,255,255,0.18); }
+     #sidebar QPushButton:checked {
+         background-color: #C8960C; color: #000000; font-weight: 700;
+         border-left: 3px solid #FDE68A;
+     }
+     #userBox { background-color: rgba(255,255,255,0.08); border-top: 1px solid rgba(255,255,255,0.15); border-radius: 12px; margin: 8px 12px; }
+     #lbl_user_name { color: #000000; font-size: 13px; font-weight: 700; }
+     #lbl_user_role { color: #333333; font-size: 11px; }
+     #btn_logout { color: #000000; text-align: left; border: none; font-size: 12px; padding: 6px 0px; background: transparent; border-radius: 8px; }
+     #btn_logout:hover { color: #000000; background-color: rgba(255,255,255,0.10); }
    </string>
   </property>
   <widget class="QWidget" name="centralwidget">
@@ -79,7 +79,7 @@
        <item>
         <widget class="QLabel" name="lbl_logo">
          <property name="styleSheet">
-          <string>color: #ffffff; font-size: 18px; font-weight: bold; padding-left: 15px; margin-bottom: 20px;</string>
+          <string>color: #000000; font-size: 18px; font-weight: bold; padding-left: 15px; margin-bottom: 20px;</string>
          </property>
          <property name="text">
           <string>Gestion Scolaire</string>
@@ -304,13 +304,13 @@
       </layout>
      </widget>
     </item>
-    <item>
-     <widget class="QStackedWidget" name="stackedWidget">
-      <property name="styleSheet">
-       <string>background-color: #f8fafc;</string>
-      </property>
-     </widget>
-    </item>
+     <item>
+      <widget class="QStackedWidget" name="stackedWidget">
+       <property name="styleSheet">
+        <string>background-color: #EDEAE4;</string>
+       </property>
+      </widget>
+     </item>
    </layout>
   </widget>
  </widget>

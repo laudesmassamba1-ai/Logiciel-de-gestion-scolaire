@@ -41,42 +41,74 @@ jobs:
         shell: python
         run: from build_app import _build_windows; _build_windows()
 
-      - name: Prepare signing certificate
-        shell: pwsh
-        env:
-          WIN_SIGN_PFX: ${{ secrets.WIN_SIGN_PFX }}
-          WIN_SIGN_PASSWORD: ${{ secrets.WIN_SIGN_PASSWORD }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          if ($env:WIN_SIGN_PFX) {
-            if (-not $env:WIN_SIGN_PASSWORD) { throw "WIN_SIGN_PASSWORD manquant" }
-            $password = $env:WIN_SIGN_PASSWORD
-            [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:WIN_SIGN_PFX))
-          } else {
-            $password = "gestion-scolaire-ci"
-            $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Gestion Scolaire, O=Gestion Scolaire" -CertStoreLocation Cert:\CurrentUser\My -KeyExportPolicy Exportable -KeySpec Signature -KeyUsage DigitalSignature -NotAfter (Get-Date).AddYears(3)
-            Export-PfxCertificate -Cert $cert -FilePath "$env:RUNNER_TEMP\cert.pfx" -Password (ConvertTo-SecureString -String $password -Force -AsPlainText) | Out-Null
-            Remove-Item -Path "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force
-          }
-          Write-Output "CERT_PATH=$env:RUNNER_TEMP\cert.pfx" >> $env:GITHUB_ENV
-          Write-Output "CERT_PASSWORD=$password" >> $env:GITHUB_ENV
+      - name: Install Windows SDK SignTool
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '17.0'
 
-      - name: Sign binaries and installer
+      - name: Sign EXE with SignPath.io (free for open source)
+        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
+        uses: signpath/action@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          certificate-profile-id: ${{ secrets.SIGNPATH_CERTIFICATE_PROFILE_ID }}
+          input-file: dist/GestionScolaire/GestionScolaire.exe
+          output-file: dist/GestionScolaire/GestionScolaire-signed.exe
+          sign-operation: SignToolOperation_Sign
+          sign-options: '{"signingMode":"SignToolSignMode_RealSign","timestampDigestAlgorithm":"TimestampDigestAlgorithm_Sha256"}'
+
+      - name: Replace EXE with signed version
+        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          if (Test-Path "dist\GestionScolaire\GestionScolaire-signed.exe") {
+            Remove-Item "dist\GestionScolaire\GestionScolaire.exe" -Force
+            Move-Item "dist\GestionScolaire\GestionScolaire-signed.exe" "dist\GestionScolaire\GestionScolaire.exe"
+            Write-Output "EXE signe remplace"
+          } else {
+            Write-Output "Aucun EXE signe trouve, conservation de l'original"
+          }
+
+      - name: Build installer
+        shell: python
+        run: from build_app import _build_installer; _build_installer()
+
+      - name: Sign installer with SignPath.io
+        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
+        uses: signpath/action@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          certificate-profile-id: ${{ secrets.SIGNPATH_CERTIFICATE_PROFILE_ID }}
+          input-file: installers/GestionScolaire-Setup-${{ steps.version.outputs.app_version }}.exe
+          output-file: installers/GestionScolaire-Setup-${{ steps.version.outputs.app_version }}-signed.exe
+          sign-operation: SignToolOperation_Sign
+          sign-options: '{"signingMode":"SignToolSignMode_RealSign","timestampDigestAlgorithm":"TimestampDigestAlgorithm_Sha256"}'
+
+      - name: Replace installer with signed version
+        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "installers\GestionScolaire-Setup-*-signed.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($setup) {
+            Remove-Item "installers\GestionScolaire-Setup-${{ steps.version.outputs.app_version }}.exe" -Force
+            Move-Item $setup.FullName "installers\GestionScolaire-Setup-${{ steps.version.outputs.app_version }}.exe"
+            Write-Output "Installeur signe remplace"
+          } else {
+            Write-Output "Aucun installeur signe trouve, conservation de l'original"
+          }
+
+      - name: Verify signatures
+        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
+        shell: pwsh
+        run: |
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $signtool) { throw "signtool.exe introuvable" }
-          if (Test-Path "dist\GestionScolaire\GestionScolaire.exe") {
-            & $signtool.FullName sign /f "$env:CERT_PATH" /p $env:CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\GestionScolaire\GestionScolaire.exe"
-            Write-Output "Binaire signe"
-          }
+          Write-Output "Verification de l'EXE:"
+          & $signtool.FullName verify /pa "dist\GestionScolaire\GestionScolaire.exe"
           $setup = Get-ChildItem "installers\GestionScolaire-Setup-*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($setup) {
-            & $signtool.FullName sign /f "$env:CERT_PATH" /p $env:CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup.FullName
-            Write-Output "Installeur signe"
-          } else {
-            Write-Output "Pas d'installeur a signer (Inno Setup non disponible?)" -ForegroundColor Yellow
+            Write-Output "Verification de l'installeur:"
+            & $signtool.FullName verify /pa $setup.FullName
           }
 
       - uses: actions/upload-artifact@v4

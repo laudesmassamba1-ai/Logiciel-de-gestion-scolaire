@@ -9,7 +9,6 @@ class ApiError(Exception):
     pass
 
 
-
 def _request(method, path, **kwargs):
     try:
         resp = httpx.request(method, API_BASE_URL + path, timeout=API_TIMEOUT, **kwargs)
@@ -31,7 +30,6 @@ def _request(method, path, **kwargs):
     return payload, None
 
 
-
 class _CacheDispo:
 
     _last = 0.0
@@ -47,7 +45,6 @@ class _CacheDispo:
         return cls._value
 
 
-
 def api_disponible(force=False) -> bool:
     try:
         return bool(_CacheDispo.get(force=force))
@@ -56,8 +53,6 @@ def api_disponible(force=False) -> bool:
 
 
 class ApiClient:
-
-
 
 
     def total_eleves(self):
@@ -123,7 +118,6 @@ class ApiClient:
         if err:
             return None, err
         return data.get("parents", []), None
-
 
 
     def total_classe(self):
@@ -197,7 +191,6 @@ class ApiClient:
         if err:
             return None, err
         return data.get("annee_scolaire_active"), None
-
 
 
     def tarifs_scolarite(self):
@@ -300,7 +293,6 @@ class ApiClient:
         return data.get("paiement", []), None
 
 
-
     def total_enseignant(self):
         data, err = _request("GET", "/total_enseignant")
         if err:
@@ -366,7 +358,6 @@ class ApiClient:
 
     def supprimer_programme(self, identifiant):
         return _request("DELETE", f"/supprimerProgramme/{identifiant}")
-
 
 
     def total_note(self):
