@@ -50,9 +50,16 @@ jobs:
         id: version
         run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
 
+      - name: Check icon files
+        run: |
+          echo "Checking icon files..."
+          ls -la assets/
+          echo "ICON_PATH: $(pwd)/assets/icon.ico"
+          echo "PNG_PATH: $(pwd)/assets/icon.png"
+          test -f assets/icon.ico && echo "icon.ico exists" || echo "icon.ico missing"
+          test -f assets/icon.png && echo "icon.png exists" || echo "icon.png missing"
+
       - name: Generate icon
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: |
           import sys
           sys.path.insert(0, ".")
