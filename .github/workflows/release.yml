@@ -49,14 +49,11 @@ jobs:
         id: version
         run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
 
-      - name: Generate icon
-        env:
-          QT_QPA_PLATFORM: offscreen
+      - name: Check icon files
         run: |
-          import sys
-          sys.path.insert(0, ".")
-          from build_app import _ensure_icon
-          _ensure_icon()
+          ls -la assets
+          test -f assets/icon.ico
+          test -f assets/icon.png
 
       - name: Build with PyInstaller
         run: |
@@ -129,13 +126,12 @@ jobs:
         shell: bash
         run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
 
-      - name: Generate icon
-        shell: python
+      - name: Check icon files
+        shell: bash
         run: |
-          import sys
-          sys.path.insert(0, ".")
-          from build_app import _ensure_icon
-          _ensure_icon()
+          ls -la assets
+          test -f assets/icon.ico
+          test -f assets/icon.png
 
       - name: Build application
         shell: python

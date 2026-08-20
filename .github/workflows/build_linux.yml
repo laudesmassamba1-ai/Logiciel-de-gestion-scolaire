@@ -52,19 +52,9 @@ jobs:
 
       - name: Check icon files
         run: |
-          echo "Checking icon files..."
-          ls -la assets/
-          echo "ICON_PATH: $(pwd)/assets/icon.ico"
-          echo "PNG_PATH: $(pwd)/assets/icon.png"
-          test -f assets/icon.ico && echo "icon.ico exists" || echo "icon.ico missing"
-          test -f assets/icon.png && echo "icon.png exists" || echo "icon.png missing"
-
-      - name: Generate icon
-        run: |
-          import sys
-          sys.path.insert(0, ".")
-          from build_app import _ensure_icon
-          _ensure_icon()
+          ls -la assets
+          test -f assets/icon.ico
+          test -f assets/icon.png
 
       - name: Build with PyInstaller
         run: |
