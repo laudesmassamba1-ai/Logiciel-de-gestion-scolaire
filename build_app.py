@@ -37,30 +37,37 @@ def _version() -> str:
 def _ensure_icon() -> Path:
     if ICON_PATH.exists() and PNG_PATH.exists():
         return ICON_PATH
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter
-    app = QGuiApplication([])
-    size = 256
-    image = QImage(size, size, QImage.Format_ARGB32)
-    image.fill(Qt.transparent)
-    painter = QPainter(image)
-    painter.setRenderHint(QPainter.Antialiasing)
-    painter.setPen(Qt.NoPen)
-    painter.setBrush(QColor('#047857'))
-    painter.drawRoundedRect(0, 0, size, size, size // 5, size // 5)
-    painter.setPen(QColor('white'))
-    painter.setFont(QFont('Segoe UI', 100, QFont.Bold))
-    painter.drawText(image.rect(), Qt.AlignCenter, 'GS')
-    painter.end()
-    ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-    saved = image.save(str(ICON_PATH), 'ICO') and image.save(str(PNG_PATH), 'PNG')
-    painter = None
-    image = None
-    app.quit()
-    app = None
-    if not saved:
-        sys.exit("Erreur : impossible de creer les icones assets/icon.ico et assets/icon.png")
-    return ICON_PATH
+    if os.environ.get('CI') == 'true':
+        print('CI detectee, generation d\'icone ignoree.')
+        return ICON_PATH
+    try:
+        from PyQt5.QtCore import Qt
+        from PyQt5.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter
+        app = QGuiApplication([])
+        size = 256
+        image = QImage(size, size, QImage.Format_ARGB32)
+        image.fill(Qt.transparent)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor('#047857'))
+        painter.drawRoundedRect(0, 0, size, size, size // 5, size // 5)
+        painter.setPen(QColor('white'))
+        painter.setFont(QFont('Segoe UI', 100, QFont.Bold))
+        painter.drawText(image.rect(), Qt.AlignCenter, 'GS')
+        painter.end()
+        ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        saved = image.save(str(ICON_PATH), 'ICO') and image.save(str(PNG_PATH), 'PNG')
+        painter = None
+        image = None
+        app.quit()
+        app = None
+        if not saved:
+            sys.exit("Erreur : impossible de creer les icones assets/icon.ico et assets/icon.png")
+        return ICON_PATH
+    except Exception as exc:
+        print(f"Generation d'icone ignoree ({exc})")
+        return ICON_PATH
 
 
 def _run(cmd: list) -> None:
