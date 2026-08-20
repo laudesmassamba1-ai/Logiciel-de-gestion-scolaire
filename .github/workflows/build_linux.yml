@@ -46,10 +46,14 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "app_version=$(python -c 'import build_app;print(build_app._version())')" >> "$GITHUB_OUTPUT"
+        run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
 
       - name: Generate icon
-        run: python -c "from build_app import _ensure_icon; _ensure_icon()"
+        run: |
+          import sys
+          sys.path.insert(0, ".")
+          from build_app import _ensure_icon
+          _ensure_icon()
 
       - name: Build with PyInstaller
         run: |
