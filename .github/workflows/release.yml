@@ -62,7 +62,11 @@ jobs:
             --workpath build
 
       - name: Create .deb package
-        run: python -c "from build_app import _build_deb; _build_deb()"
+        run: |
+          import sys
+          sys.path.insert(0, ".")
+          from build_app import _build_deb
+          _build_deb()
 
       - name: Create AppImage
         run: |

@@ -43,11 +43,19 @@ jobs:
 
       - name: Build application
         shell: python
-        run: from build_app import _build_windows; _build_windows()
+        run: |
+          import sys
+          sys.path.insert(0, ".")
+          from build_app import _build_windows
+          _build_windows()
 
       - name: Build installer
         shell: python
-        run: from build_app import _build_installer; _build_installer()
+        run: |
+          import sys
+          sys.path.insert(0, ".")
+          from build_app import _build_installer
+          _build_installer()
 
       - uses: actions/upload-artifact@v4
         with:
