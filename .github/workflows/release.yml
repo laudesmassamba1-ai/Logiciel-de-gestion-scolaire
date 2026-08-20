@@ -123,50 +123,9 @@ jobs:
         shell: python
         run: from build_app import _build_windows; _build_windows()
 
-      - name: Sign with SignPath.io (free for open source)
-        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
-        uses: signpath/action@v1
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          certificate-profile-id: ${{ secrets.SIGNPATH_CERTIFICATE_PROFILE_ID }}
-          input-file: dist/GestionScolaire/GestionScolaire.exe
-          output-file: dist/GestionScolaire/GestionScolaire-signed.exe
-          sign-operation: SignToolOperation_Sign
-          sign-options: '{"signingMode":"SignToolSignMode_RealSign","timestampDigestAlgorithm":"TimestampDigestAlgorithm_Sha256"}'
-
-      - name: Replace EXE with signed version
-        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
-        shell: pwsh
-        run: |
-          if (Test-Path "dist\GestionScolaire\GestionScolaire-signed.exe") {
-            Remove-Item "dist\GestionScolaire\GestionScolaire.exe" -Force
-            Move-Item "dist\GestionScolaire\GestionScolaire-signed.exe" "dist\GestionScolaire\GestionScolaire.exe"
-          }
-
       - name: Build installer
         shell: python
         run: from build_app import _build_installer; _build_installer()
-
-      - name: Sign installer with SignPath.io
-        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
-        uses: signpath/action@v1
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          certificate-profile-id: ${{ secrets.SIGNPATH_CERTIFICATE_PROFILE_ID }}
-          input-file: installers/GestionScolaire-Setup-${{ steps.version.outputs.app_version }}.exe
-          output-file: installers/GestionScolaire-Setup-${{ steps.version.outputs.app_version }}-signed.exe
-          sign-operation: SignToolOperation_Sign
-          sign-options: '{"signingMode":"SignToolSignMode_RealSign","timestampDigestAlgorithm":"TimestampDigestAlgorithm_Sha256"}'
-
-      - name: Replace installer with signed version
-        if: secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_CERTIFICATE_PROFILE_ID != ''
-        shell: pwsh
-        run: |
-          $setup = Get-ChildItem "installers\GestionScolaire-Setup-*-signed.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($setup) {
-            Remove-Item "installers\GestionScolaire-Setup-${{ steps.version.outputs.app_version }}.exe" -Force
-            Move-Item $setup.FullName "installers\GestionScolaire-Setup-${{ steps.version.outputs.app_version }}.exe"
-          }
 
       - uses: actions/upload-artifact@v4
         with:
