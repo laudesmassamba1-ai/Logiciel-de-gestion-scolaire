@@ -37,9 +37,6 @@ def _version() -> str:
 def _ensure_icon() -> Path:
     if ICON_PATH.exists() and PNG_PATH.exists():
         return ICON_PATH
-    if os.environ.get('CI') == 'true':
-        print('CI detectee, generation d\'icone ignoree.')
-        return ICON_PATH
     try:
         from PyQt5.QtCore import Qt
         from PyQt5.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter

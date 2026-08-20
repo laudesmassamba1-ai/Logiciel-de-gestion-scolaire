@@ -9,6 +9,8 @@ on:
 jobs:
   build-linux:
     runs-on: ubuntu-22.04
+    env:
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
         with:
@@ -101,6 +103,8 @@ jobs:
             *.AppImage
 
   build-windows:
+    env:
+      QT_QPA_PLATFORM: offscreen
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
