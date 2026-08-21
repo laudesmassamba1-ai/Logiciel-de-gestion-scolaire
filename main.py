@@ -8,8 +8,8 @@ from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from core.config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE
 from database import db
-from services import auth
-from ui.login_view import FirstSetupDialog
+from services import auth_service as auth
+from ui.login_view import FirstSetupDialog, LoginDialog
 from ui.main_view import MainWindow
 
 
@@ -47,6 +47,28 @@ def _excepthook(exc_type, exc_value, exc_tb):
     msg.exec_()
 
 
+def _demande_connexion():
+    """Affiche l'ecran de configuration initiale (aucun compte) ou l'ecran
+    de connexion. Retourne l'utilisateur connecte ou None."""
+    if not auth.has_accounts():
+        setup = FirstSetupDialog()
+        if setup.exec_() == FirstSetupDialog.Accepted:
+            user = setup.user
+            auth.save_session(user["id"])
+            return user
+        return None
+
+    # Session existante : reconnexion automatique du dernier utilisateur.
+    user = auth.get_saved_user()
+    if user is not None:
+        return user
+
+    login = LoginDialog()
+    if login.exec_() == LoginDialog.Accepted:
+        return login.user
+    return None
+
+
 def main():
     sys.excepthook = _excepthook
     _setup_high_dpi()
@@ -61,31 +83,22 @@ def main():
 
     db.init_db()
 
-    user = None
-
-    if not auth.has_accounts():
-        setup = FirstSetupDialog()
-        if setup.exec_() == FirstSetupDialog.Accepted:
-            user = setup.user
-            auth.save_session(user["id"])
-        else:
-            sys.exit(0)
-    else:
-        user = auth.get_saved_user()
+    # Boucle de session : apres une deconnexion, on revient a l'ecran de
+    # connexion au lieu de quitter l'application.
+    while True:
+        user = _demande_connexion()
         if user is None:
-            setup = FirstSetupDialog()
-            if setup.exec_() == FirstSetupDialog.Accepted:
-                user = setup.user
-                auth.save_session(user["id"])
-            else:
-                sys.exit(0)
+            sys.exit(0)
 
-    if user is None:
+        window = MainWindow(user)
+        window.showMaximized()
+        app.exec_()
+
+        # Fenetre fermee : si la session a ete effacee, c'est une
+        # deconnexion volontaire -> nouvel ecran de connexion.
+        if auth.get_saved_user() is None:
+            continue
         sys.exit(0)
-
-    window = MainWindow(user)
-    window.showMaximized()
-    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":

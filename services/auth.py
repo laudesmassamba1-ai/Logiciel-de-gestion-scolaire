@@ -69,15 +69,23 @@ class AuthService:
 
 
 class RoleAuthorizer:
+    """Controle d'acces par role. Principe: tout ce qui n'est pas
+    explicitement autorise est interdit (deny by default)."""
 
+    # Pages visibles dans la navigation, par role.
     NAV = {
         "directeur": ["dashboard", "comptes", "stats", "eleves", "classes", "cycles",
                        "notes", "presences", "planning", "caisse", "tarifs",
                        "paiements", "personnel", "programmes", "parametres"],
+        # Le gestionnaire n'a PAS acces au personnel/RH, aux parametres
+        # de l'etablissement ni a la gestion des comptes.
         "gestionnaire": ["dashboard", "stats", "eleves", "classes", "cycles", "notes",
-                         "presences", "planning", "caisse", "tarifs", "paiements",
-                         "personnel", "programmes", "parametres"],
+                          "presences", "planning", "caisse", "tarifs", "paiements",
+                          "programmes"],
     }
+
+    # Pages reservees au directeur, interdites d'edition pour les autres.
+    DIRECTEUR_ONLY = ("comptes", "parametres", "personnel")
 
     def __init__(self, role):
         self.role = role if role in ROLES else "gestionnaire"
@@ -86,8 +94,8 @@ class RoleAuthorizer:
         return page in self.NAV.get(self.role, [])
 
     def can_edit(self, page):
-        if page == "comptes":
+        if not self.allowed(page):
+            return False
+        if page in self.DIRECTEUR_ONLY:
             return self.role == "directeur"
-        if page == "parametres":
-            return self.role == "directeur"
-        return self.role in ("directeur", "gestionnaire")
+        return True

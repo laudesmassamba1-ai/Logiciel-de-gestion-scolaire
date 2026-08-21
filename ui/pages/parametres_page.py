@@ -19,6 +19,16 @@ from core.config import STYLE_BTN_PRIMARY, C_TEXT, C_BORDER, C_GOLD, C_GOLD_BG, 
 def parametres(page, ctx):
     if page.layout() is not None:
         return
+    if not ctx.can_edit("parametres"):
+        from PyQt5.QtWidgets import QLabel as _Lbl
+        refuse = _Lbl("Acces reserve au directeur : seul le directeur peut "
+                      "modifier les parametres de l'etablissement.")
+        refuse.setStyleSheet("color: #B91C1C; font-size: 14px; padding: 30px;")
+        refuse.setWordWrap(True)
+        refuse.setAlignment(Qt.AlignCenter)
+        lay_refus = QVBoxLayout(page)
+        lay_refus.addWidget(refuse)
+        return
     apply_ui("parametres/parametres.ui", page)
 
     from PyQt5.QtWidgets import QGroupBox, QListWidget, QLabel as QLbl
@@ -86,7 +96,11 @@ def parametres(page, ctx):
         page.input_signer_title.setText(params.get("signataire_titre", ""))
         page.input_city.setText(params.get("ville", ""))
         page.input_country.setText(params.get("pays", ""))
-        page.lbl_progression.setText("Progression de la configuration: 100%")
+        remplis = sum(1 for cle in ("signataire_nom", "signataire_titre", "ville", "pays",
+                                    "bandeau_haut", "bandeau_bas", "signature")
+                      if params.get(cle))
+        page.lbl_progression.setText(
+            f"Progression de la configuration : {round(remplis / 7 * 100)}%")
         _display_images(params)
 
     def _display_images(params):

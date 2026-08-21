@@ -21,6 +21,11 @@ class TestRoleAuthorizer:
         auth = RoleAuthorizer("gestionnaire")
         assert auth.can_edit("parametres") is False
 
+    def test_gestionnaire_cannot_access_personnel(self):
+        auth = RoleAuthorizer("gestionnaire")
+        assert auth.allowed("personnel") is False
+        assert auth.can_edit("personnel") is False
+
     def test_gestionnaire_can_edit_notes(self):
         auth = RoleAuthorizer("gestionnaire")
         assert auth.can_edit("notes") is True
@@ -42,14 +47,19 @@ class TestRoleAuthorizer:
 
     def test_gestionnaire_allowed_pages(self):
         auth = RoleAuthorizer("gestionnaire")
-        for page in ("dashboard", "stats", "eleves", "classes", "notes",
+        for page in ("dashboard", "stats", "eleves", "classes", "cycles", "notes",
                      "presences", "planning", "caisse", "tarifs", "paiements",
-                     "personnel", "programmes", "parametres"):
+                     "programmes"):
             assert auth.allowed(page) is True
 
     def test_gestionnaire_not_allowed_comptes(self):
         auth = RoleAuthorizer("gestionnaire")
         assert auth.allowed("comptes") is False
+
+    def test_gestionnaire_denied_by_default(self):
+        auth = RoleAuthorizer("gestionnaire")
+        assert auth.allowed("page_inexistante") is False
+        assert auth.can_edit("page_inexistante") is False
 
     def test_unknown_role_defaults_to_gestionnaire(self):
         auth = RoleAuthorizer("unknown_role")

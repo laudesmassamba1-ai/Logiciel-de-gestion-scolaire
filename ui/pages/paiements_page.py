@@ -2,9 +2,9 @@ from functools import partial
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QComboBox, QFormLayout, QPushButton, QTabWidget, QTableWidgetItem, QVBoxLayout,
-    QWidget,
+    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox,
+    QComboBox, QFormLayout, QPushButton, QTabWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
 from repositories import repos
@@ -35,9 +35,14 @@ def paiements(page, ctx):
         for a in repos.annees_scolaires():
             combo.addItem(a["libelle"], a["libelle"])
 
+    TYPES_FRAIS = ["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"]
+    MODES = ["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"]
+
     def _mode_options(combo):
+        combo.clear()
         combo.addItem("Tous les modes", None)
-        combo.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"])
+        for m in MODES:
+            combo.addItem(m, m)
 
     onglet_paiements = QWidget()
     lay_p = QVBoxLayout(onglet_paiements)
@@ -48,7 +53,8 @@ def paiements(page, ctx):
         combo_classe_p.addItem(c["nom"], c["id"])
     combo_type_p = QComboBox()
     combo_type_p.addItem("Tous les types", None)
-    combo_type_p.addItems(["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"])
+    for t in TYPES_FRAIS:
+        combo_type_p.addItem(t, t)
     combo_mode_p = QComboBox()
     _mode_options(combo_mode_p)
     filtre_p.addWidget(QLabel("Classe :"))
@@ -183,10 +189,12 @@ def paiements(page, ctx):
     _annee_options(combo_annee_b)
     combo_trimestre_b = QComboBox()
     combo_trimestre_b.addItem("Tous les trimestres", None)
-    combo_trimestre_b.addItems(list(PERIODES))
+    for p in PERIODES:
+        combo_trimestre_b.addItem(p, p)
     combo_type_b = QComboBox()
     combo_type_b.addItem("Tous les types", None)
-    combo_type_b.addItems(["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"])
+    for t in TYPES_FRAIS:
+        combo_type_b.addItem(t, t)
     combo_classe_b = QComboBox()
     combo_classe_b.addItem("Toutes les classes", None)
     for c in repos.classes():
@@ -218,7 +226,9 @@ def paiements(page, ctx):
     lay_b.addWidget(table_b)
 
     def refresh_b():
-        _reload_combo(combo_annee_b, [(a["libelle"], a["libelle"]) for a in repos.annees_scolaires()])
+        _reload_combo(combo_annee_b,
+                      [("Toutes les annees", None)] +
+                      [(a["libelle"], a["libelle"]) for a in repos.annees_scolaires()])
         _reload_combo(combo_classe_b, _classe_items())
         rows = repos.paiements(
             annee_scolaire=combo_annee_b.currentData() or None,
@@ -266,7 +276,6 @@ def open_paiement_dialog(parent, ctx, on_created):
     lay = QVBoxLayout(dlg)
     form = QFormLayout()
     combo_classe = QComboBox()
-    combo_classe.addItem("Toutes les classes", None)
     for c in repos.classes():
         combo_classe.addItem(c["nom"], c["id"])
     combo_eleve = QComboBox()
@@ -276,7 +285,8 @@ def open_paiement_dialog(parent, ctx, on_created):
     combo_mode.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"])
     combo_trimestre = QComboBox()
     combo_trimestre.addItem("-- Aucun --", "")
-    combo_trimestre.addItems(list(PERIODES))
+    for p in PERIODES:
+        combo_trimestre.addItem(p, p)
     montant = _money_edit(minimum=1)
     form.addRow("Classe :", combo_classe)
     form.addRow("Eleve :", combo_eleve)
@@ -286,6 +296,7 @@ def open_paiement_dialog(parent, ctx, on_created):
     form.addRow("Trimestre :", combo_trimestre)
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.button(QDialogButtonBox.Ok).setText("Valider")
     buttons.accepted.connect(dlg.accept)
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
@@ -298,16 +309,26 @@ def open_paiement_dialog(parent, ctx, on_created):
     combo_classe.currentIndexChanged.connect(fill_eleves)
     fill_eleves()
 
-    if dlg.exec_() == QDialog.Accepted:
+    def valider():
         eleve_id = combo_eleve.currentData()
-        if not eleve_id or montant.value() <= 0:
-            QMessageBox.warning(dlg, "Paiement", "Selectionnez un eleve et un montant valide.")
+        if not eleve_id:
+            QMessageBox.warning(dlg, "Paiement", "Selectionnez un eleve.")
+            return
+        if montant.value() <= 0:
+            QMessageBox.warning(dlg, "Paiement", "Le montant doit etre superieur a 0.")
             return
         active = repos.annee_scolaire_active()
         annee = active["libelle"] if active else ""
         repos.add_paiement(eleve_id, montant.value(), combo_mode.currentText(),
-                           combo_type.currentText(), annee, combo_trimestre.currentData())
+                           combo_type.currentText(), annee,
+                           combo_trimestre.currentData() or "")
         QMessageBox.information(dlg, "Paiement",
                                 f"{fmt_money(montant.value())} encaisse.")
-        if on_created:
-            on_created()
+        dlg.accept()
+
+    buttons.accepted.disconnect()
+    buttons.accepted.connect(valider)
+
+    dlg.exec_()
+    if dlg.result() == QDialog.Accepted and on_created:
+        on_created()

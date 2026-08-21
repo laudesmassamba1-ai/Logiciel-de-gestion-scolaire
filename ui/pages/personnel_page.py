@@ -22,9 +22,11 @@ from core.config import (
 def personnel(page, ctx):
     if page.layout() is not None:
         return
+    page.setStyleSheet("")
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
+    peut_gerer = ctx.can_edit("personnel")
 
     header = QVBoxLayout()
     titre = QLabel("Personnel & RH")
@@ -43,7 +45,8 @@ def personnel(page, ctx):
     btn_add = _btn("+ Nouvel Employe",
                    lambda: open_personnel_dialog(page, ctx),
                    STYLE_BTN_PRIMARY)
-    top.addWidget(btn_add)
+    if peut_gerer:
+        top.addWidget(btn_add)
     lay.addLayout(top)
 
     from PyQt5.QtWidgets import QTableWidget
@@ -77,10 +80,11 @@ def personnel(page, ctx):
             cell = QWidget()
             cl = QHBoxLayout(cell)
             cl.setContentsMargins(2, 2, 2, 2)
-            cl.addWidget(_btn("Modifier", partial(open_personnel_dialog, page, ctx, p),
-                              _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)))
-            cl.addWidget(_btn("Supprimer", partial(_delete, page, ctx, p),
-                              _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
+            if peut_gerer:
+                cl.addWidget(_btn("Modifier", partial(open_personnel_dialog, page, ctx, p),
+                                  _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)))
+                cl.addWidget(_btn("Supprimer", partial(_delete, page, ctx, p),
+                                  _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
             table.setCellWidget(i, 5, cell)
         table.resizeColumnsToContents()
         lbl_empty.setVisible(not rows)
@@ -98,6 +102,10 @@ def personnel(page, ctx):
 
 
 def open_personnel_dialog(parent, ctx, employe=None):
+    if ctx is not None and not ctx.can_edit("personnel"):
+        QMessageBox.warning(parent, "Acces refuse",
+                            "Seul le directeur peut gerer le personnel.")
+        return
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvel Employe" if not employe else "Modifier Employe")
     dlg.resize(400, 260)

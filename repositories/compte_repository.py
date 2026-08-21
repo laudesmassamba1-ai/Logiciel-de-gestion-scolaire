@@ -26,10 +26,14 @@ class CompteRepository(RepositoryBase):
         while db.query_one("SELECT 1 FROM utilisateurs WHERE username = ?", (username,)):
             username = f"{base}{counter}"
             counter += 1
-        return db.execute(
+        self._route_write(
+            "POST", "/comptes", {"nom": nom, "email": email, "telephone": telephone,
+                                  "role": role, "actif": 1 if actif else 0},
+            db.execute,
             """INSERT INTO utilisateurs (nom_complet, username, email, telephone, password, role, actif)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (nom, username, email, telephone, password_hash, role, 1 if actif else 0))
+        return username
 
     def update_compte(self, user_id, nom, email, telephone, role, actif):
         db.execute(

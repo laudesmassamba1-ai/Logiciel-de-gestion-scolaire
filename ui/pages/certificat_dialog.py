@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QComboBox, QFormLayout,
+    QDialog, QDialogButtonBox, QLabel, QComboBox, QFormLayout,
     QVBoxLayout, QMessageBox,
 )
 
@@ -31,11 +31,22 @@ def open_certificat_dialog(parent):
     fill_eleves()
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.button(QDialogButtonBox.Ok).setText("Generer")
-    buttons.accepted.connect(dlg.accept)
+    btn_ok = buttons.button(QDialogButtonBox.Ok)
+    btn_ok.setText("Generer")
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
-    if dlg.exec_() == QDialog.Accepted:
+
+    def valider():
+        if combo.currentData() is None:
+            QMessageBox.warning(dlg, "Certificat",
+                                "Selectionnez un eleve (aucun eleve dans cette selection).")
+            return
+        dlg.accept()
+
+    btn_ok.clicked.connect(valider)
+
+    dlg.exec_()
+    if dlg.result() == QDialog.Accepted:
         eleve = repos.eleve_by_id(combo.currentData())
         if eleve:
             eleve["classe_nom"] = ""

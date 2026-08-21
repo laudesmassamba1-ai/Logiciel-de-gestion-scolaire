@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 
 from api import client
 from repositories import repos
-from services import auth, reports
+from services import auth_service as auth, reports
 from ui.loader import apply_ui
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _today_fr, _replace_layout, _classe_items,
@@ -124,8 +124,9 @@ def dashboard_gestionnaire(page, ctx):
                 f"{t['date']}  {t['motif']}  {sens}{fmt_money(t['montant'])}")
         page.lbl_activite_empty.setVisible(not actifs)
 
-        incomplets = repos.eleves()
-        incomplets = [e for e in incomplets
+        # Une seule requete pour les dossiers incomplets et la repartition.
+        tous_les_eleves = repos.eleves()
+        incomplets = [e for e in tous_les_eleves
                       if not (e["check_acte"] and e["check_photos"] and e["check_bulletin"])]
         page.list_dossiers_incomplets.clear()
         for e in incomplets[:8]:
@@ -150,7 +151,7 @@ def dashboard_gestionnaire(page, ctx):
             chart.set_data(list(statuts.keys()), list(statuts.values()))
             _replace_layout(page.layout_chart_statuts, chart)
 
-        _render_statuts(repos.eleves())
+        _render_statuts(tous_les_eleves)
 
     from ui.pages.eleves import open_inscription_dialog
     from ui.pages.caisse_page import open_transaction_dialog

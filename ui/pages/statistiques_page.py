@@ -19,7 +19,7 @@ def statistiques(page, ctx):
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    _page_header(lay, "Statistiques de l'école",
+    _page_header(lay, "Statistiques de l'ecole",
                  "Scolarite, finances et presences en un coup d'oeil")
 
     scroll = QScrollArea()
@@ -36,7 +36,8 @@ def statistiques(page, ctx):
     def _ajouter(chart, ligne, colonne):
         cadre = QFrame()
         cadre.setStyleSheet(
-             f"QFrame {{ background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 10px; }}")
+            f"QFrame {{ background: {C_CARD}; border: 1px solid {C_BORDER};"
+            " border-radius: 12px; }")
         cadre.setMinimumHeight(250)
         cl = QVBoxLayout(cadre)
         cl.setContentsMargins(15, 15, 15, 15)
@@ -46,6 +47,20 @@ def statistiques(page, ctx):
         cl.addWidget(chart)
         grille.addWidget(cadre, ligne, colonne)
         grille.setRowStretch(ligne, 1)
+
+    def _avec_autre(labels, values, limite=8):
+        """Tronque a `limite` categories en regroupant le reste dans 'Autre'."""
+        labels = list(labels)
+        values = list(values)
+        if len(labels) <= limite:
+            return labels, values
+        reste = sum(values[limite:])
+        labels = labels[:limite]
+        values = values[:limite]
+        if reste:
+            labels.append("Autre")
+            values.append(reste)
+        return labels, values
 
     def _group_rows(rows, cle, somme):
         d = {}
@@ -65,8 +80,9 @@ def statistiques(page, ctx):
         eleves = repos.eleves()
 
         eff = SimpleBarChart(titre="Effectifs par classe")
-        eff.set_data([c["nom"][:12] for c in classes[:8]],
-                     [c["effectif"] for c in classes[:8]])
+        eff_labels = [c["nom"][:12] for c in classes]
+        eff_values = [c["effectif"] for c in classes]
+        eff.set_data(*_avec_autre(eff_labels, eff_values))
         _ajouter(eff, 0, 0)
 
         par_cycle = {}
@@ -100,11 +116,17 @@ def statistiques(page, ctx):
             mois[cle] += t["montant"] if t["type"] == "entree" else -t["montant"]
         today = datetime.date.today()
         lbls, vals = [], []
-        for i in range(11, -1, -1):
-            d = today - datetime.timedelta(days=30 * i)
+        # 12 vrais mois calendaires (evite les doublons/trous du pas de 30 jours).
+        annee, mois_num = today.year, today.month
+        for _ in range(12):
+            d = datetime.date(annee, mois_num, 1)
             cle = d.strftime("%Y-%m")
-            lbls.append(d.strftime("%b"))
-            vals.append(int(mois.get(cle, 0)))
+            lbls.insert(0, d.strftime("%b"))
+            vals.insert(0, int(mois.get(cle, 0)))
+            mois_num -= 1
+            if mois_num == 0:
+                mois_num = 12
+                annee -= 1
         ch_mois = SimpleBarChart(titre="Tresorerie sur 12 mois")
         ch_mois.set_data(lbls, vals)
         _ajouter(ch_mois, 2, 0)
@@ -124,9 +146,11 @@ def statistiques(page, ctx):
         for p in paiements:
             cle = p.get("classe_nom") or "Sans classe"
             par_classe[cle] = par_classe.get(cle, 0) + float(p["montant"] or 0)
+        # Top classes par montant, le reste regroupe dans 'Autre'.
+        tries = sorted(par_classe.items(), key=lambda kv: kv[1], reverse=True)
         ch_classe = SimpleBarChart(titre="Encaissements par classe")
-        ch_classe.set_data(list(par_classe.keys())[:8],
-                           list(par_classe.values())[:8])
+        ch_classe.set_data(*_avec_autre([k for k, _ in tries],
+                                        [v for _, v in tries]))
         _ajouter(ch_classe, 3, 1)
 
         comptes = {}

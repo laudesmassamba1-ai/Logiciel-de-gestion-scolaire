@@ -274,6 +274,27 @@ def _write_script(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
+def _signpath_credentials() -> tuple[str | None, str | None]:
+    return os.environ.get('SIGNPATH_API_TOKEN'), os.environ.get('SIGNPATH_CERTIFICATE_PROFILE_ID')
+
+
+def sign_file_via_signpath(path: Path) -> bool:
+    """Soumet un fichier a SignPath et attend la signature. True si signe."""
+    token, profile = _signpath_credentials()
+    if not token or not profile:
+        return False
+    try:
+        signing_id = sign_with_signpath(path, token, profile)
+        if not signing_id:
+            return False
+        wait_for_signpath_completion(token, signing_id)
+        print(f"SignPath: {path.name} signe")
+        return True
+    except Exception as exc:
+        print(f"SignPath: signature de {path.name} echouee: {exc}")
+        return False
+
+
 def _build_windows() -> None:
     _pyinstaller(SPEC_PATH)
     exe = DIST_DIR / APP_DIR_NAME / EXE_NAME
@@ -288,25 +309,22 @@ def _build_windows() -> None:
                 signed = True
             except Exception as exc:
                 print(f"Signature locale echouee: {exc}")
-    signpath_token = os.environ.get('SIGNPATH_API_TOKEN')
-    signpath_profile = os.environ.get('SIGNPATH_CERTIFICATE_PROFILE_ID')
-    if signpath_token and signpath_profile:
-        try:
-            signing_id = sign_with_signpath(exe, signpath_token, signpath_profile)
-            if signing_id:
-                wait_for_signpath_completion(signpath_token, signing_id)
-                signed = True
-        except Exception as exc:
-            print(f"SignPath: signature echouee: {exc}")
+    if sign_file_via_signpath(exe):
+        signed = True
     if not signed:
         print('Aucune signature appliquee: definissez SIGN_PFX/SIGN_PASSWORD ou SIGNPATH_API_TOKEN/SIGNPATH_CERTIFICATE_PROFILE_ID')
     _build_installer()
     setup = next(INSTALLER_DIR.glob('*.exe'), None) if INSTALLER_DIR.exists() else None
     if setup and signtool:
-        try:
-            _sign_target(setup, signtool)
-        except Exception as exc:
-            print(f"Signature installeur locale echouee: {exc}")
+        pfx = os.environ.get('SIGN_PFX')
+        password = os.environ.get('SIGN_PASSWORD')
+        if pfx and password and Path(pfx).exists():
+            try:
+                _sign_target(setup, signtool)
+            except Exception as exc:
+                print(f"Signature installeur locale echouee: {exc}")
+    if setup:
+        sign_file_via_signpath(setup)
 
 
 def _build_linux() -> None:

@@ -111,7 +111,7 @@ def open_inscription_dialog(parent, ctx, eleve=None):
 
     lbl_matricule = QLabel()
     lbl_matricule.setStyleSheet(
-        "color: {C_GOLD}; font-weight: bold; font-size: 13px;")
+        f"color: {C_GOLD}; font-weight: bold; font-size: 13px;")
     dlg.horizontalLayout_Header.addWidget(lbl_matricule)
 
     reins_row = QHBoxLayout()

@@ -135,20 +135,47 @@ def open_tarif_dialog(parent, ctx, on_created, tarif=None):
     form.addRow("Annee scolaire :", annee)
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.accepted.connect(dlg.accept)
+    btn_ok = buttons.button(QDialogButtonBox.Ok)
+    btn_ok.setText("Valider")
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
-    if dlg.exec_() == QDialog.Accepted:
+
+    def valider():
+        if combo_classe.currentData() is None:
+            QMessageBox.warning(dlg, "Tarif", "Selectionnez une classe.")
+            return
         if montant.value() <= 0:
             QMessageBox.warning(dlg, "Tarif", "Le montant doit etre superieur a 0.")
             return
+        libelle_type = type_frais.currentText().strip()
+        if not libelle_type:
+            QMessageBox.warning(dlg, "Tarif", "Le type de frais est obligatoire.")
+            return
+        # Anti-doublon : meme classe + type + annee deja tarifé.
+        existants = repos.tarifs(classe_id=combo_classe.currentData())
+        for t in existants:
+            meme = (t["type_frais"].lower() == libelle_type.lower()
+                    and (t["annee_scolaire"] or "") == annee.text().strip()
+                    and (not tarif or t["id"] != tarif["id"]))
+            if meme:
+                reponse = QMessageBox.question(
+                    dlg, "Tarif",
+                    "Un tarif identique existe deja pour cette classe, ce type "
+                    "et cette annee. Le remplacer ?")
+                if reponse != QMessageBox.Yes:
+                    return
+                repos.delete_tarif(t["id"])
+                break
         if tarif:
             repos.update_tarif(tarif["id"], combo_classe.currentData(),
-                               type_frais.currentText().strip(), montant.value(),
-                               annee.text().strip())
+                               libelle_type, montant.value(), annee.text().strip())
         else:
-            repos.add_tarif(combo_classe.currentData(),
-                            type_frais.currentText().strip(), montant.value(),
-                            annee.text().strip())
-        if on_created:
-            on_created()
+            repos.add_tarif(combo_classe.currentData(), libelle_type,
+                            montant.value(), annee.text().strip())
+        dlg.accept()
+
+    btn_ok.clicked.connect(valider)
+
+    dlg.exec_()
+    if dlg.result() == QDialog.Accepted and on_created:
+        on_created()

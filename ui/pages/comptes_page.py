@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
 from core.config import ROLE_LABELS, C_GOLD, C_GOLD_BG, C_GOLD_PRESSED, C_GOLD_BORDER, C_RED, C_RED_BG, C_RED_BORDER
 from database.db import hash_password
 from repositories import repos
-from services import auth
+from services import auth_service as auth
 from ui.loader import apply_ui
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _fit_rows,
@@ -23,6 +23,7 @@ def comptes(page, ctx):
     _fit_rows(page.table_comptes)
     page.combo_filter_role.clear()
     page.combo_filter_role.addItems(["Tous les roles", "Directeur", "Gestionnaire"])
+    peut_gerer = ctx.can_edit("comptes")
 
     def refresh():
         role = page.combo_filter_role.currentText()
@@ -38,13 +39,14 @@ def comptes(page, ctx):
             cell = QWidget()
             lay = QHBoxLayout(cell)
             lay.setContentsMargins(2, 2, 2, 2)
-            lay.addWidget(_btn("Activer" if not u["actif"] else "Desactiver",
-                               partial(_toggle, page, ctx, u),
-                                _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD, border=C_GOLD_BORDER)))
-            lay.addWidget(_btn("Mdp", partial(_reset_pwd, page, ctx, u),
-                                _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD_PRESSED, border=C_GOLD_BORDER)))
-            lay.addWidget(_btn("Supprimer", partial(_delete_compte, page, ctx, u),
-                                _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
+            if peut_gerer:
+                lay.addWidget(_btn("Activer" if not u["actif"] else "Desactiver",
+                                   partial(_toggle, page, ctx, u),
+                                    _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD, border=C_GOLD_BORDER)))
+                lay.addWidget(_btn("Mdp", partial(_reset_pwd, page, ctx, u),
+                                    _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD_PRESSED, border=C_GOLD_BORDER)))
+                lay.addWidget(_btn("Supprimer", partial(_delete_compte, page, ctx, u),
+                                    _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
             page.table_comptes.setCellWidget(i, 5, cell)
         page.table_comptes.resizeColumnsToContents()
         page.table_comptes.horizontalHeader().setStretchLastSection(True)
@@ -79,7 +81,10 @@ def comptes(page, ctx):
             repos.delete_compte(u["id"])
             refresh()
 
-    page.btn_add_compte.clicked.connect(lambda: open_compte_dialog(page, ctx))
+    if peut_gerer:
+        page.btn_add_compte.clicked.connect(lambda: open_compte_dialog(page, ctx))
+    else:
+        page.btn_add_compte.setVisible(False)
     page.btn_apply_filter_compte.clicked.connect(refresh)
     page.input_search_compte.textChanged.connect(refresh)
     page.combo_filter_role.currentIndexChanged.connect(refresh)
@@ -123,11 +128,11 @@ def open_compte_dialog(parent, ctx, compte=None):
             QMessageBox.information(dlg, "Compte", "Compte mis a jour.")
         else:
             password = auth.random_password()
-            repos.add_compte(nom, email, telephone, role,
-                             hash_password(password), actif)
+            username = repos.add_compte(nom, email, telephone, role,
+                                        hash_password(password), actif)
             QMessageBox.information(
                 dlg, "Compte",
-                f"Compte cree pour {nom}.\nIdentifiant : {email.split('@')[0]}"
+                f"Compte cree pour {nom}.\nIdentifiant : {username}"
                 f"\nMot de passe temporaire : {password}")
         dlg.accept()
 

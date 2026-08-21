@@ -1,9 +1,9 @@
 from functools import partial
 
-from PyQt5.QtCore import QDate
+from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QComboBox, QFormLayout, QDoubleSpinBox, QTableWidgetItem, QVBoxLayout,
+    QComboBox, QFormLayout, QTableWidgetItem, QVBoxLayout,
     QWidget,
 )
 
@@ -13,13 +13,19 @@ from ui.pages.helpers import (
     _btn, _simple_btn_style, _money_edit, _fit_rows,
 )
 from ui.widgets import fmt_money
+from core.config import (
+    STYLE_TABLE, STYLE_EMPTY_STATE,
+    C_RED_BG, C_RED, C_RED_BORDER,
+)
 
 
 def caisse(page, ctx):
     if page.layout() is not None:
         return
     apply_ui("caisse/caisse.ui", page)
+    page.setStyleSheet("")
     _fit_rows(page.table_transactions)
+    page.table_transactions.setStyleSheet(STYLE_TABLE)
 
     if not ctx.can_edit("caisse"):
         page.btn_add_income.setVisible(False)
@@ -28,6 +34,11 @@ def caisse(page, ctx):
     now = QDate.currentDate()
     page.date_start.setDate(now.addDays(-(now.day() - 1)))
     page.date_end.setDate(now)
+
+    lbl_empty = QLabel("Aucune transaction sur la periode selectionnee")
+    lbl_empty.setStyleSheet(STYLE_EMPTY_STATE)
+    lbl_empty.setAlignment(Qt.AlignCenter)
+    page.mainLayout.addWidget(lbl_empty)
 
     def refresh():
         type_filtre = page.combo_type.currentText()
@@ -43,32 +54,40 @@ def caisse(page, ctx):
             date_start=page.date_start.date().toString("yyyy-MM-dd"),
             date_end=page.date_end.date().toString("yyyy-MM-dd"))
         page.table_transactions.setRowCount(len(rows))
+        total_entrees = 0.0
+        total_sorties = 0.0
         for i, r in enumerate(rows):
             values = [r["date"], r["reference"], r["beneficiaire"] or "-",
                       r["motif"] or "-", r["categorie"] or "-"]
             for j, val in enumerate(values):
                 page.table_transactions.setItem(i, j, QTableWidgetItem(str(val)))
-            montant = r["montant"]
+            montant = float(r["montant"] or 0)
             if r["type"] == "entree":
+                total_entrees += montant
                 page.table_transactions.setItem(i, 5, QTableWidgetItem(fmt_money(montant)))
                 page.table_transactions.setItem(i, 6, QTableWidgetItem(""))
             else:
+                total_sorties += montant
                 page.table_transactions.setItem(i, 5, QTableWidgetItem(""))
                 page.table_transactions.setItem(i, 6, QTableWidgetItem(fmt_money(montant)))
             cell = QWidget()
             lay = QHBoxLayout(cell)
             lay.setContentsMargins(2, 2, 2, 2)
-            lay.addWidget(_btn("Supprimer", partial(_delete_transaction, page, ctx, r),
-                                _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
+            if ctx.can_edit("caisse"):
+                lay.addWidget(_btn("Supprimer", partial(_delete_transaction, page, ctx, r),
+                                    _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
             page.table_transactions.setCellWidget(i, 7, cell)
         page.table_transactions.resizeColumnsToContents()
         page.table_transactions.horizontalHeader().setStretchLastSection(True)
         page.table_transactions.horizontalHeader().setMinimumSectionSize(80)
 
-        entree, sortie, solde = repos.caisse_totals()
-        page.val_total_incomes.setText(fmt_money(entree))
-        page.val_total_expenses.setText(fmt_money(sortie))
-        page.val_current_balance.setText(fmt_money(solde))
+        # Totaux coherent avec le filtre affiche.
+        page.val_total_incomes.setText(fmt_money(total_entrees))
+        page.val_total_expenses.setText(fmt_money(total_sorties))
+        page.val_current_balance.setText(fmt_money(total_entrees - total_sorties))
+
+        lbl_empty.setVisible(not rows)
+        page.table_transactions.setVisible(bool(rows))
 
     def _delete_transaction(parent, ctx, t):
         if QMessageBox.question(parent, "Supprimer",
@@ -77,9 +96,9 @@ def caisse(page, ctx):
             refresh()
 
     page.btn_add_income.clicked.connect(
-        lambda: open_transaction_dialog(page, ctx, "entree"))
+        lambda: open_transaction_dialog(page, ctx, "entree", on_created=refresh))
     page.btn_add_expense.clicked.connect(
-        lambda: open_transaction_dialog(page, ctx, "sortie"))
+        lambda: open_transaction_dialog(page, ctx, "sortie", on_created=refresh))
     page.btn_apply_filter.clicked.connect(refresh)
     page.search_input.textChanged.connect(refresh)
     page.combo_type.currentIndexChanged.connect(refresh)
@@ -98,7 +117,7 @@ def caisse(page, ctx):
     page.refresh = refresh
 
 
-def open_transaction_dialog(parent, ctx, type_trans):
+def open_transaction_dialog(parent, ctx, type_trans, on_created=None):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Nouvelle Recette" if type_trans == "entree" else "Nouvelle Depense")
     dlg.resize(420, 300)
@@ -129,12 +148,12 @@ def open_transaction_dialog(parent, ctx, type_trans):
     form.addRow("Mode :", mode)
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.button(QDialogButtonBox.Ok).setText("Valider")
-    buttons.accepted.connect(dlg.accept)
+    btn_ok = buttons.button(QDialogButtonBox.Ok)
+    btn_ok.setText("Valider")
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
 
-    if dlg.exec_() == QDialog.Accepted:
+    def valider():
         if montant.value() <= 0:
             QMessageBox.warning(dlg, "Caisse", "Le montant doit etre superieur a 0.")
             return
@@ -143,3 +162,10 @@ def open_transaction_dialog(parent, ctx, type_trans):
             categorie.currentText(), beneficiaire.text().strip() or "-",
             mode.currentText())
         QMessageBox.information(dlg, "Caisse", "Transaction enregistree.")
+        dlg.accept()
+
+    btn_ok.clicked.connect(valider)
+
+    dlg.exec_()
+    if dlg.result() == QDialog.Accepted and on_created:
+        on_created()

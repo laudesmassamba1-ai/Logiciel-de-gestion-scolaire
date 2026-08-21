@@ -20,7 +20,11 @@ class _Task(QRunnable):
             result = self.fn()
         except Exception as exc:
             result = exc
-        self.signals.done.emit(result)
+        try:
+            self.signals.done.emit(result)
+        except RuntimeError:
+            # Le recepteur (fenetre/page) a ete detruit entre-temps.
+            pass
 
 
 def run_async(fn, on_done):

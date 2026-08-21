@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 APP_NAME = "Gestion Scolaire"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.5.0"
 
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
@@ -173,8 +173,15 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTextEdit {{
     background-color: {C_CARD}; color: {C_TEXT}; font-size: 13px;
     selection-background-color: {C_PRIMARY_LIGHT};
 }}
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QDateEdit:hover {{
+    border: 1px solid {C_TEXT_MUTED};
+}}
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {{
-    border: 2px solid {C_SUCCESS}; background-color: {C_CARD};
+    border: 1px solid {C_SUCCESS}; background-color: {C_CARD};
+}}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
+QDateEdit:disabled, QTextEdit:disabled {{
+    background-color: {C_BG_ALT}; color: {C_TEXT_MUTED}; border: 1px solid {C_BORDER};
 }}
 QComboBox::drop-down {{ border: none; width: 28px; }}
 QComboBox::down-arrow {{
@@ -186,6 +193,27 @@ QComboBox QAbstractItemView {{
     background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 8px;
     selection-background-color: {C_PRIMARY_LIGHT}; selection-color: {C_PRIMARY};
     padding: 4px; color: {C_TEXT_SECONDARY};
+}}
+
+QCheckBox {{ spacing: 8px; color: {C_TEXT_SECONDARY}; }}
+QCheckBox::indicator {{
+    width: 17px; height: 17px; border: 1px solid {C_BORDER_STRONG};
+    border-radius: 5px; background: {C_CARD};
+}}
+QCheckBox::indicator:hover {{ border-color: {C_PRIMARY}; }}
+QCheckBox::indicator:checked {{
+    background-color: {C_PRIMARY}; border-color: {C_PRIMARY_PRESSED};
+}}
+
+QGroupBox {{
+    background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 12px;
+    margin-top: 12px; padding: 14px 12px 12px 12px; font-weight: 700;
+    font-size: 13px; color: {C_TEXT_SECONDARY};
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin; subcontrol-position: top left;
+    left: 14px; top: 2px; padding: 0 6px;
+    background: {C_BG}; color: {C_TEXT_MUTED};
 }}
 
 QTabWidget::pane {{ border: none; background: transparent; }}
