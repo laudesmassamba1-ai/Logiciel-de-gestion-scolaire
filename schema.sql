@@ -92,12 +92,12 @@ CREATE TABLE programme (
 );
 
 -- 9. note (dépend de inscription, matiere)
--- ⚠️ Valeurs de l'ENUM type_evaluation à vérifier/ajuster selon la vraie base
+--  Valeurs de l'ENUM type_evaluation à vérifier/ajuster selon la vraie base
 CREATE TABLE note (
     id INT AUTO_INCREMENT PRIMARY KEY,
     inscription_id INT NOT NULL,
     matiere_id INT NOT NULL,
-    type_evaluation ENUM('devoir de classe', 'composition') NOT NULL,
+    type_evaluation TEXT NOT NULL,
     note DECIMAL(4,2) NOT NULL,
     note_sur INT DEFAULT 20,
     date_evaluation DATE NOT NULL,

@@ -29,6 +29,41 @@ def get_connection():
         database="ecole"
     )
 
+@app.on_event("startup")
+def initialiser_base_au_demarrage():
+    conn = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="Josias50"
+    )
+    cursor = conn.cursor()
+
+    cursor.execute("CREATE DATABASE IF NOT EXISTS ecole")
+    cursor.execute("USE ecole")
+
+    with open("schema.sql", "r", encoding="utf-8") as f:
+        script_sql = f.read()
+
+    instructions = [req.strip() for req in script_sql.split(";") if req.strip()]
+
+    for instruction in instructions:
+        lignes_utiles = [
+            l for l in instruction.split("\n") if l.strip() and not l.strip().startswith("--")
+        ]
+        if not lignes_utiles:
+            continue
+        instruction_propre = "\n".join(lignes_utiles)
+        try:
+            cursor.execute(instruction_propre)
+        except mysql.connector.Error as err:
+            if err.errno != 1050:  # 1050 = table déjà existante, on ignore sans planter
+                raise
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print(" Base de données vérifiée/créée avec succès au démarrage.")
+
 def hacher_mot_de_passe(mot_de_passe: str) -> str:
     # On convertit en bytes et on tronque à 72 octets max pour éviter tout blocage
     pwd_bytes = mot_de_passe.encode("utf-8")[:72]
@@ -155,7 +190,7 @@ class Eleveajouter(BaseModel):
     lieu_naissance: str
     adresse: str
     nom_parent: str
-    redoublant: str  # "0" pour Non, "1" pour Oui
+    redoublant: Optional[str]   # "0" pour Non, "1" pour Oui
     statut: str
     classe_id: int  # Transmis par le front pour l'inscription !
     telephone_parent: str
