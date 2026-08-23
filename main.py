@@ -85,6 +85,22 @@ def get_total_eleves()-> dict:
     total_eleves = cursor.fetchone()[0]
     return {"total_eleves": total_eleves}
 
+# afficher le nombre total d'eleves par sexe 
+@app.get("/total_eleve_par_sexe")
+def get_total_eleve_par_sexe() -> dict:
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)  # Retourne les résultats sous forme de dictionnaires
+    try:
+        # On sélectionne aussi la colonne 'sexe'
+        cursor.execute("SELECT sexe, COUNT(*) AS total FROM eleve GROUP BY sexe")
+        total_eleve_par_sexe = cursor.fetchall()
+        
+        # Format propre retourné : {"total_eleves_par_sexe": [{"sexe": "M", "total": 150}, {"sexe": "F", "total": 120}]}
+        return {"total_eleves_par_sexe": total_eleve_par_sexe}
+    finally:
+        cursor.close()
+        conn.close()
+
 #affichage du nombre total d'élèves par classe
 @app.get("/total_eleves_par_classe")
 def get_total_eleves_par_classe(recherche: Optional[str] = None) -> dict:
@@ -123,6 +139,41 @@ def get_total_eleves_par_classe(recherche: Optional[str] = None) -> dict:
 
         return {"nombre total d'élèves": {nom_classe: total_eleves}}
 
+    finally:
+        cursor.close()
+        conn.close()
+
+# afficher le nombre total d'eleves par classe
+@app.get("/total_eleve_par_classe")
+def get_total_eleve_par_classe() -> dict:
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # On suppose que la colonne s'appelle 'classe' dans la table 'eleve'
+        cursor.execute("SELECT classe, COUNT(*) AS total FROM eleve GROUP BY classe")
+        total_eleve_par_classe = cursor.fetchall()
+        
+        return {"total_eleves_par_classe": total_eleve_par_classe}
+    finally:
+        cursor.close()
+        conn.close()
+
+# afficher le nombre de garcons et de filles pour une classe donnee
+@app.get("/total_eleve_par_sexe_par_classe")
+def get_total_eleve_par_sexe_par_classe(classe: str) -> dict:
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT sexe, COUNT(*) AS total FROM eleve WHERE classe = %s GROUP BY sexe",
+            (classe,)
+        )
+        resultats = cursor.fetchall()
+        
+        return {
+            "classe": classe,
+            "statistiques": resultats
+        }
     finally:
         cursor.close()
         conn.close()
@@ -213,7 +264,7 @@ class RequeteAjoutEleve(BaseModel):
 
 
 # 2. Route POST
-@app.post("/eleve")
+@app.post("/ajout_eleve")
 def ajouter_eleve(payload: RequeteAjoutEleve):
     eleve = payload.eleve
     paiement = payload.paiement
@@ -490,7 +541,7 @@ class classeAjouter(BaseModel):
     uuid_client: Optional[str] = None
 
 # 2. Route POST pour ajouter une classe
-@app.post("/classe")
+@app.post("/ajout_classe")
 def ajouter_classe(classe: classeAjouter):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -628,7 +679,7 @@ class cycleAjouter(BaseModel):
     nom: str   
 
 # 2. Route POST pour ajouter l'élève
-@app.post("/cycle")
+@app.post("/ajout_cycle")
 def ajouter_cycle(cycle: cycleAjouter):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -753,7 +804,7 @@ class enseignantAjouter(BaseModel):
    
 
 # 2. Route POST pour ajouter un enseignant
-@app.post("/enseignant")
+@app.post("/ajout_enseignant")
 def ajouter_enseignant(enseignant: enseignantAjouter):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1035,7 +1086,7 @@ class PaiementVersement(BaseModel):
     uuid_client: str
 
 # 2. Route POST pour ajouter un paiement
-@app.post("/paiement")
+@app.post("/ajout_paiement")
 def ajouter_paiement(paiement: PaiementVersement):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1181,7 +1232,7 @@ class noteAjouter(BaseModel):
     uuid_client: Optional[str] = None
 
 # 2. Route POST pour ajouter une note
-@app.post("/note")
+@app.post("/ajout_note")
 def ajouter_note(note: noteAjouter):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1456,7 +1507,7 @@ class PresenceAjouter(BaseModel):
     classe_id: int
     uuid_client: Optional[str] = None
 
-@app.post("/presence")
+@app.post("/ajout_presence")
 def ajouter_presence(presence: PresenceAjouter):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1554,7 +1605,7 @@ def supprimer_presence(id: int = Path(ge=1)):
 class matiereAjouter(BaseModel):
     nom: str
 
-@app.post("/matiere")
+@app.post("/ajout_matiere")
 def ajouter_matiere(matiere: matiereAjouter):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1851,7 +1902,7 @@ class TarifScolariteCreate(BaseModel):
     montant_pension: float  # ex: 150000.00
 
 
-@app.post("/tarifs-scolarite")
+@app.post("/ajout_tarifs-scolarite")
 def creer_tarif_scolarite(tarif: TarifScolariteCreate):
     conn = get_connection()
     cursor = conn.cursor()
@@ -2171,7 +2222,7 @@ class ConnexionDemande(BaseModel):
 
 
 # 1. Créer un compte utilisateur
-@app.post("/utilisateurs")
+@app.post("/ajout_utilisateurs")
 def creer_utilisateur(data: UtilisateurCreate):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
