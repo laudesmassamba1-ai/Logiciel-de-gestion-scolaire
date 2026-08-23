@@ -150,7 +150,7 @@ def get_total_eleve_par_classe() -> dict:
     cursor = conn.cursor(dictionary=True)
     try:
         # On suppose que la colonne s'appelle 'classe' dans la table 'eleve'
-        cursor.execute("SELECT classe, COUNT(*) AS total FROM eleve GROUP BY classe")
+        cursor.execute("SELECT classe, COUNT(*) AS total FROM eleve, classe, inscription where eleve.id=inscription.eleve_id and inscription.classe_id=classe.id GROUP BY classe")
         total_eleve_par_classe = cursor.fetchall()
         
         return {"total_eleves_par_classe": total_eleve_par_classe}
@@ -165,7 +165,7 @@ def get_total_eleve_par_sexe_par_classe(classe: str) -> dict:
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT sexe, COUNT(*) AS total FROM eleve WHERE classe = %s GROUP BY sexe",
+            "SELECT sexe, COUNT(*) AS total FROM eleve, classe, inscription WHERE eleve.id=inscription.eleve_id and inscription.classe_id=classe.id and classe = %s GROUP BY sexe",
             (classe,)
         )
         resultats = cursor.fetchall()
