@@ -51,15 +51,6 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Comptes par defaut
-
-| Role | Identifiant | Mot de passe |
-|---|---|---|
-| Administrateur | admin | admin123 |
-| Directeur | directeur | directeur123 |
-| Gestionnaire | gestionnaire | gestionnaire123 |
-
-> **Important** : Changez les mots de passe apres la premiere connexion.
 
 ## Configuration
 
@@ -96,33 +87,6 @@ python build_app.py
 
 Les installateurs sont générés dans le dossier `installers/`.
 
-### Signature Windows
-
-Pour éviter le blocage par Windows SmartScreen, signature recommandée via **SignPath Foundation** (gratuit pour projets open source) :
-
-1. Créez un compte sur [signpath.io](https://www.signpath.io/)
-2. Soumettez le projet au programme gratuit open source
-3. Créez un **Signing Profile** de type `SignTool`
-4. Ajoutez les secrets GitHub :
-   - `SIGNPATH_API_TOKEN`
-   - `SIGNPATH_CERTIFICATE_PROFILE_ID`
-
-Alternative locale avec certificat PFX :
-
-```powershell
-$env:SIGN_PFX = "C:\path\to\cert.pfx"
-$env:SIGN_PASSWORD = "votre_password"
-python build_app.py
-```
-
-### Publication automatique via GitHub Actions
-
-```bash
-git tag v1.4.0
-git push origin v1.4.0
-```
-
-Cela déclenche les workflows de build et crée une GitHub Release avec tous les installateurs.
 
 ## Structure du projet
 
