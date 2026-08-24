@@ -125,16 +125,24 @@ def preparer_eleve_pour_synchro(eleve_id):
 # AJOUTER UN ÉLÈVE À LA FILE DE SYNCHRONISATION
 # ============================================================
 
-def ajouter_eleve_a_la_file(eleve_id):
+def ajouter_eleve_a_la_file(eleve_id, paiement):
 
-    uuid_client, payload = preparer_eleve_pour_synchro(
+    uuid_client, payload_eleve = preparer_eleve_pour_synchro(
         eleve_id
     )
+    payload_eleve["uuid_client"] = uuid_client
+    paiement["uuid_client"] = uuid_client
+
+    payload_complet = {
+        "eleve": payload_eleve,
+        "paiement": paiement,
+        "uuid_client": uuid_client
+    }
 
     ajouter_a_la_file(
         endpoint="/eleve",
         methode="POST",
-        payload=payload,
+        payload=payload_complet,
         uuid_client=uuid_client
     )
 
