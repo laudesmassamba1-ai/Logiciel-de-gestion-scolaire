@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Path, HTTPException
+from fastapi import FastAPI, Path, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import date
 from pydantic import BaseModel
@@ -15,17 +15,26 @@ from passlib.context import CryptContext
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Charge le fichier .env AVANT toute lecture des variables d'environnement
+import securite
+
 DB_HOST = os.environ.get("GS_DB_HOST", "localhost")
 DB_USER = os.environ.get("GS_DB_USER", "root")
-DB_PASSWORD = os.environ.get("GS_DB_PASSWORD", "Josias50")
+# Aucun mot de passe par defaut : definir GS_DB_PASSWORD dans .env ou l'environnement
+DB_PASSWORD = os.environ.get("GS_DB_PASSWORD", "")
 DB_NAME = os.environ.get("GS_DB_NAME", "ecole")
 
 app = FastAPI()
 
+_origins_brut = os.environ.get("GS_CORS_ORIGINS", "*")
+ORIGINS_AUTORISEES = [o.strip() for o in _origins_brut.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    # Un joker "*" est incompatible avec allow_credentials (spec Fetch) :
+    # on n'active les credentials que pour une liste explicite d'origines.
+    allow_origins=ORIGINS_AUTORISEES,
+    allow_credentials="*" not in ORIGINS_AUTORISEES,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -2197,9 +2206,11 @@ def suivi_mensuel_eleve(inscription_id: int, type_frais: str):
         conn.close()
 
 # CONFIGURATION ET UTILITAIRES SÉCURITÉ / JWT
-SECRET_KEY = "MON_SECRET_SUPER_SECURISE_A_CHANGER_EN_PROD_123456789"
-ALGORITHM = "HS256"
-TOKEN_EXPIRATION_SECONDS = 8 * 3600  # 8 heures
+# Le secret est fourni par GS_JWT_SECRET ou genere/persiste dans .jwt_secret
+# (voir securite.py). Aucune valeur faible n'est codee en dur.
+SECRET_KEY = securite.SECRET_KEY
+ALGORITHM = securite.ALGORITHM
+TOKEN_EXPIRATION_SECONDS = securite.TOKEN_EXPIRATION_SECONDS
 
 
 # 1. Hachage des mots de passe (Version bcrypt native)
@@ -2268,9 +2279,22 @@ def creer_utilisateur(data: UtilisateurCreate):
 
 # 2. Se connecter (Login)
 @app.post("/login")
-def connexion(credentials: ConnexionDemande):
+def connexion(credentials: ConnexionDemande, request: Request):
+    adresse_ip = request.client.host if request.client else None
+    securite.limiteur_connexion.verifier(adresse_ip, credentials.identifiant)
+
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+
+    def _echec(code, detail, action_audit="connexion_echouee"):
+        securite.limiteur_connexion.enregistrer_echec(adresse_ip, credentials.identifiant)
+        try:
+            compat.enregistrer_audit(cursor, None, action_audit,
+                                     credentials.identifiant, adresse_ip)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        raise HTTPException(status_code=code, detail=detail)
 
     try:
         sql = """
@@ -2289,21 +2313,24 @@ def connexion(credentials: ConnexionDemande):
         user = cursor.fetchone()
 
         if not user:
-            raise HTTPException(
-                status_code=401,
-                detail="Identifiant (téléphone/email) ou mot de passe incorrect.",
+            return _echec(
+                401,
+                "Identifiant (téléphone/email) ou mot de passe incorrect.",
             )
 
         if user["statut"] != "actif":
-            raise HTTPException(
-                status_code=403, detail="Ce compte a été suspendu ou désactivé."
-            )
+            return _echec(403, "Ce compte a été suspendu ou désactivé.")
 
         if not verifier_mot_de_passe(credentials.mot_de_passe, user["mot_de_passe"]):
-            raise HTTPException(
-                status_code=401,
-                detail="Identifiant (téléphone/email) ou mot de passe incorrect.",
+            return _echec(
+                401,
+                "Identifiant (téléphone/email) ou mot de passe incorrect.",
             )
+
+        securite.limiteur_connexion.reinitialiser(adresse_ip, credentials.identifiant)
+        compat.enregistrer_audit(cursor, user["id"], "connexion_reussie",
+                                 credentials.identifiant, adresse_ip)
+        conn.commit()
 
         token_payload = {
             "user_id": user["id"],

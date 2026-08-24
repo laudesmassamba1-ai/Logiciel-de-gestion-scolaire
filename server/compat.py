@@ -13,7 +13,14 @@ import random
 import string
 from datetime import date, datetime
 
-from fastapi import Body, HTTPException, Path
+from fastapi import Body, Header, HTTPException, Path
+
+try:
+    import jwt
+except ImportError:  # pragma: no cover
+    jwt = None
+
+import securite
 
 try:
     import mysql.connector
@@ -38,8 +45,49 @@ def connexion():
     return mysql.connect(
         host=_parametre_bd("GS_DB_HOST", "localhost"),
         user=_parametre_bd("GS_DB_USER", "root"),
-        password=_parametre_bd("GS_DB_PASSWORD", "Josias50"),
+        password=_parametre_bd("GS_DB_PASSWORD", ""),
         database=_parametre_bd("GS_DB_NAME", "ecole"),
+    )
+
+
+# ============================================================
+# PISTE D'AUDIT
+# ============================================================
+
+def _identite_depuis_token(authorization):
+    """Decode l'entete Authorization: Bearer <jwt> et retourne le payload.
+
+    Leve 401 si l'entete est absente, mal formee ou si le token est
+    invalide/expire.
+    """
+    if jwt is None:
+        raise HTTPException(status_code=500, detail="PyJWT non installe")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401,
+                            detail="En-tête Authorization manquant")
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        return jwt.decode(token, securite.SECRET_KEY,
+                          algorithms=[securite.ALGORITHM])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+
+
+def enregistrer_audit(curseur, utilisateur_id, action, details="", adresse_ip=None):
+    """Insere une entree dans la piste d'audit.
+
+    Appelée avec le curseur de la transaction en cours : l'entree d'audit
+    est validee (commit) atomiquement avec l'operation qu'elle decrit.
+    """
+    curseur.execute(
+        "INSERT INTO audit_log (utilisateur_id, action, details, adresse_ip)"
+        " VALUES (%s, %s, %s, %s)",
+        (
+            utilisateur_id,
+            str(action)[:80],
+            str(details or "")[:500],
+            adresse_ip,
+        ),
     )
 
 
@@ -73,6 +121,17 @@ CREATE TABLE IF NOT EXISTS caisse_transaction (
     type ENUM('entree', 'sortie') NOT NULL,
     mode_reglement VARCHAR(30),
     date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    horodatage TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    utilisateur_id INT,
+    action VARCHAR(80) NOT NULL,
+    details VARCHAR(500),
+    adresse_ip VARCHAR(45),
+    INDEX idx_audit_action (action),
+    INDEX idx_audit_date (horodatage)
 );
 """
 
@@ -381,6 +440,8 @@ def _modifier_eleve(eleve_id: int, payload_brut: dict):
                     curseur.execute(
                         "INSERT INTO inscription (eleve_id, classe_id, annee_scolaire_id)"
                         " VALUES (%s, %s, %s)", (eleve_id, classe_id, annee_id))
+        enregistrer_audit(curseur, None, "modification_eleve",
+                          f"eleve_id={eleve_id} champs={sorted(champs)}")
         conn.commit()
         return {"message": "Élève modifié avec succès", "eleve_id": eleve_id}
     except HTTPException:
@@ -410,6 +471,8 @@ def _vider_donnees_eleve(eleve_id: int, table: str):
                    (SELECT id FROM inscription WHERE eleve_id = %s)""", (eleve_id,))
         else:
             raise HTTPException(status_code=400, detail="Table inconnue")
+        enregistrer_audit(curseur, None, "suppression_donnees_eleve",
+                          f"eleve_id={eleve_id} table={table}")
         conn.commit()
         return {"message": f"Données '{table}' supprimées"}
     except HTTPException:
@@ -495,6 +558,8 @@ def _supprimer_classe(ref: str):
         curseur.execute("UPDATE eleve JOIN inscription i ON i.eleve_id = eleve.id"
                         " SET eleve.est_supprime = TRUE WHERE i.classe_id = %s", (id_classe,))
         curseur.execute("DELETE FROM classe WHERE id = %s", (id_classe,))
+        enregistrer_audit(curseur, None, "suppression_classe",
+                          f"classe_id={id_classe} ref={ref}")
         conn.commit()
         return {"message": "Classe supprimée avec succès"}
     except HTTPException:
@@ -864,6 +929,9 @@ def _ajouter_paiement(payload: dict):
              _chaine(payload.get("mois")) or None,
              _chaine(payload.get("uuid_client")) or None))
         nouvel_id = curseur.lastrowid
+        enregistrer_audit(curseur, None, "paiement_eleve",
+                          f"eleve_id={eleve_id} montant={payload.get('montant')} "
+                          f"type={_type_frais(payload.get('type_frais'))}")
         conn.commit()
         return {"message": "Paiement enregistré avec succès", "id": nouvel_id,
                 "inscription_id": inscription_id}
@@ -1008,6 +1076,9 @@ def _ajouter_note(payload: dict):
                 (inscription_id, matiere_id, type_evaluation,
                  float(valeur), 20, jour, trimestre,
                  _chaine(payload.get("uuid_client")) or None))
+        enregistrer_audit(curseur, None, "saisie_notes",
+                          f"eleve_id={eleve_id} matiere_id={matiere_id} "
+                          f"trimestre={trimestre} nb={len(composantes)}")
         conn.commit()
         return {"message": "Notes enregistrées avec succès",
                 "inscription_id": inscription_id, "nb_notes": len(composantes)}
@@ -1108,6 +1179,8 @@ def _activer_annee(annee_id: int):
         curseur.execute("UPDATE annee_scolaire SET est_active = FALSE")
         curseur.execute("UPDATE annee_scolaire SET est_active = TRUE WHERE id = %s",
                         (annee_id,))
+        enregistrer_audit(curseur, None, "activation_annee_scolaire",
+                          f"annee_id={annee_id}")
         conn.commit()
         return {"message": "Année scolaire activée avec succès"}
     except HTTPException:
@@ -1171,6 +1244,8 @@ def _creer_compte(payload: dict):
              email, identifiant, hacher(_token_aleatoire()), role,
              "actif" if payload.get("actif", 1) else "inactif"))
         nouvel_id = curseur.lastrowid
+        enregistrer_audit(curseur, None, "creation_compte",
+                          f"identifiant={identifiant} role={role}")
         conn.commit()
         return {"message": "Utilisateur créé avec succès", "id": nouvel_id,
                 "identifiant": identifiant}
@@ -1499,6 +1574,30 @@ def enregistrer_routes_compat(app):
         try:
             curseur.execute("SELECT COUNT(*) FROM classe")
             return {"total_classe": curseur.fetchone()[0]}
+        finally:
+            curseur.close()
+            conn.close()
+
+    # ---------- Piste d'audit (lecture reservee admin/directeur) ----------
+    @app.get("/audit")
+    def _compat_consulter_audit(limite: int = 200,
+                                authorization: str = Header(None)):
+        identite = _identite_depuis_token(authorization)
+        if str(identite.get("role", "")).lower() not in ("admin", "administrateur",
+                                                         "directeur"):
+            raise HTTPException(status_code=403,
+                                detail="Consultation de l'audit reservee "
+                                       "aux administrateurs et directeurs.")
+        conn = connexion()
+        curseur = conn.cursor()
+        try:
+            curseur.execute(
+                "SELECT id, horodatage, utilisateur_id, action, details, adresse_ip"
+                " FROM audit_log ORDER BY id DESC LIMIT %s",
+                (max(1, min(int(limite), 1000)),))
+            colonnes = ["id", "horodatage", "utilisateur_id", "action",
+                        "details", "adresse_ip"]
+            return [dict(zip(colonnes, ligne)) for ligne in curseur.fetchall()]
         finally:
             curseur.close()
             conn.close()

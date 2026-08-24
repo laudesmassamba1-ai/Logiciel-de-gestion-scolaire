@@ -14,3 +14,8 @@ mobile/bin/
 mobile/.buildozer/
 mobile/*.keystore
 mobile/keystore-credentials.txt
+server/.env
+server/.jwt_secret
+server/venv/
+__pycache__/
+*.pyc

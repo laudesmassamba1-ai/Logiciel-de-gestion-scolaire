@@ -413,3 +413,111 @@ def test_routes_historiques_toujours_la(client):
     c, _ = client
     assert c.get("/ping").json() == {"status": "online"}
     assert c.get("/total_eleves").status_code == 200
+
+
+# ============================================================
+# SECURITE : RATE LIMITING, AUDIT, PROTECTION /audit
+# ============================================================
+
+import time
+
+import jwt as pyjwt
+import securite
+
+
+@pytest.fixture(autouse=True)
+def _limiteur_propre():
+    securite.limiteur_connexion.reinitialiser()
+    yield
+    securite.limiteur_connexion.reinitialiser()
+
+
+def test_rate_limit_login_bloque_apres_5_echecs(client):
+    c, _ = client
+    for _ in range(securite.LimiteurConnexion().max_echecs):
+        r = c.post("/login", json={"identifiant": "pirate", "mot_de_passe": "x"})
+        assert r.status_code == 401
+    # 6eme tentative : bloque avant meme de toucher la base
+    r = c.post("/login", json={"identifiant": "pirate", "mot_de_passe": "x"})
+    assert r.status_code == 429
+
+
+def test_rate_limit_par_identifiant_independant(client):
+    c, _ = client
+    for _ in range(5):
+        c.post("/login", json={"identifiant": "pirate", "mot_de_passe": "x"})
+    # Un autre identifiant n'herit pas du blocage
+    r = c.post("/login", json={"identifiant": "directeur", "mot_de_passe": "x"})
+    assert r.status_code == 401
+
+
+def test_audit_ecrit_les_actions_sensibles(client):
+    c, conn = client
+    c.delete("/eleve/7/paiements")
+    c.put("/modifierEleve/7", json={"pere_nom": "Nouveau Pere"})
+    actions = [p[1] for s, p in conn.curseur_obj.historique
+               if s.startswith("INSERT INTO audit_log")]
+    assert "suppression_donnees_eleve" in actions
+    assert "modification_eleve" in actions
+
+
+def test_connexion_reussie_est_auditee(client):
+    import bcrypt as bcrypt_mod
+    hache = bcrypt_mod.hashpw(b"secret123", bcrypt_mod.gensalt()).decode()
+    # /login utilise un curseur dictionary=True : ligne sous forme de dict
+    ligne_utilisateur = {"id": 1, "nom": "DIALLO", "prenom": "Awa",
+                         "telephone": "066000111", "email": None,
+                         "mot_de_passe": hache, "role": "admin",
+                         "statut": "actif"}
+    motif = ("from utilisateur", [ligne_utilisateur])
+    REPONSES.append(motif)
+    try:
+        c, conn = client
+        r = c.post("/login", json={"identifiant": "066000111",
+                                   "mot_de_passe": "secret123"})
+        assert r.status_code == 200, r.text
+        actions = [p[1] for s, p in conn.curseur_obj.historique
+                   if s.startswith("INSERT INTO audit_log")]
+        assert actions[-1] == "connexion_reussie"
+    finally:
+        REPONSES.remove(motif)
+
+
+def test_consultation_audit_protegee(client):
+    c, _ = client
+    assert c.get("/audit").status_code == 401  # pas de token
+
+    def token(role):
+        return {"Authorization": "Bearer " + pyjwt.encode(
+            {"user_id": 1, "role": role, "exp": time.time() + 3600},
+            securite.SECRET_KEY, algorithm=securite.ALGORITHM)}
+
+    assert c.get("/audit", headers=token("gestionnaire")).status_code == 403
+    r = c.get("/audit", headers=token("admin"))
+    assert r.status_code == 200 and r.json() == []
+    # Token falsifie : signature invalide -> 401
+    faux = {"Authorization": "Bearer " + pyjwt.encode(
+        {"user_id": 9, "role": "admin", "exp": time.time() + 3600},
+        "mauvaise-cle", algorithm="HS256")}
+    assert c.get("/audit", headers=faux).status_code == 401
+
+
+def test_charger_secret_jwt_priorites(tmp_path, monkeypatch):
+    monkeypatch.delenv("GS_JWT_SECRET", raising=False)
+
+    # 1. Generation + persistance dans le dossier fourni
+    secret1 = securite.charger_secret_jwt(dossier=str(tmp_path))
+    assert len(secret1) >= 32
+    fichier = tmp_path / ".jwt_secret"
+    assert fichier.read_text(encoding="utf-8").strip() == secret1
+    # 2. Relecture : le meme secret est retourn (persistance)
+    assert securite.charger_secret_jwt(dossier=str(tmp_path)) == secret1
+
+    # 3. Variable d'environnement trop courte -> refus explicite
+    monkeypatch.setenv("GS_JWT_SECRET", "court")
+    with pytest.raises(ValueError):
+        securite.charger_secret_jwt(dossier=str(tmp_path))
+
+    # 4. Variable d'environnement valide -> prioritaire
+    monkeypatch.setenv("GS_JWT_SECRET", "x" * 48)
+    assert securite.charger_secret_jwt(dossier=str(tmp_path)) == "x" * 48

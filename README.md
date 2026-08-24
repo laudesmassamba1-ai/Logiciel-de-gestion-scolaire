@@ -88,17 +88,34 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 La base MySQL est creee automatiquement au premier demarrage (`schema.sql`).
-Configuration optionnelle par variables d'environnement :
+Configuration par le fichier `server/.env` (voir `.env.example`) :
 
 | Variable | Description | Defaut |
 |---|---|---|
 | `GS_DB_HOST` | Hote MySQL | `localhost` |
 | `GS_DB_USER` | Utilisateur MySQL | `root` |
-| `GS_DB_PASSWORD` | Mot de passe MySQL | - |
+| `GS_DB_PASSWORD` | Mot de passe MySQL (**obligatoire**, aucun defaut) | - |
 | `GS_DB_NAME` | Nom de la base | `ecole` |
+| `GS_JWT_SECRET` | Secret JWT (32 car. min ; sinon genere dans `.jwt_secret`) | auto |
 
 Puis ouvrir le port 8000 dans le pare-feu du poste serveur et lui donner
 une IP fixe sur le reseau local.
+
+### Securite integree
+
+- **Aucun secret en dur** : mot de passe MySQL obligatoire via `.env`,
+  secret JWT fourni ou genere aleatoirement et persiste (fichier
+  `server/.jwt_secret`, non versionne).
+- **Anti brute-force** : 5 echecs de connexion par poste/identifiant
+  declenchent un blocage temporaire (HTTP 429).
+- **Piste d'audit** : connexions, saisie de notes, paiements, suppressions,
+  activation d'annee et creation de comptes sont journalises dans la table
+  `audit_log`. Consultation : `GET /audit?limite=200` avec un token JWT
+  d'administrateur ou directeur.
+- **CORS** configurable via `GS_CORS_ORIGINS` (defaut `*` sans cookies).
+
+Recommandations reseau complementaires : IP fixe du serveur, trafic
+restreint au VLAN de l'ecole, sauvegarde quotidienne de la base MySQL.
 
 ### Postes clients
 

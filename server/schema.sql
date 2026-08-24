@@ -193,3 +193,15 @@ CREATE TABLE IF NOT EXISTS caisse_transaction (
     mode_reglement VARCHAR(30),
     date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 17. audit_log (piste d'audit des operations sensibles)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    horodatage TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    utilisateur_id INT,
+    action VARCHAR(80) NOT NULL,
+    details VARCHAR(500),
+    adresse_ip VARCHAR(45),
+    INDEX idx_audit_action (action),
+    INDEX idx_audit_date (horodatage)
+);
