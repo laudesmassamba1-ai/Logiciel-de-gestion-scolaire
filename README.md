@@ -69,6 +69,58 @@ Variables d'environnement optionnelles :
 python -m pytest tests/ -v
 ```
 
+## Serveur de synchronisation (multi-postes)
+
+Le dossier `server/` contient l'API FastAPI + MySQL issue de la branche
+`gestion_scolaire_api`. Elle centralise les donnees entre plusieurs postes
+d'un meme etablissement : un seul PC fait tourner le serveur, les autres
+postes (clients) pointent vers lui via `GS_API_URL`.
+
+### Installation du poste serveur (un seul par etablissement)
+
+```bash
+cd server/
+pip install -r requirements.txt
+# Windows : installe l'API comme service demarrage automatique (NSSM)
+setup_service.bat
+# Linux / test :
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+La base MySQL est creee automatiquement au premier demarrage (`schema.sql`).
+Configuration optionnelle par variables d'environnement :
+
+| Variable | Description | Defaut |
+|---|---|---|
+| `GS_DB_HOST` | Hote MySQL | `localhost` |
+| `GS_DB_USER` | Utilisateur MySQL | `root` |
+| `GS_DB_PASSWORD` | Mot de passe MySQL | - |
+| `GS_DB_NAME` | Nom de la base | `ecole` |
+
+Puis ouvrir le port 8000 dans le pare-feu du poste serveur et lui donner
+une IP fixe sur le reseau local.
+
+### Postes clients
+
+```bash
+set GS_API_URL=http://IP_DU_POSTE_SERVEUR:8000
+set GS_SYNC_ACTIVE=true
+python main.py
+```
+
+L'application reste entierement fonctionnelle hors-ligne : les ecritures
+sont enregistrees localement puis synchronisees automatiquement des que le
+serveur repond (file d'attente, anti-doublon par `uuid_client`).
+
+### Compatibilite client/serveur
+
+Le serveur expose a la fois ses routes historiques (`/ajout_eleve`,
+`/ajout_classe`, ...) et celles utilisees par l'application de bureau
+(`/eleve`, `/classe`, `/modifierEleve/{id}`, `/planning`, `/parametre`, ...).
+Cette couche d'adaptation vit dans `server/compat.py` ; elle traduit aussi
+les champs de l'app bureau vers le schema MySQL (ex : `pere_nom` ->
+`nom_parent`). Tests : `cd server && python -m pytest test_compat.py`.
+
 ## Build et distribution
 
 ### Linux (.deb + AppImage)
@@ -124,7 +176,13 @@ Logiciel-de-gestion-scolaire/
       programmes_page.py     # Programmes
       statistiques_page.py   # Statistiques
     ui_files/                # Fichiers .ui (Qt Designer)
-  tests/                     # Tests unitaires
+  tests/                     # Tests unitaires (app bureau)
+  server/                    # API de synchronisation (FastAPI + MySQL)
+    main.py                  # Application FastAPI
+    compat.py                # Couche de compatibilite app bureau <-> serveur
+    test_compat.py           # Tests de la couche de compatibilite
+    schema.sql               # Schema MySQL (cree automatiquement)
+    setup_service.bat        # Installation service Windows (NSSM)
 ```
 
 ## Licence
