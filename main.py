@@ -1,114 +1,39 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+import threading
+import time
+from database import initialiser_base
+from sync_engine import demarrer_moteur_synchro
+import api_client
+# Importe ton queue_manager pour les opérations POST/PUT/DELETE
+import queue_manager 
 
-from database import (
-    init_database,
-    insert_cycles,
-    insert_classes,
-    insert_eleves
-)
+def lancer_application():
+    # 1. Initialiser la base de données locale SQLite
+    print("[INIT] Initialisation de la base SQLite locale...")
+    initialiser_base()
 
+    # 2. Lancer le moteur de synchronisation en arrière-plan (Thread séparé)
+    print("[INIT] Démarrage du thread de synchronisation...")
+    thread_synchro = threading.Thread(
+        target=demarrer_moteur_synchro, 
+        kwargs={"intervalle": 10},  # Vérifie toutes les 10 secondes
+        daemon=True  # S'arrête automatiquement quand l'application principale ferme
+    )
+    thread_synchro.start()
 
-# ============================================================
-# APPLICATION FASTAPI
-# ============================================================
+    # 3. Lancement du reste de ton application (Exemple de test)
+    print("[APP] Application prête et en cours d'exécution !")
+    
+    # --- TEST RAPIDE DE FONCTIONNEMENT ---
+    # Exemple 1: Lecture d'élèves (hybride)
+    res_eleves = api_client.obtenir_liste_eleves()
+    print(f"[TEST GET] Source: {res_eleves['source']}, Nb élèves: {len(res_eleves['data'])}")
 
-app = FastAPI(
-    title="Gestion Scolaire API",
-    version="1.0.0"
-)
+    # Garder le script principal éveillé (si c'est un script console)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n[STOP] Fermeture de l'application.")
 
-
-# ============================================================
-# INITIALISATION DE LA BASE DE DONNÉES
-# ============================================================
-
-init_database()
-insert_cycles()
-insert_classes()
-insert_eleves()
-
-
-print("Base de données initialisée avec succès.")
-print("Données des cycles chargées.")
-print("Données des classes chargées.")
-print("Données des élèves chargées.")
-
-
-# ============================================================
-# MODÈLE ÉLÈVE
-# ============================================================
-
-class Eleve(BaseModel):
-    id: int
-    nom: str
-    prenom: str
-    classe_id: int
-
-
-# ============================================================
-# MODÈLE D'UNE OPÉRATION DE SYNCHRONISATION
-# ============================================================
-
-class EleveSynchro(BaseModel):
-    uuid_client: str
-    eleve: Eleve
-
-
-# ============================================================
-# ROUTE PRINCIPALE
-# ============================================================
-
-@app.get("/")
-def accueil():
-
-    return {
-        "message": "API Gestion Scolaire opérationnelle"
-    }
-
-
-# ============================================================
-# ROUTE DE TEST
-# ============================================================
-
-@app.get("/test")
-def test():
-
-    return {
-        "message": "Connexion FastAPI réussie"
-    }
-
-
-# ============================================================
-# ROUTE PING
-# ============================================================
-
-@app.get("/ping")
-def ping():
-
-    return {
-        "status": "online"
-    }
-
-
-# ============================================================
-# AJOUTER UN ÉLÈVE
-# ============================================================
-
-@app.post("/eleves")
-def ajouter_eleve(data: EleveSynchro):
-
-    print("\n===================================")
-    print("SYNCHRONISATION D'UN ÉLÈVE")
-    print("===================================")
-
-    print("UUID client :", data.uuid_client)
-    print("Élève reçu :", data.eleve.model_dump())
-
-    print("===================================\n")
-
-    return {
-        "message": "Élève synchronisé avec succès",
-        "uuid_client": data.uuid_client,
-        "eleve": data.eleve.model_dump()
-    }
+if __name__ == "__main__":
+    lancer_application()
