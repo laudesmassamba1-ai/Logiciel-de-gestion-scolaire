@@ -1,10 +1,35 @@
 import json
+import os
 import time
 import requests
 from database import get_connection
 
-BASE_URL_SERVEUR = "http://ton-serveur-api.com" 
+# Chemin vers le fichier de configuration
+CONFIG_FILE = "config.json"
+
+def charger_configuration():
+    """Charge la configuration depuis le fichier JSON ou utilise des valeurs par défaut."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                ip = config.get("server_ip", "127.0.0.1")
+                port = config.get("port", 8000)
+                return f"http://{ip}:{port}"
+        except Exception as e:
+            print(f"[ERREUR CONFIG] Impossible de lire le fichier config.json : {e}")
+    
+    # Valeur de secours par défaut si le fichier n'existe pas
+    return "http://127.0.0.1:8000"
+
+# Initialisation de l'URL du serveur
+BASE_URL_SERVEUR = charger_configuration()
 TIMEOUT = 5  # secondes
+
+print(f"[SYNC ENGINE] Moteur de synchronisation démarré...")
+print(f"[SYNC ENGINE] Connecté au serveur cible : {BASE_URL_SERVEUR}")
+
+# --- Le reste de ton code de synchronisation continue ici ---
 
 
 def tester_connexion() -> bool:
