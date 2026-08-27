@@ -183,7 +183,7 @@ def get_total_eleve_par_sexe_par_classe(classe: str) -> dict:
 def get_all_eleves_par_classe(classe: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nom, prenom, sexe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and  classe.classe = %s and est_supprime = 0",(classe, ))
+    cursor.execute("SELECT eleve.id, nom, prenom, sexe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and  classe.classe = %s and est_supprime = 0",(classe, ))
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -371,6 +371,30 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
         cursor.close()
         conn.close()
 
+@app.get("/lister_toutes_les_inscriptions")
+def get_lister_toutes_les_inscriptions():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Utilisation de JOIN et ORDER BY pour lister TOUTES les inscriptions triées par classe
+    cursor.execute("""
+        SELECT eleve.nom, eleve.prenom, eleve.sexe, inscription.*, classe.classe AS nom_classe 
+        FROM inscription
+        JOIN eleve ON inscription.eleve_id = eleve.id
+        JOIN classe ON inscription.classe_id = classe.id
+        ORDER BY classe.classe ASC
+    """)
+    inscriptions = cursor.fetchall()
+    
+    conn.close()
+
+    return {
+        "status": "success",
+        "total": len(inscriptions),
+        "inscriptions": inscriptions
+    }
+
+
 class EleveModifier(BaseModel):
     nom: Optional[str] = None
     prenom: Optional[str] = None
@@ -518,7 +542,7 @@ def get_total_classe()-> dict:
 def get_all_classe()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT classe, cycle.nom FROM classe, cycle where classe.cycle_id=cycle.id")
+    cursor.execute("SELECT classe.id, classe, cycle.nom FROM classe, cycle where classe.cycle_id=cycle.id")
     classes = cursor.fetchall()
     return {"classes": classes}
 
@@ -1498,6 +1522,27 @@ def get_liste_de_presence_par_classe(classe: str):
     conn.close()
     return{"liste de presence par classe": liste_eleve}
 
+@app.get("/toutes_presence")
+def get_presence_par_classe():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Récupérer la liste des présences avec le nom de la classe
+    cursor.execute("""
+        SELECT presences.*, classe.classe as nom_classe
+        FROM presences
+        JOIN classe ON presences.classe_id = classe.id
+        ORDER BY classe.classe ASC
+    """)
+    presences = cursor.fetchall()
+    conn.close()
+
+    return {
+        "status": "success",
+        "total": len(presences),
+        "presences": presences
+    }
+
 
 #route pour ajouter une présence pour un élève dans une classe
 class PresenceAjouter(BaseModel):
@@ -1761,6 +1806,29 @@ def associer_matiere_classe_enseignant(association: MatiereClasseEnseignant):
         "message": "Association ajoutée avec succès",
         "id": nouvel_id,
         "association": association.dict(),
+    }
+
+@app.get("/tous_les_programme")
+def tous_les_programme():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT p.id, classe.nom AS classe, m.nom AS matiere, e.nom AS enseignant_nom, p.coefficient
+        FROM programme p
+        JOIN matiere m ON p.matiere_id = m.id
+        JOIN enseignant e ON p.enseignant_id = e.id
+        JOIN classe ON p.classe_id = classe.id
+        ORDER BY classe.nom ASC
+    """)
+    programme = cursor.fetchall()
+
+    conn.close()
+
+    return {
+        "status": "success",
+        "total": len(programme),
+        "programme": programme
     }
 
 #route pour lister le programme d'une classe avec les matieres et les enseignants
