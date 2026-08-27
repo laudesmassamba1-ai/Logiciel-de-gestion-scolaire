@@ -2,13 +2,18 @@ import json
 import os
 import time
 import requests
-from database import get_connection
 
-# Chemin vers le fichier de configuration
+from database import get_connection, initialiser_base
+
+
+# ============================================================
+# CONFIGURATION SERVEUR (via config.json)
+# ============================================================
+
 CONFIG_FILE = "config.json"
 
+
 def charger_configuration():
-    """Charge la configuration depuis le fichier JSON ou utilise des valeurs par défaut."""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -17,23 +22,20 @@ def charger_configuration():
                 port = config.get("port", 8000)
                 return f"http://{ip}:{port}"
         except Exception as e:
-            print(f"[ERREUR CONFIG] Impossible de lire le fichier config.json : {e}")
-    
-    # Valeur de secours par défaut si le fichier n'existe pas
+            print(f"[ERREUR CONFIG] Impossible de lire config.json : {e}")
+
     return "http://127.0.0.1:8000"
 
-# Initialisation de l'URL du serveur
+
 BASE_URL_SERVEUR = charger_configuration()
-TIMEOUT = 5  # secondes
+TIMEOUT = 5
 
-print(f"[SYNC ENGINE] Moteur de synchronisation démarré...")
-print(f"[SYNC ENGINE] Connecté au serveur cible : {BASE_URL_SERVEUR}")
 
-# --- Le reste de ton code de synchronisation continue ici ---
-
+# ============================================================
+# TEST DE CONNEXION
+# ============================================================
 
 def tester_connexion() -> bool:
-    """Vérifie si le serveur distant est accessible (endpoint /ping)."""
     try:
         response = requests.get(f"{BASE_URL_SERVEUR}/ping", timeout=TIMEOUT)
         return response.status_code == 200
@@ -41,8 +43,12 @@ def tester_connexion() -> bool:
         return False
 
 
+# ============================================================
+# TRAITEMENT DE LA FILE D'ATTENTE
+# ============================================================
+
 def traiter_file_synchro():
-    """Parcourt la file d'attente et envoie les requêtes au serveur central."""
+
     if not tester_connexion():
         return
 
@@ -60,43 +66,68 @@ def traiter_file_synchro():
         connection.close()
         return
 
-    print(f"[SYNC] Connection active. {len(actions)} action(s) à synchroniser...")
+    print(f"[SYNC] Connexion active. {len(actions)} action(s) à synchroniser...")
 
-    for action in actions:
-        action_id, endpoint, methode, payload_json, uuid_client = action
+    for action_id, endpoint, methode, payload_json, uuid_client in actions:
+
         url = f"{BASE_URL_SERVEUR}{endpoint}"
         payload = json.loads(payload_json) if payload_json else {}
 
         try:
             if methode == "POST":
                 res = requests.post(url, json=payload, timeout=TIMEOUT)
+
             elif methode == "PUT":
                 res = requests.put(url, json=payload, timeout=TIMEOUT)
+
             elif methode == "DELETE":
-                res = requests.delete(url, json=payload, timeout=TIMEOUT)
+                # Les routes DELETE de l'API n'attendent aucun corps
+                res = requests.delete(url, timeout=TIMEOUT)
+
             else:
+                print(f"[SYNC] Méthode inconnue ({methode}), opération {action_id} ignorée.")
                 continue
 
-            # Succès (200, 201, 204)
-            if res.status_code in [200, 201, 204]:
-                cursor.execute("DELETE FROM file_attente_synchro WHERE id = ?", (action_id,))
+            # Succès
+            if res.status_code in (200, 201, 204):
+                cursor.execute(
+                    "DELETE FROM file_attente_synchro WHERE id = ?", (action_id,)
+                )
                 connection.commit()
                 print(f"[SYNC OK] {methode} {endpoint} synchronisé avec succès.")
-            else:
-                print(f"[SYNC ERREUR] {methode} {endpoint} -> Code HTTP {res.status_code}: {res.text}")
-                # On stoppe la boucle pour préserver l'ordre chronologique des requêtes
-                break
 
-        except Exception as e:
-            print(f"[SYNC ÉCHEC] Impossible de joindre le serveur pour l'action {action_id}: {e}")
+            # Payload définitivement invalide : ne bloque pas les autres,
+            # mais on la laisse en file pour investigation (pas de perte
+            # silencieuse de données).
+            elif res.status_code == 422:
+                print(f"[SYNC ERREUR 422] {methode} {endpoint} — payload invalide, "
+                      f"opération {action_id} laissée en file pour correction.")
+                print("Détail :", res.text)
+                continue  # on passe à la suivante, pas de blocage global
+
+            # Autre erreur serveur (500, 404...) : on log et on continue,
+            # sans bloquer le reste de la file.
+            else:
+                print(f"[SYNC ERREUR] {methode} {endpoint} -> {res.status_code} : {res.text}")
+                continue  # idem, plus de "break" qui bloquait tout
+
+        except requests.exceptions.RequestException as e:
+            # Là, c'est vraiment une coupure réseau en plein milieu du
+            # traitement : ça, on arrête tout, ça n'a aucun sens de
+            # continuer à essayer les suivantes dans la même seconde.
+            print(f"[SYNC ÉCHEC] Connexion perdue en cours de synchro : {e}")
             break
 
     connection.close()
 
 
+# ============================================================
+# BOUCLE PRINCIPALE
+# ============================================================
+
 def demarrer_moteur_synchro(intervalle: int = 10):
-    """Boucle infinie pour vérifier et exécuter la synchronisation périodiquement."""
     print("[SYNC ENGINE] Moteur de synchronisation démarré...")
+    print(f"[SYNC ENGINE] Connecté au serveur cible : {BASE_URL_SERVEUR}")
     while True:
         try:
             traiter_file_synchro()
@@ -106,4 +137,5 @@ def demarrer_moteur_synchro(intervalle: int = 10):
 
 
 if __name__ == "__main__":
+    initialiser_base()
     demarrer_moteur_synchro()

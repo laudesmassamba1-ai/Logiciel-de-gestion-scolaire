@@ -2,7 +2,7 @@ import requests
 from database import get_connection
 
 # Configuration du serveur backend FastAPI
-BASE_URL_SERVEUR = "http://localhost:8000"  # Remplace par l'URL exacte de ton serveur distant
+BASE_URL_SERVEUR = "http://localhost:8000"  
 TIMEOUT = 3  # Délai maximal (en secondes) avant d'abandonner le réseau et basculer sur SQLite
 
 

@@ -1,136 +1,187 @@
 import sqlite3
+import uuid
 
-DB_NAME = "local_database.db"
 
+DB_NAME = "cache_local.db"
+
+
+# ============================================================
+# CONNEXION À LA BASE
+# ============================================================
 
 def get_connection():
-    """Retourne une connexion active à la base SQLite local."""
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+    connection = sqlite3.connect(DB_NAME)
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
 
 
-def initialiser_base():
-    """Crée les tables SQLite locales si elles n'existent pas encore."""
-    conn = get_connection()
-    cursor = conn.cursor()
+# ============================================================
+# INITIALISATION DE LA BASE
+# ============================================================
 
-    # 1. Table de file d'attente pour la synchronisation hors-ligne
+def init_database():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    # ========================================================
+    # DONNÉES DE RÉFÉRENCE (en lecture seule, synchronisées
+    # depuis le serveur — pas concernées par la file d'attente)
+    # ========================================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cycle (
+            id INTEGER PRIMARY KEY,
+            nom TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS classe (
+            id INTEGER PRIMARY KEY,
+            nom TEXT NOT NULL,
+            cycle_id INTEGER NOT NULL,
+            FOREIGN KEY (cycle_id) REFERENCES cycle(id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS matiere (
+            id INTEGER PRIMARY KEY,
+            nom TEXT NOT NULL
+        )
+    """)
+
+    # ========================================================
+    # ELEVE — cache local, aligné sur les champs de l'API
+    # ========================================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS eleve (
+            id INTEGER PRIMARY KEY,
+            uuid_client TEXT UNIQUE NOT NULL,
+            matricule TEXT NOT NULL,
+            nom TEXT NOT NULL,
+            prenom TEXT NOT NULL,
+            sexe TEXT NOT NULL,
+            date_naissance TEXT,
+            lieu_naissance TEXT,
+            adresse TEXT,
+            nom_parent TEXT,
+            redoublant TEXT NOT NULL DEFAULT '0',
+            statut TEXT,
+            classe_id INTEGER NOT NULL,
+            telephone_parent TEXT,
+            inscription_id INTEGER,
+            FOREIGN KEY (classe_id) REFERENCES classe(id)
+        )
+    """)
+
+    # ========================================================
+    # FILE D'ATTENTE DE SYNCHRONISATION (générique — sert à
+    # TOUTES les opérations : élève, paiement, note, présence...)
+    # ========================================================
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS file_attente_synchro (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             endpoint TEXT NOT NULL,
             methode TEXT NOT NULL,
             payload_json TEXT NOT NULL,
-            uuid_client TEXT,
-            cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            uuid_client TEXT
         )
     """)
 
-    # 2. Table Élèves
+    connection.commit()
+    connection.close()
+
+    print("Base de données locale initialisée avec succès.")
+
+
+# Alias pour compatibilité avec le code existant qui appelle "initialiser_base"
+initialiser_base = init_database
+
+
+# ============================================================
+# DONNÉES DE RÉFÉRENCE PAR DÉFAUT (cycles et classes)
+# À charger une fois, ou à recevoir du serveur plus tard
+# ============================================================
+
+def insert_cycles():
+    connection = get_connection()
+    cursor = connection.cursor()
+    cycles = [
+        (1, "prescolaire"), (2, "primaire"), (3, "college"), (4, "lycee"),
+    ]
+    cursor.executemany(
+        "INSERT OR IGNORE INTO cycle (id, nom) VALUES (?, ?)", cycles
+    )
+    connection.commit()
+    connection.close()
+    print("Données des cycles chargées.")
+
+
+def insert_classes():
+    connection = get_connection()
+    cursor = connection.cursor()
+    classes = [
+        (1, "P1", 1), (2, "P2", 1), (3, "P3", 1),
+        (4, "CP1", 2), (5, "CP2", 2), (6, "CE1", 2), (7, "CE2", 2),
+        (8, "CM1", 2), (9, "CM2", 2),
+        (10, "6E", 3), (11, "5E", 3), (12, "4E", 3), (13, "3E", 3),
+        (14, "SECOND TROIS COMMUNS", 4), (15, "PREMIERE TROIS COMMUNS", 4),
+        (16, "TERMINALE TROIS COMMUNS", 4),
+    ]
+    cursor.executemany(
+        "INSERT OR IGNORE INTO classe (id, nom, cycle_id) VALUES (?, ?, ?)",
+        classes,
+    )
+    connection.commit()
+    connection.close()
+    print("Données des classes chargées.")
+
+
+# ============================================================
+# ENREGISTRER UN ÉLÈVE DANS LE CACHE LOCAL
+# (appelé juste après l'avoir mis en file d'attente, pour que
+# l'interface puisse l'afficher tout de suite, sans attendre
+# la synchro)
+# ============================================================
+
+def enregistrer_eleve_local(uuid_client, eleve_dict, inscription_id=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS eleve (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT,
-            prenom TEXT,
-            sexe TEXT,
-            date_naissance TEXT,
-            lieu_naissance TEXT,
-            adresse TEXT,
-            nom_parent TEXT,
-            numero_parent TEXT,
-            redoublant TEXT DEFAULT '0',
-            statut TEXT DEFAULT 'actif',
-            uuid_client TEXT UNIQUE
-        )
-    """)
+        INSERT INTO eleve (
+            uuid_client, matricule, nom, prenom, sexe, date_naissance,
+            lieu_naissance, adresse, nom_parent, redoublant, statut,
+            classe_id, telephone_parent, inscription_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        uuid_client,
+        eleve_dict.get("matricule"),
+        eleve_dict.get("nom"),
+        eleve_dict.get("prenom"),
+        eleve_dict.get("sexe"),
+        eleve_dict.get("date_naissance"),
+        eleve_dict.get("lieu_naissance"),
+        eleve_dict.get("adresse"),
+        eleve_dict.get("nom_parent"),
+        eleve_dict.get("redoublant", "0"),
+        eleve_dict.get("statut"),
+        eleve_dict.get("classe_id"),
+        eleve_dict.get("telephone_parent"),
+        inscription_id,
+    ))
 
-    # 3. Table Enseignants
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS enseignant (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT,
-            prenom TEXT,
-            sexe TEXT,
-            date_naissance TEXT,
-            lieu_naissance TEXT,
-            adresse TEXT,
-            telephone TEXT,
-            email TEXT,
-            diplome TEXT,
-            date_embauche TEXT,
-            statut TEXT DEFAULT 'actif'
-        )
-    """)
-
-    # 4. Table Inscriptions
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS inscription (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            eleve_id INTEGER,
-            classe_id INTEGER,
-            annee_scolaire_id INTEGER,
-            statut TEXT DEFAULT 'actif',
-            uuid_client TEXT UNIQUE
-        )
-    """)
-
-    # 5. Table Paiements
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS paiement (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            inscription_id INTEGER,
-            type_frais TEXT,
-            montant REAL,
-            mode_paiement TEXT,
-            trimestre TEXT,
-            mois TEXT,
-            date_paiement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            uuid_client TEXT UNIQUE
-        )
-    """)
-
-    # 6. Table Notes
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS note (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            inscription_id INTEGER,
-            matiere_id INTEGER,
-            type_evaluation TEXT,
-            note REAL,
-            note_sur REAL DEFAULT 20,
-            date_evaluation TEXT,
-            trimestre TEXT,
-            uuid_client TEXT UNIQUE
-        )
-    """)
-
-    # 7. Table Présences
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS presences (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            eleve_id INTEGER,
-            classe_id INTEGER,
-            date_presence TEXT,
-            statut TEXT DEFAULT 'Present',
-            justifie TEXT DEFAULT 'Non',
-            uuid_client TEXT UNIQUE
-        )
-    """)
-
-    # 8. Tables de configuration (Classe, Cycle, Matiere, Programme, Tarif, Utilisateurs)
-    cursor.execute("CREATE TABLE IF NOT EXISTS classe (id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT, cycle_id INTEGER)")
-    cursor.execute("CREATE TABLE IF NOT EXISTS cycle (id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT)")
-    cursor.execute("CREATE TABLE IF NOT EXISTS matiere (id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT, code TEXT)")
-    cursor.execute("CREATE TABLE IF NOT EXISTS programme (id INTEGER PRIMARY KEY AUTOINCREMENT, classe_id INTEGER, matiere_id INTEGER, enseignant_id INTEGER, coefficient REAL DEFAULT 1)")
-    cursor.execute("CREATE TABLE IF NOT EXISTS annee_scolaire (id INTEGER PRIMARY KEY AUTOINCREMENT, libelle TEXT, date_debut TEXT, date_fin TEXT, statut TEXT DEFAULT 'actif')")
-    cursor.execute("CREATE TABLE IF NOT EXISTS tarif_scolarite (id INTEGER PRIMARY KEY AUTOINCREMENT, cycle_id INTEGER, type_frais TEXT, montant REAL, annee_scolaire_id INTEGER)")
-    cursor.execute("CREATE TABLE IF NOT EXISTS utilisateurs (id INTEGER PRIMARY KEY AUTOINCREMENT, nom_utilisateur TEXT, mot_de_passe_hash TEXT, role TEXT DEFAULT 'utilisateur')")
-
-    conn.commit()
-    conn.close()
-    print("[DATABASE] SQLite locale initialisée avec toutes les tables.")
+    connection.commit()
+    connection.close()
 
 
 if __name__ == "__main__":
-    initialiser_base()
+    init_database()
+    insert_cycles()
+    insert_classes()
+    print("Initialisation terminée.")
