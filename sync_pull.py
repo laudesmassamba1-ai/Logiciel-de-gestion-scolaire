@@ -3,10 +3,6 @@ Synchronisation DESCENDANTE : MySQL -> SQLite.
 À appeler dès qu'il y a internet, pour rafraîchir tout le cache local
 (tables de référence ET tables d'action) avec les dernières données
 du serveur — y compris ce que d'autres postes ont ajouté entre-temps.
-
-⚠️ Vérifie les noms de clés JSON ci-dessous (ex: "classes", "presences",
-"inscriptions") contre ce que tes routes renvoient réellement, surtout
-pour les 3 routes que tu viens d'ajouter/corriger toi-même.
 """
 
 import requests
@@ -39,14 +35,20 @@ def pull_cycle(base_url):
 
 
 def pull_classe(base_url):
-    # ⚠️ Suppose que ta route corrigée renvoie {"classes": [{"id":..,"classe" ou "nom":..,"cycle_id":..}, ...]}
     data = _get(base_url, "/classe")
     if not data:
         return
     lignes = []
     for c in data.get("classes", []):
+        id_classe = c.get("id")
         nom = c.get("nom") or c.get("classe")
-        lignes.append((c["id"], nom, c["cycle_id"]))
+        # Utilisation de .get() pour éviter le plantage si la clé est absente
+        cycle_id = c.get("cycle_id") or c.get("id_cycle")
+        
+        # On s'assure qu'on a au moins l'id et le nom avant d'ajouter
+        if id_classe is not None:
+            lignes.append((id_classe, nom, cycle_id))
+            
     upsert_reference("classe", ["id", "nom", "cycle_id"], lignes)
     print(f"[PULL] {len(lignes)} classe(s) synchronisée(s).")
 

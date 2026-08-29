@@ -105,7 +105,7 @@ def rafraichir_cache_local():
     try:
         # Import différé pour éviter une boucle d'import avec sync_pull.py
         from sync_pull import synchroniser_tout_depuis_mysql
-        synchroniser_tout_depuis_mysql()
+        synchroniser_tout_depuis_mysql(BASE_URL_SERVEUR)
     except Exception as e:
         print(f"[PULL] Erreur pendant le rafraîchissement du cache : {e}")
 
