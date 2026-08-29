@@ -542,7 +542,7 @@ def get_total_classe()-> dict:
 def get_all_classe()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT classe.id, classe, cycle.nom FROM classe, cycle where classe.cycle_id=cycle.id")
+    cursor.execute("SELECT classe.id, classe, cycle.id, cycle.nom FROM classe, cycle where classe.cycle_id=cycle.id")
     classes = cursor.fetchall()
     return {"classes": classes}
 
