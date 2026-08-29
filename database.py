@@ -323,6 +323,56 @@ def remplacer_temp_par_serveur(nom_table, uuid_client, id_serveur, autres_colonn
     connection.close()
 
 
+def upsert_action_row(nom_table, id_serveur, uuid_client, colonnes_valeurs):
+    """
+    Upsert complet pour une table d'action, à partir d'une ligne
+    venant du serveur MySQL. Gère 3 cas :
+      1. La ligne existe déjà en local avec ce id_serveur -> on met à jour
+      2. La ligne existe en local en tant que ligne TEMPORAIRE (créée hors
+         ligne, retrouvée par son uuid_client) -> on la complète avec le
+         vrai id_serveur
+      3. La ligne n'existe pas du tout en local (créée directement côté
+         serveur, ou par un autre poste client) -> on l'insère pour de vrai
+
+    uuid_client peut être None (ligne créée hors du mécanisme de synchro,
+    par exemple directement dans Workbench) : on génère alors un
+    identifiant technique interne pour respecter la contrainte UNIQUE.
+    """
+    if uuid_client is None:
+        uuid_client = f"SERVEUR-{nom_table}-{id_serveur}"
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(f"SELECT id FROM {nom_table} WHERE id_serveur = ?", (id_serveur,))
+    ligne = cursor.fetchone()
+
+    if ligne is None:
+        cursor.execute(f"SELECT id FROM {nom_table} WHERE uuid_client = ?", (uuid_client,))
+        ligne = cursor.fetchone()
+
+    colonnes = list(colonnes_valeurs.keys())
+    valeurs = list(colonnes_valeurs.values())
+
+    if ligne:
+        set_clause = ", ".join(f"{c} = ?" for c in colonnes)
+        cursor.execute(
+            f"UPDATE {nom_table} SET {set_clause}, id_serveur = ?, uuid_client = ? WHERE id = ?",
+            (*valeurs, id_serveur, uuid_client, ligne[0]),
+        )
+    else:
+        toutes_colonnes = colonnes + ["id_serveur", "uuid_client"]
+        toutes_valeurs = valeurs + [id_serveur, uuid_client]
+        placeholders = ", ".join(["?"] * len(toutes_colonnes))
+        cursor.execute(
+            f"INSERT INTO {nom_table} ({', '.join(toutes_colonnes)}) VALUES ({placeholders})",
+            toutes_valeurs,
+        )
+
+    connection.commit()
+    connection.close()
+
+
 if __name__ == "__main__":
     init_database()
     charger_donnees_par_defaut()

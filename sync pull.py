@@ -6,7 +6,7 @@ du serveur — y compris ce que d'autres postes ont ajouté entre-temps.
 """
 
 import requests
-from database import upsert_reference, remplacer_temp_par_serveur
+from database import upsert_reference, upsert_action_row
 
 TIMEOUT = 5
 
@@ -20,10 +20,7 @@ def _get(base_url, endpoint):
         print(f"[PULL] Échec sur {endpoint} : {e}")
         return None
 
-
-# ============================================================
 # TABLES DE RÉFÉRENCE
-# ============================================================
 
 def pull_cycle(base_url):
     data = _get(base_url, "/cycle")
@@ -33,22 +30,15 @@ def pull_cycle(base_url):
     upsert_reference("cycle", ["id", "nom"], lignes)
     print(f"[PULL] {len(lignes)} cycle(s) synchronisé(s).")
 
-
 def pull_classe(base_url):
+
     data = _get(base_url, "/classe")
     if not data:
         return
     lignes = []
     for c in data.get("classes", []):
-        id_classe = c.get("id")
         nom = c.get("nom") or c.get("classe")
-        # Utilisation de .get() pour éviter le plantage si la clé est absente
-        cycle_id = c.get("cycle_id") or c.get("id_cycle")
-        
-        # On s'assure qu'on a au moins l'id et le nom avant d'ajouter
-        if id_classe is not None:
-            lignes.append((id_classe, nom, cycle_id))
-            
+        lignes.append((c["id"], nom, c["cycle_id"]))
     upsert_reference("classe", ["id", "nom", "cycle_id"], lignes)
     print(f"[PULL] {len(lignes)} classe(s) synchronisée(s).")
 
@@ -129,72 +119,126 @@ def pull_tarifs(base_url):
     )
     print(f"[PULL] {len(lignes)} tarif(s) synchronisé(s).")
 
-
-# ============================================================
-# TABLES D'ACTION — on rafraîchit ET on marque les lignes
-# locales temporaires comme désormais synchronisées (via uuid_client)
-# ============================================================
+# TABLES D'ACTION — upsert COMPLET (pas juste réconciliation) :
+# toute ligne venant du serveur est copiée en local, qu'elle ait
+# été créée hors ligne, directement en MySQL, ou par un autre poste.
 
 def pull_eleve(base_url):
     data = _get(base_url, "/eleve")
     if not data:
         return
-    for e in data.get("eleves", []):
-        uuid_client = e.get("uuid_client")
-        if uuid_client:
-            remplacer_temp_par_serveur("eleve", uuid_client, e["id"])
-    print(f"[PULL] Élèves recoupés avec le serveur ({len(data.get('eleves', []))}).")
+    eleves = data.get("eleves", [])
+    for e in eleves:
+        upsert_action_row(
+            "eleve",
+            id_serveur=e["id"],
+            uuid_client=e.get("uuid_client"),
+            colonnes_valeurs={
+                "matricule": e.get("matricule"),
+                "nom": e.get("nom"),
+                "prenom": e.get("prenom"),
+                "sexe": e.get("sexe"),
+                "date_naissance": e.get("date_naissance"),
+                "lieu_naissance": e.get("lieu_naissance"),
+                "adresse": e.get("adresse"),
+                "nom_parent": e.get("nom_parent"),
+                "redoublant": e.get("redoublant", "0"),
+                "statut": e.get("statut"),
+                "telephone_parent": e.get("numero_parent") or e.get("telephone_parent"),
+                "est_supprime": int(e.get("est_supprime", 0)),
+            },
+        )
+    print(f"[PULL] {len(eleves)} élève(s) synchronisé(s).")
 
 
 def pull_paiement(base_url):
     data = _get(base_url, "/paiement")
     if not data:
         return
-    for p in data.get("paiement", []):
-        uuid_client = p.get("uuid_client")
-        if uuid_client:
-            remplacer_temp_par_serveur("paiement", uuid_client, p["id"])
-    print(f"[PULL] Paiements recoupés avec le serveur ({len(data.get('paiement', []))}).")
+    paiements = data.get("paiement", [])
+    for p in paiements:
+        upsert_action_row(
+            "paiement",
+            id_serveur=p["id"],
+            uuid_client=p.get("uuid_client"),
+            colonnes_valeurs={
+                "inscription_id": p.get("inscription_id"),
+                "type_frais": p.get("type_frais"),
+                "montant": p.get("montant"),
+                "date_paiement": p.get("date_paiement"),
+                "mode_paiement": p.get("mode_paiement"),
+                "trimestre": p.get("trimestre"),
+                "mois": p.get("mois"),
+            },
+        )
+    print(f"[PULL] {len(paiements)} paiement(s) synchronisé(s).")
 
 
 def pull_note(base_url):
     data = _get(base_url, "/note")
     if not data:
         return
-    for n in data.get("note", []):
-        uuid_client = n.get("uuid_client")
-        if uuid_client:
-            remplacer_temp_par_serveur("note", uuid_client, n["id"])
-    print(f"[PULL] Notes recoupées avec le serveur ({len(data.get('note', []))}).")
+    notes = data.get("note", [])
+    for n in notes:
+        upsert_action_row(
+            "note",
+            id_serveur=n["id"],
+            uuid_client=n.get("uuid_client"),
+            colonnes_valeurs={
+                "inscription_id": n.get("inscription_id"),
+                "matiere_id": n.get("matiere_id"),
+                "type_evaluation": n.get("type_evaluation"),
+                "note": n.get("note"),
+                "note_sur": n.get("note_sur", 20),
+                "date_evaluation": n.get("date_evaluation"),
+                "trimestre": n.get("trimestre"),
+            },
+        )
+    print(f"[PULL] {len(notes)} note(s) synchronisée(s).")
 
 
 def pull_presences(base_url):
-    # ⚠️ Suppose que ta nouvelle route renvoie {"presences": [...]}
+    
     data = _get(base_url, "/presences")
     if not data:
         return
-    for p in data.get("presences", []):
-        uuid_client = p.get("uuid_client")
-        if uuid_client:
-            remplacer_temp_par_serveur("presences", uuid_client, p["id"])
-    print(f"[PULL] Présences recoupées avec le serveur ({len(data.get('presences', []))}).")
-
+    presences = data.get("presences", [])
+    for p in presences:
+        upsert_action_row(
+            "presences",
+            id_serveur=p["id"],
+            uuid_client=p.get("uuid_client"),
+            colonnes_valeurs={
+                "eleve_id_serveur": p.get("eleve_id"),
+                "classe_id": p.get("classe_id"),
+                "date_presence": p.get("date_presence"),
+                "statut": p.get("statut"),
+                "justifie": p.get("justifie", "Non"),
+            },
+        )
+    print(f"[PULL] {len(presences)} présence(s) synchronisée(s).")
 
 def pull_inscription(base_url):
-    # ⚠️ Suppose que ta nouvelle route renvoie {"inscriptions": [...]}
+
     data = _get(base_url, "/inscription")
     if not data:
         return
-    for i in data.get("inscriptions", []):
-        uuid_client = i.get("uuid_client")
-        if uuid_client:
-            remplacer_temp_par_serveur("inscription", uuid_client, i["id"])
-    print(f"[PULL] Inscriptions recoupées avec le serveur ({len(data.get('inscriptions', []))}).")
+    inscriptions = data.get("inscriptions", [])
+    for i in inscriptions:
+        upsert_action_row(
+            "inscription",
+            id_serveur=i["id"],
+            uuid_client=i.get("uuid_client"),
+            colonnes_valeurs={
+                "eleve_id_serveur": i.get("eleve_id"),
+                "classe_id": i.get("classe_id"),
+                "annee_scolaire_id": i.get("annee_scolaire_id"),
+                "statut": i.get("statut", "actif"),
+            },
+        )
+    print(f"[PULL] {len(inscriptions)} inscription(s) synchronisée(s).")
 
-
-# ============================================================
 # POINT D'ENTRÉE : tout rafraîchir d'un coup
-# ============================================================
 
 def synchroniser_tout_depuis_mysql(base_url):
     print("[PULL] Rafraîchissement complet depuis MySQL...")
