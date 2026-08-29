@@ -2394,7 +2394,7 @@ def lister_utilisateurs():
 
     try:
         sql = """
-            SELECT id, nom, prenom, telephone, email, role, statut, date_creation 
+            SELECT id, nom, prenom, telephone, email, role, statut, updated_at 
             FROM utilisateur 
             ORDER BY nom ASC
         """
