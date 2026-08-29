@@ -539,11 +539,16 @@ def get_total_classe()-> dict:
 
 #affichage de la liste des classes
 @app.get("/classe")
-def get_all_classe()-> dict:
+def get_all_classe() -> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT classe.id, classe, cycle.id, cycle.nom FROM classe, cycle where classe.cycle_id=cycle.id")
+    # On sélectionne directement les bonnes colonnes avec les bons alias
+    cursor.execute("""
+        SELECT id, classe AS nom, cycle_id 
+        FROM classe
+    """)
     classes = cursor.fetchall()
+    conn.close()
     return {"classes": classes}
 
 #affichage d'une classe par son nom
