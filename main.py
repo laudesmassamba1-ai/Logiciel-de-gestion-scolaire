@@ -192,7 +192,7 @@ def get_all_eleves_par_classe(classe: str)-> dict:
 def get_all_eleves()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT eleve.id, nom, prenom, sexe, classe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime = false")
+    cursor.execute("SELECT eleve.*, classe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime = false")
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
