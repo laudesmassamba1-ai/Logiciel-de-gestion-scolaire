@@ -5,10 +5,6 @@ import uuid
 DB_NAME = "cache_local.db"
 
 
-# ============================================================
-# CONNEXION À LA BASE
-# ============================================================
-
 def get_connection():
     connection = sqlite3.connect(DB_NAME)
     connection.execute("PRAGMA foreign_keys = ON")
@@ -16,49 +12,95 @@ def get_connection():
 
 
 # ============================================================
-# INITIALISATION DE LA BASE
+# TABLES DE RÉFÉRENCE — miroir LECTURE SEULE (rafraîchies
+# depuis MySQL via sync_pull.py, jamais modifiées localement)
 # ============================================================
 
-def init_database():
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    # ========================================================
-    # DONNÉES DE RÉFÉRENCE (en lecture seule, synchronisées
-    # depuis le serveur — pas concernées par la file d'attente)
-    # ========================================================
-
-    cursor.execute("""
+TABLES_REFERENCE_SQL = {
+    "cycle": """
         CREATE TABLE IF NOT EXISTS cycle (
             id INTEGER PRIMARY KEY,
             nom TEXT NOT NULL
         )
-    """)
-
-    cursor.execute("""
+    """,
+    "classe": """
         CREATE TABLE IF NOT EXISTS classe (
             id INTEGER PRIMARY KEY,
             nom TEXT NOT NULL,
             cycle_id INTEGER NOT NULL,
             FOREIGN KEY (cycle_id) REFERENCES cycle(id)
         )
-    """)
-
-    cursor.execute("""
+    """,
+    "matiere": """
         CREATE TABLE IF NOT EXISTS matiere (
             id INTEGER PRIMARY KEY,
             nom TEXT NOT NULL
         )
-    """)
-
-    # ========================================================
-    # ELEVE — cache local, aligné sur les champs de l'API
-    # ========================================================
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS eleve (
+    """,
+    "annee_scolaire": """
+        CREATE TABLE IF NOT EXISTS annee_scolaire (
             id INTEGER PRIMARY KEY,
+            libelle TEXT NOT NULL,
+            date_debut TEXT,
+            date_fin TEXT,
+            est_active INTEGER DEFAULT 0
+        )
+    """,
+    "enseignant": """
+        CREATE TABLE IF NOT EXISTS enseignant (
+            id INTEGER PRIMARY KEY,
+            nom TEXT NOT NULL,
+            prenom TEXT NOT NULL,
+            sexe TEXT,
+            telephone TEXT,
+            email TEXT,
+            statut TEXT
+        )
+    """,
+    "programme": """
+        CREATE TABLE IF NOT EXISTS programme (
+            id INTEGER PRIMARY KEY,
+            classe_id INTEGER,
+            matiere_id INTEGER,
+            enseignant_id INTEGER,
+            coefficient INTEGER DEFAULT 1
+        )
+    """,
+    "tarif_scolarite": """
+        CREATE TABLE IF NOT EXISTS tarif_scolarite (
+            id INTEGER PRIMARY KEY,
+            classe_id INTEGER,
+            annee_scolaire_id INTEGER,
+            frais_inscription REAL,
+            montant_pension REAL
+        )
+    """,
+    "utilisateur": """
+        CREATE TABLE IF NOT EXISTS utilisateur (
+            id INTEGER PRIMARY KEY,
+            nom TEXT NOT NULL,
+            prenom TEXT NOT NULL,
+            telephone TEXT,
+            email TEXT,
+            role TEXT,
+            statut TEXT
+        )
+    """,
+}
+
+
+# ============================================================
+# TABLES D'ACTION — celles qui ont un uuid_client côté MySQL.
+# id local = AUTOINCREMENT (temporaire, tant que non synchronisé).
+# Une fois la synchro faite, sync_pull.py remplace ces lignes
+# temporaires par la vraie ligne serveur (même uuid_client).
+# ============================================================
+
+TABLES_ACTION_SQL = {
+    "eleve": """
+        CREATE TABLE IF NOT EXISTS eleve (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_serveur INTEGER,
             uuid_client TEXT UNIQUE NOT NULL,
             matricule TEXT NOT NULL,
             nom TEXT NOT NULL,
@@ -70,61 +112,114 @@ def init_database():
             nom_parent TEXT,
             redoublant TEXT NOT NULL DEFAULT '0',
             statut TEXT,
-            classe_id INTEGER NOT NULL,
             telephone_parent TEXT,
-            inscription_id INTEGER,
+            est_supprime INTEGER DEFAULT 0
+        )
+    """,
+    "inscription": """
+        CREATE TABLE IF NOT EXISTS inscription (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_serveur INTEGER,
+            uuid_client TEXT UNIQUE,
+            eleve_local_id INTEGER,
+            eleve_id_serveur INTEGER,
+            classe_id INTEGER NOT NULL,
+            annee_scolaire_id INTEGER,
+            statut TEXT DEFAULT 'actif',
             FOREIGN KEY (classe_id) REFERENCES classe(id)
         )
-    """)
-
-    # ========================================================
-    # FILE D'ATTENTE DE SYNCHRONISATION (générique — sert à
-    # TOUTES les opérations : élève, paiement, note, présence...)
-    # ========================================================
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS file_attente_synchro (
+    """,
+    "note": """
+        CREATE TABLE IF NOT EXISTS note (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            endpoint TEXT NOT NULL,
-            methode TEXT NOT NULL,
-            payload_json TEXT NOT NULL,
-            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            uuid_client TEXT
+            id_serveur INTEGER,
+            uuid_client TEXT UNIQUE,
+            inscription_id INTEGER NOT NULL,
+            matiere_id INTEGER NOT NULL,
+            type_evaluation TEXT NOT NULL,
+            note REAL NOT NULL,
+            note_sur INTEGER DEFAULT 20,
+            date_evaluation TEXT,
+            trimestre TEXT,
+            FOREIGN KEY (matiere_id) REFERENCES matiere(id)
         )
-    """)
+    """,
+    "paiement": """
+        CREATE TABLE IF NOT EXISTS paiement (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_serveur INTEGER,
+            uuid_client TEXT UNIQUE,
+            inscription_id INTEGER NOT NULL,
+            type_frais TEXT NOT NULL,
+            montant REAL NOT NULL,
+            date_paiement TEXT,
+            mode_paiement TEXT,
+            trimestre TEXT,
+            mois TEXT
+        )
+    """,
+    "presences": """
+        CREATE TABLE IF NOT EXISTS presences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_serveur INTEGER,
+            uuid_client TEXT UNIQUE,
+            eleve_id_serveur INTEGER,
+            classe_id INTEGER NOT NULL,
+            date_presence TEXT,
+            statut TEXT NOT NULL,
+            justifie TEXT DEFAULT 'Non',
+            FOREIGN KEY (classe_id) REFERENCES classe(id)
+        )
+    """,
+}
+
+FILE_ATTENTE_SQL = """
+    CREATE TABLE IF NOT EXISTS file_attente_synchro (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        endpoint TEXT NOT NULL,
+        methode TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        uuid_client TEXT
+    )
+"""
+
+
+def init_database():
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    for sql in TABLES_REFERENCE_SQL.values():
+        cursor.execute(sql)
+    for sql in TABLES_ACTION_SQL.values():
+        cursor.execute(sql)
+    cursor.execute(FILE_ATTENTE_SQL)
 
     connection.commit()
     connection.close()
+    print("Base de données locale initialisée avec succès (13 tables + file d'attente).")
 
-    print("Base de données locale initialisée avec succès.")
 
-
-# Alias pour compatibilité avec le code existant qui appelle "initialiser_base"
 initialiser_base = init_database
 
+NOMS_TABLES_REFERENCE = list(TABLES_REFERENCE_SQL.keys())
+NOMS_TABLES_ACTION = list(TABLES_ACTION_SQL.keys())
+
 
 # ============================================================
-# DONNÉES DE RÉFÉRENCE PAR DÉFAUT (cycles et classes)
-# À charger une fois, ou à recevoir du serveur plus tard
+# DONNÉES DE RÉFÉRENCE PAR DÉFAUT — juste pour pouvoir tester
+# hors ligne avant la toute première synchro. Le pull (sync_pull.py)
+# écrasera ces valeurs avec les vraies données serveur dès que
+# possible (INSERT OR REPLACE), donc aucun risque de conflit.
 # ============================================================
 
-def insert_cycles():
+def charger_donnees_par_defaut():
     connection = get_connection()
     cursor = connection.cursor()
-    cycles = [
-        (1, "prescolaire"), (2, "primaire"), (3, "college"), (4, "lycee"),
-    ]
-    cursor.executemany(
-        "INSERT OR IGNORE INTO cycle (id, nom) VALUES (?, ?)", cycles
-    )
-    connection.commit()
-    connection.close()
-    print("Données des cycles chargées.")
 
+    cycles = [(1, "prescolaire"), (2, "primaire"), (3, "college"), (4, "lycee")]
+    cursor.executemany("INSERT OR IGNORE INTO cycle (id, nom) VALUES (?, ?)", cycles)
 
-def insert_classes():
-    connection = get_connection()
-    cursor = connection.cursor()
     classes = [
         (1, "P1", 1), (2, "P2", 1), (3, "P3", 1),
         (4, "CP1", 2), (5, "CP2", 2), (6, "CE1", 2), (7, "CE2", 2),
@@ -134,22 +229,21 @@ def insert_classes():
         (16, "TERMINALE TROIS COMMUNS", 4),
     ]
     cursor.executemany(
-        "INSERT OR IGNORE INTO classe (id, nom, cycle_id) VALUES (?, ?, ?)",
-        classes,
+        "INSERT OR IGNORE INTO classe (id, nom, cycle_id) VALUES (?, ?, ?)", classes
     )
+
     connection.commit()
     connection.close()
-    print("Données des classes chargées.")
+    print("Données de référence par défaut chargées (cycles + classes).")
 
 
 # ============================================================
-# ENREGISTRER UN ÉLÈVE DANS LE CACHE LOCAL
-# (appelé juste après l'avoir mis en file d'attente, pour que
-# l'interface puisse l'afficher tout de suite, sans attendre
-# la synchro)
+# ÉCRITURE LOCALE IMMÉDIATE — pour que l'interface affiche
+# tout de suite ce qui vient d'être créé hors ligne, sans
+# attendre la synchro.
 # ============================================================
 
-def enregistrer_eleve_local(uuid_client, eleve_dict, inscription_id=None):
+def enregistrer_eleve_local(uuid_client, eleve_dict, classe_id, annee_scolaire_id=None):
     connection = get_connection()
     cursor = connection.cursor()
 
@@ -157,8 +251,8 @@ def enregistrer_eleve_local(uuid_client, eleve_dict, inscription_id=None):
         INSERT INTO eleve (
             uuid_client, matricule, nom, prenom, sexe, date_naissance,
             lieu_naissance, adresse, nom_parent, redoublant, statut,
-            classe_id, telephone_parent, inscription_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            telephone_parent
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         uuid_client,
         eleve_dict.get("matricule"),
@@ -171,17 +265,66 @@ def enregistrer_eleve_local(uuid_client, eleve_dict, inscription_id=None):
         eleve_dict.get("nom_parent"),
         eleve_dict.get("redoublant", "0"),
         eleve_dict.get("statut"),
-        eleve_dict.get("classe_id"),
         eleve_dict.get("telephone_parent"),
-        inscription_id,
     ))
+    eleve_local_id = cursor.lastrowid
 
+    cursor.execute("""
+        INSERT INTO inscription (
+            uuid_client, eleve_local_id, classe_id, annee_scolaire_id, statut
+        ) VALUES (?, ?, ?, ?, 'actif')
+    """, (uuid_client, eleve_local_id, classe_id, annee_scolaire_id))
+
+    connection.commit()
+    connection.close()
+
+
+# ============================================================
+# UPSERT GÉNÉRIQUE — utilisé par sync_pull.py pour rafraîchir
+# le cache local à partir des données reçues de MySQL.
+# ============================================================
+
+def upsert_reference(nom_table, colonnes, lignes):
+    """
+    lignes : liste de tuples, dans l'ordre exact de `colonnes`.
+    La 1ère colonne doit toujours être `id`.
+    """
+    if not lignes:
+        return
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    placeholders = ", ".join(["?"] * len(colonnes))
+    colonnes_str = ", ".join(colonnes)
+
+    cursor.executemany(
+        f"INSERT OR REPLACE INTO {nom_table} ({colonnes_str}) VALUES ({placeholders})",
+        lignes,
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def remplacer_temp_par_serveur(nom_table, uuid_client, id_serveur, autres_colonnes=None):
+    """
+    Une fois qu'une ligne créée hors ligne (id local temporaire)
+    apparaît dans les données du serveur, on marque la ligne locale
+    avec son vrai id_serveur — elle n'est plus "en attente".
+    """
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        f"UPDATE {nom_table} SET id_serveur = ? WHERE uuid_client = ?",
+        (id_serveur, uuid_client),
+    )
     connection.commit()
     connection.close()
 
 
 if __name__ == "__main__":
     init_database()
-    insert_cycles()
-    insert_classes()
-    print("Initialisation terminée.")
+    charger_donnees_par_defaut()
+    print("Tables de référence :", NOMS_TABLES_REFERENCE)
+    print("Tables d'action :", NOMS_TABLES_ACTION)
