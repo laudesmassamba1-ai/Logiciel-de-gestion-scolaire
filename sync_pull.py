@@ -134,7 +134,7 @@ def pull_eleve(base_url):
             id_serveur=e["id"],
             uuid_client=e.get("uuid_client"),
             colonnes_valeurs={
-                "matricule": e.get("matricule"),
+                "id_sync": e.get("id_sync"),
                 "nom": e.get("nom"),
                 "prenom": e.get("prenom"),
                 "sexe": e.get("sexe"),

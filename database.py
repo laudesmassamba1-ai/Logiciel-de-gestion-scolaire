@@ -99,7 +99,7 @@ TABLES_REFERENCE_SQL = {
 TABLES_ACTION_SQL = {
     "eleve": """
         CREATE TABLE IF NOT EXISTS eleve (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_sync INTEGER PRIMARY KEY AUTOINCREMENT,
             id_serveur INTEGER,
             uuid_client TEXT UNIQUE NOT NULL,
             matricule TEXT NOT NULL,
