@@ -134,7 +134,6 @@ def pull_eleve(base_url):
             id_serveur=e["id"],
             uuid_client=e.get("uuid_client"),
             colonnes_valeurs={
-                "id_sync": e.get("id_sync"),
                 "nom": e.get("nom"),
                 "prenom": e.get("prenom"),
                 "sexe": e.get("sexe"),
@@ -149,7 +148,6 @@ def pull_eleve(base_url):
             },
         )
     print(f"[PULL] {len(eleves)} élève(s) synchronisé(s).")
-
 
 def pull_paiement(base_url):
     data = _get(base_url, "/paiement")
@@ -199,7 +197,7 @@ def pull_note(base_url):
 
 def pull_presences(base_url):
     
-    data = _get(base_url, "/presences")
+    data = _get(base_url, "/toutes_presence")
     if not data:
         return
     presences = data.get("presences", [])
@@ -220,7 +218,7 @@ def pull_presences(base_url):
 
 def pull_inscription(base_url):
 
-    data = _get(base_url, "/inscription")
+    data = _get(base_url, "/lister_toutes_les_inscriptions")
     if not data:
         return
     inscriptions = data.get("inscriptions", [])
