@@ -4,9 +4,6 @@ Synchronisation DESCENDANTE : MySQL -> SQLite.
 (tables de référence ET tables d'action) avec les dernières données
 du serveur — y compris ce que d'autres postes ont ajouté entre-temps.
 
-⚠️ Vérifie les noms de clés JSON ci-dessous (ex: "classes", "presences",
-"inscriptions") contre ce que tes routes renvoient réellement, surtout
-pour les 3 routes que tu viens d'ajouter/corriger toi-même.
 """
 
 import requests
@@ -130,7 +127,7 @@ def pull_tarifs(base_url):
 
 def pull_programme(base_url):
     # ⚠️ Suppose que tu as ajouté GET /programme (toutes classes confondues)
-    data = _get(base_url, "/programme")
+    data = _get(base_url, "/tous_les_programme")
     if not data:
         return
     liste = data.get("programme", []) if isinstance(data, dict) else data
@@ -164,7 +161,6 @@ def pull_eleve(base_url):
             id_serveur=e["id"],
             uuid_client=e.get("uuid_client"),
             colonnes_valeurs={
-                "matricule": e.get("matricule"),
                 "nom": e.get("nom"),
                 "prenom": e.get("prenom"),
                 "sexe": e.get("sexe"),
@@ -229,7 +225,7 @@ def pull_note(base_url):
 
 def pull_presences(base_url):
     # ⚠️ Suppose que ta nouvelle route renvoie {"presences": [...]}
-    data = _get(base_url, "/presences")
+    data = _get(base_url, "/toutes_presence")
     if not data:
         return
     presences = data.get("presences", [])
@@ -251,7 +247,7 @@ def pull_presences(base_url):
 
 def pull_inscription(base_url):
     # ⚠️ Suppose que ta nouvelle route renvoie {"inscriptions": [...]}
-    data = _get(base_url, "/inscription")
+    data = _get(base_url, "/lister_toutes_les_inscriptions")
     if not data:
         return
     inscriptions = data.get("inscriptions", [])

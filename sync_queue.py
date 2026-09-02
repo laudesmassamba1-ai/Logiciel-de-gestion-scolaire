@@ -51,10 +51,11 @@ def supprimer_de_la_file(operation_id):
 
 
 # ============================================================
-# ÉLÈVES — inscription (POST /eleve)
+# ÉLÈVES — table d'action avec uuid_client, CRUD complet
 # ============================================================
 
 def ajouter_eleve_a_la_file(eleve_dict, paiement_dict, classe_id, annee_scolaire_id=None):
+    """POST /ajout_eleve"""
     uuid_client = str(uuid.uuid4())
 
     eleve_dict = dict(eleve_dict)
@@ -66,7 +67,7 @@ def ajouter_eleve_a_la_file(eleve_dict, paiement_dict, classe_id, annee_scolaire
         "uuid_client": uuid_client,
     }
 
-    ajouter_a_la_file("/eleve", "POST", payload_complet, uuid_client)
+    ajouter_a_la_file("/ajout_eleve", "POST", payload_complet, uuid_client)
 
     # Écriture locale immédiate pour affichage instantané
     enregistrer_eleve_local(uuid_client, eleve_dict, classe_id, annee_scolaire_id)
@@ -75,23 +76,29 @@ def ajouter_eleve_a_la_file(eleve_dict, paiement_dict, classe_id, annee_scolaire
     return uuid_client
 
 
-# ============================================================
-# ÉLÈVES — modification (PUT /eleve/{id})
-# ============================================================
-
 def modifier_eleve_a_la_file(eleve_id_serveur, champs_modifies):
+    """PUT /eleve/{eleve_id}"""
     uuid_client = str(uuid.uuid4())
     ajouter_a_la_file(f"/eleve/{eleve_id_serveur}", "PUT", champs_modifies, uuid_client)
     print(f"Modification de l'élève {eleve_id_serveur} mise en file.")
     return uuid_client
 
 
+def supprimer_eleve_a_la_file(eleve_id_serveur):
+    """DELETE /eleve/{id}"""
+    uuid_client = str(uuid.uuid4())
+    ajouter_a_la_file(f"/eleve/{eleve_id_serveur}", "DELETE", {}, uuid_client)
+    print(f"Suppression de l'élève {eleve_id_serveur} mise en file.")
+    return uuid_client
+
+
 # ============================================================
-# PAIEMENTS (POST /paiement)
+# PAIEMENTS — table d'action avec uuid_client, CRUD complet
 # ============================================================
 
 def ajouter_paiement_a_la_file(inscription_id, type_frais, montant, mode_paiement,
                                  trimestre=None, mois=None):
+    """POST /ajout_paiement"""
     uuid_client = str(uuid.uuid4())
     payload = {
         "inscription_id": inscription_id,
@@ -102,16 +109,33 @@ def ajouter_paiement_a_la_file(inscription_id, type_frais, montant, mode_paiemen
         "mois": mois,
         "uuid_client": uuid_client,
     }
-    ajouter_a_la_file("/paiement", "POST", payload, uuid_client)
+    ajouter_a_la_file("/ajout_paiement", "POST", payload, uuid_client)
     print("Paiement préparé pour la synchronisation.")
     return uuid_client
 
 
+def modifier_paiement_a_la_file(paiement_id_serveur, champs_modifies):
+    """PUT /modifierPaiement/{id}"""
+    uuid_client = str(uuid.uuid4())
+    ajouter_a_la_file(f"/modifierPaiement/{paiement_id_serveur}", "PUT", champs_modifies, uuid_client)
+    print(f"Modification du paiement {paiement_id_serveur} mise en file.")
+    return uuid_client
+
+
+def supprimer_paiement_a_la_file(paiement_id_serveur):
+    """DELETE /supprimerPaiement/{id}"""
+    uuid_client = str(uuid.uuid4())
+    ajouter_a_la_file(f"/supprimerPaiement/{paiement_id_serveur}", "DELETE", {}, uuid_client)
+    print(f"Suppression du paiement {paiement_id_serveur} mise en file.")
+    return uuid_client
+
+
 # ============================================================
-# PRÉSENCES (POST /presence)
+# PRÉSENCES — table d'action avec uuid_client, CRUD complet
 # ============================================================
 
 def ajouter_presence_a_la_file(eleve_id, statut, classe_id, justifie=None):
+    """POST /ajout_presence"""
     uuid_client = str(uuid.uuid4())
     payload = {
         "eleve_id": eleve_id,
@@ -120,17 +144,34 @@ def ajouter_presence_a_la_file(eleve_id, statut, classe_id, justifie=None):
         "classe_id": classe_id,
         "uuid_client": uuid_client,
     }
-    ajouter_a_la_file("/presence", "POST", payload, uuid_client)
+    ajouter_a_la_file("/ajout_presence", "POST", payload, uuid_client)
     print("Présence préparée pour la synchronisation.")
     return uuid_client
 
 
+def modifier_presence_a_la_file(presence_id_serveur, champs_modifies):
+    """PUT /modifierPresence/{id}"""
+    uuid_client = str(uuid.uuid4())
+    ajouter_a_la_file(f"/modifierPresence/{presence_id_serveur}", "PUT", champs_modifies, uuid_client)
+    print(f"Modification de la présence {presence_id_serveur} mise en file.")
+    return uuid_client
+
+
+def supprimer_presence_a_la_file(presence_id_serveur):
+    """DELETE /supprimerPresence/{id}"""
+    uuid_client = str(uuid.uuid4())
+    ajouter_a_la_file(f"/supprimerPresence/{presence_id_serveur}", "DELETE", {}, uuid_client)
+    print(f"Suppression de la présence {presence_id_serveur} mise en file.")
+    return uuid_client
+
+
 # ============================================================
-# NOTES (POST /note)
+# NOTES — table d'action avec uuid_client, CRUD complet
 # ============================================================
 
 def ajouter_note_a_la_file(inscription_id, matiere_id, type_evaluation, note,
                              note_sur, date_evaluation, trimestre):
+    """POST /ajout_note"""
     uuid_client = str(uuid.uuid4())
     payload = {
         "inscription_id": inscription_id,
@@ -142,15 +183,35 @@ def ajouter_note_a_la_file(inscription_id, matiere_id, type_evaluation, note,
         "trimestre": trimestre,
         "uuid_client": uuid_client,
     }
-    ajouter_a_la_file("/note", "POST", payload, uuid_client)
+    ajouter_a_la_file("/ajout_note", "POST", payload, uuid_client)
     print("Note préparée pour la synchronisation.")
     return uuid_client
 
 
+def modifier_note_a_la_file(note_id_serveur, champs_modifies):
+    """PUT /modifierNote/{id}"""
+    uuid_client = str(uuid.uuid4())
+    ajouter_a_la_file(f"/modifierNote/{note_id_serveur}", "PUT", champs_modifies, uuid_client)
+    print(f"Modification de la note {note_id_serveur} mise en file.")
+    return uuid_client
+
+
+def supprimer_note_a_la_file(note_id_serveur):
+    """DELETE /supprimerNote/{id}"""
+    uuid_client = str(uuid.uuid4())
+    ajouter_a_la_file(f"/supprimerNote/{note_id_serveur}", "DELETE", {}, uuid_client)
+    print(f"Suppression de la note {note_id_serveur} mise en file.")
+    return uuid_client
+
+
+# ============================================================
+# TEST MANUEL
+# ============================================================
+
 if __name__ == "__main__":
     ajouter_eleve_a_la_file(
         eleve_dict={
-            "matricule": "LOCAL-TEST-01", "nom": "TEST", "prenom": "Hors-ligne",
+            "nom": "TEST", "prenom": "Hors-ligne",
             "sexe": "M", "date_naissance": "2015-01-01", "lieu_naissance": "Brazzaville",
             "adresse": "Test", "nom_parent": "Parent Test", "redoublant": "0",
             "statut": "actif", "telephone_parent": "060000000",
