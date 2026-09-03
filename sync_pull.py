@@ -4,6 +4,9 @@ Synchronisation DESCENDANTE : MySQL -> SQLite.
 (tables de référence ET tables d'action) avec les dernières données
 du serveur — y compris ce que d'autres postes ont ajouté entre-temps.
 
+⚠️ Vérifie les noms de clés JSON ci-dessous (ex: "classes", "presences",
+"inscriptions") contre ce que tes routes renvoient réellement, surtout
+pour les 3 routes que tu viens d'ajouter/corriger toi-même.
 """
 
 import requests

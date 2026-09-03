@@ -248,13 +248,12 @@ def enregistrer_eleve_local(uuid_client, eleve_dict, classe_id, annee_scolaire_i
 
     cursor.execute("""
         INSERT INTO eleve (
-            uuid_client, matricule, nom, prenom, sexe, date_naissance,
+            uuid_client, nom, prenom, sexe, date_naissance,
             lieu_naissance, adresse, nom_parent, redoublant, statut,
             telephone_parent
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         uuid_client,
-        eleve_dict.get("matricule"),
         eleve_dict.get("nom"),
         eleve_dict.get("prenom"),
         eleve_dict.get("sexe"),
