@@ -1819,12 +1819,12 @@ def tous_les_programme():
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT p.id, classe.nom AS classe, m.nom AS matiere, e.nom AS enseignant_nom, p.coefficient
+        SELECT p.id, classe.classe AS classe, m.nom AS matiere, e.nom AS enseignant_nom, p.coefficient
         FROM programme p
         JOIN matiere m ON p.matiere_id = m.id
         JOIN enseignant e ON p.enseignant_id = e.id
         JOIN classe ON p.classe_id = classe.id
-        ORDER BY classe.nom ASC
+        ORDER BY classe.classe ASC
     """)
     programme = cursor.fetchall()
 
