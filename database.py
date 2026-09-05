@@ -10,11 +10,8 @@ def get_connection():
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
-
-# ============================================================
 # TABLES DE RÉFÉRENCE — miroir LECTURE SEULE (rafraîchies
 # depuis MySQL via sync_pull.py, jamais modifiées localement)
-# ============================================================
 
 TABLES_REFERENCE_SQL = {
     "cycle": """
@@ -87,14 +84,10 @@ TABLES_REFERENCE_SQL = {
         )
     """,
 }
-
-
-# ============================================================
 # TABLES D'ACTION — celles qui ont un uuid_client côté MySQL.
 # id local = AUTOINCREMENT (temporaire, tant que non synchronisé).
 # Une fois la synchro faite, sync_pull.py remplace ces lignes
 # temporaires par la vraie ligne serveur (même uuid_client).
-# ============================================================
 
 TABLES_ACTION_SQL = {
     "eleve": """
@@ -204,13 +197,10 @@ initialiser_base = init_database
 NOMS_TABLES_REFERENCE = list(TABLES_REFERENCE_SQL.keys())
 NOMS_TABLES_ACTION = list(TABLES_ACTION_SQL.keys())
 
-
-# ============================================================
 # DONNÉES DE RÉFÉRENCE PAR DÉFAUT — juste pour pouvoir tester
 # hors ligne avant la toute première synchro. Le pull (sync_pull.py)
 # écrasera ces valeurs avec les vraies données serveur dès que
 # possible (INSERT OR REPLACE), donc aucun risque de conflit.
-# ============================================================
 
 def charger_donnees_par_defaut():
     connection = get_connection()
@@ -235,12 +225,9 @@ def charger_donnees_par_defaut():
     connection.close()
     print("Données de référence par défaut chargées (cycles + classes).")
 
-
-# ============================================================
 # ÉCRITURE LOCALE IMMÉDIATE — pour que l'interface affiche
 # tout de suite ce qui vient d'être créé hors ligne, sans
 # attendre la synchro.
-# ============================================================
 
 def enregistrer_eleve_local(uuid_client, eleve_dict, classe_id, annee_scolaire_id=None):
     connection = get_connection()
@@ -276,11 +263,8 @@ def enregistrer_eleve_local(uuid_client, eleve_dict, classe_id, annee_scolaire_i
     connection.commit()
     connection.close()
 
-
-# ============================================================
 # UPSERT GÉNÉRIQUE — utilisé par sync_pull.py pour rafraîchir
 # le cache local à partir des données reçues de MySQL.
-# ============================================================
 
 def upsert_reference(nom_table, colonnes, lignes):
     """

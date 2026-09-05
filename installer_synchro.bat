@@ -12,7 +12,7 @@ set SERVICE_NAME=SyncEngineEcole
 set SCRIPT_DIR=%~dp0
 set NSSM_PATH=%SCRIPT_DIR%nssm.exe
 
-REM ⚠️ Adapte ce chemin si ton environnement virtuel n'est pas
+REM  Adapte ce chemin si ton environnement virtuel n'est pas
 REM    dans un sous-dossier "venv" à côté de ce fichier .bat
 set PYTHON_PATH=%SCRIPT_DIR%venv\Scripts\python.exe
 

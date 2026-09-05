@@ -3,10 +3,7 @@ import uuid
 
 from database import get_connection, enregistrer_eleve_local
 
-
-# ============================================================
 # COUCHE GÉNÉRIQUE
-# ============================================================
 
 def ajouter_a_la_file(endpoint, methode, payload, uuid_client=None):
     connection = get_connection()
@@ -49,10 +46,7 @@ def supprimer_de_la_file(operation_id):
     connection.close()
     print(f"Opération {operation_id} supprimée de la file.")
 
-
-# ============================================================
 # ÉLÈVES — table d'action avec uuid_client, CRUD complet
-# ============================================================
 
 def ajouter_eleve_a_la_file(eleve_dict, paiement_dict, classe_id, annee_scolaire_id=None):
     """POST /ajout_eleve"""
@@ -92,10 +86,7 @@ def supprimer_eleve_a_la_file(eleve_id_serveur):
     print(f"Suppression de l'élève {eleve_id_serveur} mise en file.")
     return uuid_client
 
-
-# ============================================================
 # PAIEMENTS — table d'action avec uuid_client, CRUD complet
-# ============================================================
 
 def ajouter_paiement_a_la_file(inscription_id, type_frais, montant, mode_paiement,
                                  trimestre=None, mois=None):
@@ -130,10 +121,7 @@ def supprimer_paiement_a_la_file(paiement_id_serveur):
     print(f"Suppression du paiement {paiement_id_serveur} mise en file.")
     return uuid_client
 
-
-# ============================================================
 # PRÉSENCES — table d'action avec uuid_client, CRUD complet
-# ============================================================
 
 def ajouter_presence_a_la_file(eleve_id, statut, classe_id, justifie=None):
     """POST /ajout_presence"""
@@ -165,10 +153,7 @@ def supprimer_presence_a_la_file(presence_id_serveur):
     print(f"Suppression de la présence {presence_id_serveur} mise en file.")
     return uuid_client
 
-
-# ============================================================
 # NOTES — table d'action avec uuid_client, CRUD complet
-# ============================================================
 
 def ajouter_note_a_la_file(inscription_id, matiere_id, type_evaluation, note,
                              note_sur, date_evaluation, trimestre):
@@ -204,10 +189,7 @@ def supprimer_note_a_la_file(note_id_serveur):
     print(f"Suppression de la note {note_id_serveur} mise en file.")
     return uuid_client
 
-
-# ============================================================
 # TEST MANUEL
-# ============================================================
 
 if __name__ == "__main__":
     ajouter_eleve_a_la_file(

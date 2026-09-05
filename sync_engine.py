@@ -5,10 +5,7 @@ import requests
 
 from database import get_connection, initialiser_base
 
-
-# ============================================================
 # CONFIGURATION SERVEUR (via config.json)
-# ============================================================
 
 CONFIG_FILE = "config.json"
 
@@ -37,10 +34,7 @@ def tester_connexion() -> bool:
     except Exception:
         return False
 
-
-# ============================================================
 # 1. PUSH — envoyer la file d'attente locale vers MySQL
-# ============================================================
 
 def traiter_file_synchro():
 
@@ -96,10 +90,7 @@ def traiter_file_synchro():
 
     connection.close()
 
-
-# ============================================================
 # 2. PULL — rafraîchir le cache local depuis MySQL
-# ============================================================
 
 def rafraichir_cache_local():
     try:
@@ -109,10 +100,7 @@ def rafraichir_cache_local():
     except Exception as e:
         print(f"[PULL] Erreur pendant le rafraîchissement du cache : {e}")
 
-
-# ============================================================
 # CYCLE COMPLET : push puis pull, seulement si en ligne
-# ============================================================
 
 def cycle_synchro():
     if not tester_connexion():

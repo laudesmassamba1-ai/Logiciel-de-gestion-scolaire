@@ -3,10 +3,6 @@ Synchronisation DESCENDANTE : MySQL -> SQLite.
 À appeler dès qu'il y a internet, pour rafraîchir tout le cache local
 (tables de référence ET tables d'action) avec les dernières données
 du serveur — y compris ce que d'autres postes ont ajouté entre-temps.
-
-⚠️ Vérifie les noms de clés JSON ci-dessous (ex: "classes", "presences",
-"inscriptions") contre ce que tes routes renvoient réellement, surtout
-pour les 3 routes que tu viens d'ajouter/corriger toi-même.
 """
 
 import requests
@@ -24,10 +20,7 @@ def _get(base_url, endpoint):
         print(f"[PULL] Échec sur {endpoint} : {e}")
         return None
 
-
-# ============================================================
 # TABLES DE RÉFÉRENCE
-# ============================================================
 
 def pull_cycle(base_url):
     data = _get(base_url, "/cycle")
@@ -39,7 +32,7 @@ def pull_cycle(base_url):
 
 
 def pull_classe(base_url):
-    # ⚠️ Suppose que ta route corrigée renvoie {"classes": [{"id":..,"classe" ou "nom":..,"cycle_id":..}, ...]}
+    # la route corrigée renvoie {"classes": [{"id":..,"classe" ou "nom":..,"cycle_id":..}, ...]}
     data = _get(base_url, "/classe")
     if not data:
         return
@@ -129,7 +122,7 @@ def pull_tarifs(base_url):
 
 
 def pull_programme(base_url):
-    # ⚠️ Suppose que tu as ajouté GET /programme (toutes classes confondues)
+
     data = _get(base_url, "/tous_les_programme")
     if not data:
         return
@@ -146,12 +139,9 @@ def pull_programme(base_url):
     )
     print(f"[PULL] {len(lignes)} ligne(s) de programme synchronisée(s).")
 
-
-# ============================================================
 # TABLES D'ACTION — upsert COMPLET (pas juste réconciliation) :
 # toute ligne venant du serveur est copiée en local, qu'elle ait
 # été créée hors ligne, directement en MySQL, ou par un autre poste.
-# ============================================================
 
 def pull_eleve(base_url):
     data = _get(base_url, "/eleve")
@@ -227,7 +217,7 @@ def pull_note(base_url):
 
 
 def pull_presences(base_url):
-    # ⚠️ Suppose que ta nouvelle route renvoie {"presences": [...]}
+
     data = _get(base_url, "/toutes_presence")
     if not data:
         return
@@ -249,7 +239,7 @@ def pull_presences(base_url):
 
 
 def pull_inscription(base_url):
-    # ⚠️ Suppose que ta nouvelle route renvoie {"inscriptions": [...]}
+
     data = _get(base_url, "/lister_toutes_les_inscriptions")
     if not data:
         return
@@ -268,10 +258,7 @@ def pull_inscription(base_url):
         )
     print(f"[PULL] {len(inscriptions)} inscription(s) synchronisée(s).")
 
-
-# ============================================================
 # POINT D'ENTRÉE : tout rafraîchir d'un coup
-# ============================================================
 
 def synchroniser_tout_depuis_mysql(base_url):
     print("[PULL] Rafraîchissement complet depuis MySQL...")
