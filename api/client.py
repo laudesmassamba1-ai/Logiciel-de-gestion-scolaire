@@ -2,7 +2,7 @@ import time
 
 import httpx
 
-from core.config import API_BASE_URL, API_TIMEOUT
+from core import config
 
 
 class ApiError(Exception):
@@ -11,7 +11,10 @@ class ApiError(Exception):
 
 def _request(method, path, **kwargs):
     try:
-        resp = httpx.request(method, API_BASE_URL + path, timeout=API_TIMEOUT, **kwargs)
+        # Lecture dynamique : l'assistant graphique peut changer l'URL
+        # du serveur pendant l'execution (changement de port).
+        resp = httpx.request(method, config.API_BASE_URL + path,
+                             timeout=config.API_TIMEOUT, **kwargs)
     except httpx.HTTPError as exc:
 
         return None, f"API hors ligne ({exc.__class__.__name__})"

@@ -1,9 +1,15 @@
+import base64
 import datetime
+import html
 from pathlib import Path
 
 from core.config import DOCS_DIR, CRENEAUX, JOURS, VILLE_DEFAUT
 from database import db
 from repositories import repos
+
+
+def echap(valeur):
+    return html.escape(str(valeur if valeur is not None else ""))
 
 
 def _generate_pdf(html_content: str, filename: str) -> str:
@@ -16,16 +22,42 @@ def _generate_pdf(html_content: str, filename: str) -> str:
         raise RuntimeError("weasyprint n'est pas installe. Installez-le avec : pip install weasyprint")
 
 
+def _img_data_uri(path_str):
+    """Convertit un chemin d'image en data URI base64 pour embed HTML."""
+    if not path_str:
+        return ""
+    p = Path(path_str)
+    if not p.exists():
+        return ""
+    ext = p.suffix.lower()
+    mime = {"png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(ext, "image/png")
+    data = p.read_bytes()
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
 def _entete_doc():
     params = repos.parametres()
     pays = params.get("pays", "") or "Republique du Congo"
     ville = params.get("ville", "")
     now = datetime.datetime.now().strftime("%d/%m/%Y")
-    localite = f" - {ville}" if ville else ""
-    return (f"<div style='display:flex;justify-content:space-between;border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:20px;'>"
-            f"<div><strong>Gestion Scolaire</strong>"
-            f"<div style='color:#64748b;font-size:12px;'>{pays}{localite}</div></div>"
-            f"<div style='color:#64748b;font-size:12px;'>Edite le {now}</div></div>")
+    localite = f" - {echap(ville)}" if ville else ""
+    bandeau_haut = _img_data_uri(params.get("bandeau_haut", ""))
+    bandeau_bas = _img_data_uri(params.get("bandeau_bas", ""))
+    signature = _img_data_uri(params.get("signature", ""))
+    entete = "<div style='border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:20px;'>"
+    if bandeau_haut:
+        entete += f"<div style='text-align:center;margin-bottom:8px;'><img src='{bandeau_haut}' style='max-width:100%;max-height:80px;'/></div>"
+    entete += (f"<div style='display:flex;justify-content:space-between;'>"
+               f"<div><strong>Gestion Scolaire</strong>"
+               f"<div style='color:#64748b;font-size:12px;'>{echap(pays)}{localite}</div></div>"
+               f"<div style='color:#64748b;font-size:12px;'>Edite le {now}</div></div>")
+    if bandeau_bas:
+        entete += f"<div style='text-align:center;margin-top:8px;'><img src='{bandeau_bas}' style='max-width:100%;max-height:80px;'/></div>"
+    if signature:
+        entete += f"<div style='text-align:right;margin-top:16px;'><img src='{signature}' style='max-height:50px;'/></div>"
+    entete += "</div>"
+    return entete
 
 
 STYLE = """
@@ -42,17 +74,8 @@ strong { color: #1e293b; }
 
 
 def _appreciation(moyenne):
-    if moyenne >= 16:
-        return "Excellent"
-    if moyenne >= 14:
-        return "Tres bien"
-    if moyenne >= 12:
-        return "Bien"
-    if moyenne >= 10:
-        return "Assez bien"
-    if moyenne >= 8:
-        return "Passable"
-    return "Insuffisant"
+    from services.appreciations import appreciation
+    return appreciation(moyenne)
 
 
 def bulletins_pdf(classe_id, periode):
@@ -66,7 +89,7 @@ def bulletins_pdf(classe_id, periode):
     for n in all_notes:
         key = (n["eleve_id"], n["matiere_id"])
         notes_index[key] = n
-    corps = [f"<h1>Bulletins - {nom_classe}</h1>", f"<p style='color:#64748b;font-size:12px;'>Periode : {periode} - Effectif : {len(eleves)}</p>"]
+    corps = [f"<h1>Bulletins - {echap(nom_classe)}</h1>", f"<p style='color:#64748b;font-size:12px;'>Periode : {echap(periode)} - Effectif : {len(eleves)}</p>"]
     for eleve in eleves:
         lignes = ""
         total = 0.0
@@ -81,21 +104,21 @@ def bulletins_pdf(classe_id, periode):
                 coef = m["coefficient"] or 1
                 total += moy * coef
                 coefs += coef
-                lignes += (f"<tr><td>{m['nom']}</td><td>{d1}</td><td>{d2}</td>"
+                lignes += (f"<tr><td>{echap(m['nom'])}</td><td>{d1}</td><td>{d2}</td>"
                            f"<td>{comp}</td><td>{moy}</td></tr>")
             else:
-                lignes += (f"<tr><td>{m['nom']}</td><td>-</td><td>-</td>"
+                lignes += (f"<tr><td>{echap(m['nom'])}</td><td>-</td><td>-</td>"
                            f"<td>-</td><td>-</td></tr>")
         generale = round(total / coefs, 2) if coefs else 0
         appreciation = _appreciation(generale)
         corps.append(
-            f"<h3>{eleve['prenom']} {eleve['nom']} ({eleve['matricule']})</h3>"
+            f"<h3>{echap(eleve['prenom'])} {echap(eleve['nom'])} ({echap(eleve['matricule'])})</h3>"
             f"<table><tr><th>Matiere</th><th>Devoir 1</th><th>Devoir 2</th>"
             f"<th>Composition</th><th>Moyenne</th></tr>{lignes}"
             f"<tr><td><strong>Moyenne generale</strong></td><td colspan='3'></td>"
             f"<td><strong>{generale} /20</strong></td></tr></table>"
             f"<p style='color:#64748b;font-size:12px;'>Appreciation : <strong>{appreciation}</strong></p>")
-    html = f"<html><head><meta charset='utf-8'><title>Bulletins {nom_classe}</title><style>{STYLE}</style></head><body>{_entete_doc()}{''.join(corps)}</body></html>"
+    html = f"<html><head><meta charset='utf-8'><title>Bulletins {echap(nom_classe)}</title><style>{STYLE}</style></head><body>{_entete_doc()}{''.join(corps)}</body></html>"
     filename = f"bulletins_{nom_classe.replace(' ', '_')}_{periode.split()[0]}.pdf"
     return _generate_pdf(html, filename)
 
@@ -107,14 +130,14 @@ def recu_paiement_pdf(eleve, montant, mode, reference):
     ville = params.get("ville", "") or VILLE_DEFAUT
     corps = f"""
     <h2 style="text-align:center;">RECU DE PAIEMENT</h2>
-    <p>Recu N <strong>{reference}</strong> en date du {date}</p>
+    <p>Recu N <strong>{echap(reference)}</strong> en date du {date}</p>
     <table>
-    <tr><th>Eleve</th><td>{eleve['prenom']} {eleve['nom']}</td></tr>
-    <tr><th>Matricule</th><td>{eleve['matricule']}</td></tr>
+    <tr><th>Eleve</th><td>{echap(eleve['prenom'])} {echap(eleve['nom'])}</td></tr>
+    <tr><th>Matricule</th><td>{echap(eleve['matricule'])}</td></tr>
     <tr><th>Montant</th><td><strong>{fmt_money(montant)}</strong></td></tr>
-    <tr><th>Mode de reglement</th><td>{mode}</td></tr>
+    <tr><th>Mode de reglement</th><td>{echap(mode)}</td></tr>
     </table>
-    <p style="margin-top:60px;">Fait a {ville}, le {date}</p>
+    <p style="margin-top:60px;">Fait a {echap(ville)}, le {date}</p>
     """
     html = f"<html><head><meta charset='utf-8'><title>Recu de paiement</title><style>{STYLE}</style></head><body>{_entete_doc()}{corps}</body></html>"
     filename = f"recu_{eleve['matricule']}_{reference}.pdf"
@@ -128,14 +151,14 @@ def certificat_scolarite_pdf(eleve, params):
     titre = params.get("signataire_titre", "")
     corps = f"""
     <h2 style="text-align:center;">CERTIFICAT DE SCOLARITE</h2>
-    <p>Nous, soussignes, certifions que l'eleve <strong>{eleve['prenom']} {eleve['nom']}</strong>,
-    matricule <strong>{eleve['matricule']}</strong>, ne le {eleve.get('date_naissance') or '-'}
-    a {eleve.get('lieu_naissance') or '-'}, est regulierement inscrit(e) dans notre etablissement.</p>
+    <p>Nous, soussignes, certifions que l'eleve <strong>{echap(eleve['prenom'])} {echap(eleve['nom'])}</strong>,
+    matricule <strong>{echap(eleve['matricule'])}</strong>, ne le {eleve.get('date_naissance') or '-'}
+    a {echap(eleve.get('lieu_naissance') or '-')}, est regulierement inscrit(e) dans notre etablissement.</p>
     <table><tr><th>Classe</th><th>Statut</th><th>Date d'inscription</th></tr>
-    <tr><td>{eleve.get('classe_nom') or '-'}</td><td>{eleve['statut']}</td>
-    <td>{eleve.get('date_inscription', '-')}</td></tr></table>
-    <p style="margin-top:60px;">Fait a {ville}, le {date}<br>
-    {signataire}<br><em>{titre}</em></p>
+    <tr><td>{echap(eleve.get('classe_nom') or '-')}</td><td>{echap(eleve['statut'])}</td>
+    <td>{echap(eleve.get('date_inscription', '-'))}</td></tr></table>
+    <p style="margin-top:60px;">Fait a {echap(ville)}, le {date}<br>
+    {echap(signataire)}<br><em>{echap(titre)}</em></p>
     """
     html = f"<html><head><meta charset='utf-8'><title>Certificat de scolarite</title><style>{STYLE}</style></head><body>{_entete_doc()}{corps}</body></html>"
     filename = f"certificat_{eleve['matricule']}.pdf"
@@ -147,7 +170,7 @@ def paie_pdf():
     personnel = repos.personnel()
     masse = repos.masse_salariale()
     lignes = "".join(
-        f"<tr><td>{p['nom_complet']}</td><td>{p['fonction']}</td><td>{p['statut']}</td>"
+        f"<tr><td>{echap(p['nom_complet'])}</td><td>{echap(p['fonction'])}</td><td>{echap(p['statut'])}</td>"
         f"<td>{fmt_money(p['salaire'])}</td></tr>" for p in personnel)
     corps = (
         f"<h1>Bulletins de paie - {datetime.date.today():%B %Y}</h1>"
@@ -169,11 +192,12 @@ def planning_pdf(classe):
         for jour in JOURS:
             entree = grid.get(jour, {}).get(creneau)
             if entree:
-                cells += f"<td>{entree['matiere'] or ''}{' (' + entree['salle'] + ')' if entree['salle'] else ''}</td>"
+                salle = f" ({echap(entree['salle'])})" if entree['salle'] else ""
+                cells += f"<td>{echap(entree['matiere'] or '')}{salle}</td>"
             else:
                 cells += "<td></td>"
         lignes += f"<tr><td><strong>{creneau}</strong></td>{cells}</tr>"
-    corps = f"<h1>Emploi du temps - {classe['nom']}</h1>" \
+    corps = f"<h1>Emploi du temps - {echap(classe['nom'])}</h1>" \
             f"<table><tr>{entetes}</tr>{lignes}</table>"
     html = f"<html><head><meta charset='utf-8'><title>Emploi du temps</title><style>{STYLE}</style></head><body>{_entete_doc()}{corps}</body></html>"
     filename = f"planning_{classe['nom'].replace(' ', '_')}.pdf"

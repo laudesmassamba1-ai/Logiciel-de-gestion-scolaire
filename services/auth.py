@@ -21,6 +21,11 @@ class AuthService:
             return None, "Ce compte est desactive."
         if not verify_password(password, user["password"]):
             return None, "Identifiant ou mot de passe incorrect."
+        # Upgrade silencieux : les tres anciens hash SHA-256 non sales sont
+        # re-haches en PBKDF2 des que le mot de passe est verifie correct.
+        if ":" not in user["password"]:
+            db.execute("UPDATE utilisateurs SET password = ? WHERE id = ?",
+                       (hash_password(password), user["id"]))
         db.execute("UPDATE utilisateurs SET last_login = datetime('now', 'localtime') WHERE id = ?",
                    (user["id"],))
         db.execute("INSERT INTO connexions (utilisateur_id) VALUES (?)", (user["id"],))

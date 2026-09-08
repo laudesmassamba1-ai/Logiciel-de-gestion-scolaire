@@ -17,46 +17,45 @@
    <string>
     QMainWindow { background-color: #F5F3EF; }
     #sidebar {
-        background: #FFF7E0;
-        border-right: 3px solid #111111;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #27304A, stop:1 #1B2132);
+        border-right: 1px solid #141A29;
     }
     #lbl_logo {
-        color: #111111; font-size: 18px; font-weight: 800;
-        padding: 10px 20px 2px 20px; letter-spacing: 1px;
+        color: #FFFFFF; font-size: 17px; font-weight: 800;
+        padding: 12px 22px 2px 22px; letter-spacing: 1.5px;
     }
     #lbl_logo_subtitle {
-        color: #8A6D1F; font-size: 10px; font-weight: 600;
-        padding: 0px 20px 10px 20px; letter-spacing: 0.5px;
+        color: #F0C157; font-size: 10px; font-weight: 600;
+        padding: 0px 22px 12px 22px; letter-spacing: 1px;
     }
     #lbl_section_general, #lbl_section_scolarite,
     #lbl_section_finances, #lbl_section_administration {
-        color: #A38428; font-size: 10px; font-weight: 800;
-        letter-spacing: 1.5px; padding: 10px 22px 4px 24px;
+        color: #7E87A3; font-size: 9px; font-weight: 800;
+        letter-spacing: 2px; padding: 12px 22px 4px 24px;
     }
     #sidebar QPushButton {
-        color: #111111; text-align: left; padding: 8px 16px;
-        border: 2px solid transparent; margin: 1px 12px;
-        border-radius: 11px; font-size: 13px; font-weight: 600;
+        color: #D7DBE8; text-align: left; padding: 9px 16px;
+        border: none; margin: 2px 12px;
+        border-radius: 10px; font-size: 13px; font-weight: 500;
         background: transparent;
     }
-    #sidebar QPushButton:hover { background-color: #FFE9A8; color: #111111; }
-    #sidebar QPushButton:pressed { background-color: #FFDD7E; }
+    #sidebar QPushButton:hover { background-color: rgba(255,255,255,0.07); color: #FFFFFF; }
+    #sidebar QPushButton:pressed { background-color: rgba(255,255,255,0.12); }
     #sidebar QPushButton:checked {
-        background-color: #FFD54F; color: #111111; font-weight: 800;
-        border: 2px solid #111111;
+        background-color: rgba(244,186,63,0.16); color: #F6C866; font-weight: 700;
+        border-left: 3px solid #EAB43B;
     }
     #userBox {
-        background-color: #FFFFFF;
-        border: 2px solid #111111;
-        border-radius: 14px; margin: 8px 14px;
+        background-color: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; margin: 8px 14px;
     }
-    #lbl_user_name { color: #111111; font-size: 13px; font-weight: 800; }
-    #lbl_user_role { color: #8A6D1F; font-size: 11px; font-weight: 600; }
+    #lbl_user_name { color: #FFFFFF; font-size: 13px; font-weight: 700; }
+    #lbl_user_role { color: #F0C157; font-size: 11px; font-weight: 600; }
     #btn_logout {
-        color: #B91C1C; text-align: left; border: none; font-size: 12px;
-        font-weight: 700; padding: 6px 0px; background: transparent; border-radius: 8px;
+        color: #AEB4C6; text-align: left; border: none; font-size: 12px;
+        font-weight: 600; padding: 6px 0px; background: transparent; border-radius: 8px;
     }
-    #btn_logout:hover { color: #7F1010; background-color: #FEE2E2; }
+    #btn_logout:hover { color: #FFFFFF; background-color: rgba(220,80,80,0.18); }
    </string>
   </property>
   <widget class="QWidget" name="centralwidget">

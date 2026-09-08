@@ -3,8 +3,8 @@ from functools import partial
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QPushButton,
-    QTableWidgetItem, QVBoxLayout, QTableWidget, QHeaderView,
+    QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QPushButton, QTableWidgetItem, QVBoxLayout, QTableWidget, QHeaderView,
 )
 
 from core.config import (
@@ -124,23 +124,51 @@ def _page_header(parent_lay, titre, sous_titre):
     s.setStyleSheet(STYLE_HEADER_SUBTITLE)
     header.addWidget(t)
     header.addWidget(s)
+
+    accent = QFrame()
+    accent.setFixedSize(46, 3)
+    accent.setStyleSheet(
+        f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+        f" stop:0 #DAA520, stop:1 rgba(218,165,32,0));"
+        " border: none; border-radius: 2px; margin-top: 2px;")
+    header.addWidget(accent)
     parent_lay.addLayout(header)
 
 
 def _kpi_card(label, valeur, couleur=C_PRIMARY):
     frame = QFrame()
-    frame.setStyleSheet(STYLE_CARD)
+    frame.setStyleSheet(
+        f"background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        f" stop:0 #FFFFFF, stop:1 #FAF9F6); border: 1px solid #E6E3DB;"
+        f" border-radius: 14px; border-top: 3px solid {couleur};")
     v = QVBoxLayout(frame)
     v.setContentsMargins(16, 14, 16, 14)
     v.setSpacing(2)
     val = QLabel(str(valeur))
     val.setObjectName("kpi_value")
-    val.setStyleSheet(f"font-size: 22px; font-weight: 700; color: {couleur};")
+    val.setStyleSheet(f"font-size: 23px; font-weight: 800; color: {couleur};")
     lab = QLabel(label)
     lab.setStyleSheet(f"font-size: 11px; color: {C_TEXT_MUTED}; font-weight: 500;")
     v.addWidget(val)
     v.addWidget(lab)
     return frame
+
+
+def _styler_carte(frame, accent=None):
+    """Style moderne d'une carte existante (bande d'accent or en haut).
+
+    Utilisee par les tableaux de bord dont les frames viennent des .ui.
+    """
+    if accent is None:
+        accent = C_PRIMARY
+    try:
+        frame.setStyleSheet(
+            f"QFrame {{ background-color: qlineargradient(x1:0, y1:0,"
+            f" x2:0, y2:1, stop:0 #FFFFFF, stop:1 #FAF9F6);"
+            f" border: 1px solid #E6E3DB; border-radius: 14px;"
+            f" border-top: 3px solid {accent}; }}")
+    except RuntimeError:
+        pass
 
 
 def _add_btn(text, callback):
@@ -157,23 +185,58 @@ def _replace_layout(layout, widget):
 
 
 def _appreciation(moyenne):
-    if moyenne >= 16:
-        return "Excellent"
-    if moyenne >= 14:
-        return "Tres bien"
-    if moyenne >= 12:
-        return "Bien"
-    if moyenne >= 10:
-        return "Assez bien"
-    if moyenne >= 8:
-        return "Passable"
-    return "Insuffisant"
+    from services.appreciations import appreciation
+    return appreciation(moyenne)
 
 
 def _parse_money(text):
+    """Convertit une saisie monetaire en float ; renvoie 0.0 si aucune
+    valeur numerique exploitable (champ vide, "FCFA", texte libre...)."""
     if text is None:
         return 0.0
-    try:
-        return float(text.replace(" ", "").replace(",", "").replace("FCFA", "").strip())
-    except (TypeError, ValueError):
+    nettoye = str(text).replace(" ", "").replace(",", "").replace("FCFA", "").strip()
+    if not nettoye:
         return 0.0
+    try:
+        return float(nettoye)
+    except ValueError:
+        return 0.0
+
+
+def date_dans_annee_active(date_iso):
+    """Logique pure : True si la date ISO tombe dans l'annee scolaire active.
+
+    Pas d'annee definie -> garde desactivee (l'alerte de configuration est
+    affichee par refuser_si_hors_annee).
+    """
+    a = repos.annee_scolaire_active()
+    if not a or not a.get("date_debut"):
+        return True
+    debut = str(a["date_debut"])
+    fin = str(a.get("date_fin") or "9999-12-31")
+    return bool(date_iso) and debut <= date_iso <= fin
+
+
+def refuser_si_hors_annee(parent, date_iso, label="La date"):
+    """Garde de coherence : aucune ecriture datee hors annee scolaire active.
+
+    Affiche l'explication a l'utilisateur et renvoie True si la saisie
+    doit etre refusee.
+    """
+    a = repos.annee_scolaire_active()
+    if not a or not a.get("date_debut"):
+        QMessageBox.warning(
+            parent, "Annee scolaire",
+            "Aucune annee scolaire active n'est definie.\n\n"
+            "Ouvrez 'Cycles & Annees Scolaires' pour creer/activer "
+            "l'annee en cours avant toute saisie.")
+        return True
+    if not date_dans_annee_active(date_iso):
+        QMessageBox.warning(
+            parent, "Date hors annee scolaire",
+            f"{label} ({date_iso}) est en dehors de l'annee scolaire active :\n"
+            f"{a['libelle']}  ({a['date_debut']} → {a.get('date_fin') or '?'})\n\n"
+            "Choisissez une date dans l'annee active, ou changez d'annee "
+            "active dans 'Cycles & Annees Scolaires'.")
+        return True
+    return False

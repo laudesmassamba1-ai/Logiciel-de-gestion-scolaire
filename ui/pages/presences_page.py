@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 from repositories import repos
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _classe_items, _reload_combo, _make_table,
-    _page_header, _kpi_card,
+    _page_header, _kpi_card, refuser_si_hors_annee,
 )
 from core.config import (
     C_EMPTY_STATE, STYLE_BTN_PRIMARY, STYLE_BTN_ADD,
@@ -79,6 +79,9 @@ def presences(page, ctx):
     lay.addWidget(lbl_empty)
 
     etats = {}
+    # Selection reellement chargee dans la table : la sauvegarde doit
+    # correspondre exactement a ce qui est affiche (classe + date).
+    charge = {"cle": None}
 
     def refresh():
         _reload_combo(combo_classe, _classe_items(avec_toutes=False))
@@ -86,10 +89,18 @@ def presences(page, ctx):
         date = date_edit.date().toString("yyyy-MM-dd")
         if not classe_id:
             table.setRowCount(0)
+            charge["cle"] = None
             lbl_empty.setVisible(True)
             table.setVisible(False)
             return
         eleves_rows = repos.eleves(classe_id=classe_id)
+        if not eleves_rows:
+            table.setRowCount(0)
+            charge["cle"] = None
+            lbl_empty.setText("Aucun eleve dans cette classe")
+            lbl_empty.setVisible(True)
+            table.setVisible(False)
+            return
         pres_rows = {p["eleve_id"]: p for p in repos.presences(classe_id, date)}
         etats.clear()
         table.blockSignals(True)
@@ -109,6 +120,7 @@ def presences(page, ctx):
             table.setCellWidget(i, 3, edit_motif)
             etats[i] = (e["id"], combo, edit_motif)
         table.blockSignals(False)
+        charge["cle"] = (classe_id, date)
         table.resizeColumnsToContents()
         lbl_empty.setVisible(False)
         table.setVisible(True)
@@ -132,8 +144,18 @@ def presences(page, ctx):
     def save():
         classe_id = combo_classe.currentData()
         date = date_edit.date().toString("yyyy-MM-dd")
-        if not etats:
+        if not etats or charge["cle"] is None:
             QMessageBox.warning(page, "Presences", "Chargez d'abord la feuille de presence.")
+            return
+        if refuser_si_hors_annee(page, date, "La date de presence"):
+            return
+        if charge["cle"] != (classe_id, date):
+            QMessageBox.warning(
+                page, "Selection modifiee",
+                "La classe ou la date a change depuis le chargement. "
+                "Cliquez 'Charger' pour recharger la feuille avant "
+                "d'enregistrer : evite d'ecrire les statuts affiches "
+                "sous une autre date.")
             return
         for eleve_id, combo, edit_motif in etats.values():
             repos.save_presence(eleve_id, classe_id, date,
@@ -144,6 +166,9 @@ def presences(page, ctx):
     btn_all_present.clicked.connect(lambda: _set_all("Present"))
     btn_all_absent.clicked.connect(lambda: _set_all("Absent"))
     combo_classe.currentIndexChanged.connect(refresh)
+    # Changer la date doit recharger la feuille : sinon les statuts affiches
+    # d'un jour pouvaient etre enregistres sous une autre date.
+    date_edit.dateChanged.connect(refresh)
     btn_charger.clicked.connect(refresh)
     btn_save.clicked.connect(save)
     refresh()

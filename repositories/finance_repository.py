@@ -7,7 +7,8 @@ from repositories.base import RepositoryBase, _gen_reference
 
 class FinanceRepository(RepositoryBase):
 
-    def transactions(self, type_filtre=None, recherche="", date_start=None, date_end=None):
+    def transactions(self, type_filtre=None, recherche="", date_start=None, date_end=None,
+                     annee=None):
 
         sql = "SELECT * FROM transactions WHERE 1=1"
         params = []
@@ -15,6 +16,9 @@ class FinanceRepository(RepositoryBase):
             sql += " AND type = 'entree'"
         elif type_filtre == "sortie":
             sql += " AND type = 'sortie'"
+        if annee:
+            sql += " AND (annee_scolaire = ? OR annee_scolaire IS NULL)"
+            params.append(annee)
         if recherche:
             sql += " AND (beneficiaire LIKE ? OR motif LIKE ? OR reference LIKE ?)"
             like = f"%{recherche}%"
@@ -31,15 +35,19 @@ class FinanceRepository(RepositoryBase):
     def add_transaction(self, type_trans, montant, motif, categorie, beneficiaire, mode=None):
 
         reference = _gen_reference("REC" if type_trans == "entree" else "DEP")
+        active = db.query_one(
+            "SELECT libelle FROM annees_scolaires WHERE est_active = 1")
+        annee = active["libelle"] if active else None
         payload = {"reference": reference, "beneficiaire": beneficiaire, "motif": motif,
                    "categorie": categorie, "montant": montant,
-                   "type": type_trans, "mode_reglement": mode}
+                   "type": type_trans, "mode_reglement": mode,
+                   "annee_scolaire": annee}
         self._route_write(
             "POST", "/paiement", payload,
             db.execute,
-            """INSERT INTO transactions (reference, beneficiaire, motif, categorie, montant, type, mode_reglement)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (reference, beneficiaire, motif, categorie, montant, type_trans, mode))
+            """INSERT INTO transactions (reference, beneficiaire, motif, categorie, montant, type, mode_reglement, annee_scolaire)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (reference, beneficiaire, motif, categorie, montant, type_trans, mode, annee))
         return reference
 
     def delete_transaction(self, transaction_id):
@@ -56,14 +64,19 @@ class FinanceRepository(RepositoryBase):
         sortie = row["sortie"] if row else 0
         return entree, sortie, entree - sortie
 
-    def export_transactions_csv(self, path):
-        rows = self.transactions()
+    def export_transactions_csv(self, path, type_filtre=None, recherche="",
+                                date_start=None, date_end=None, annee=None):
+        # Meme filtrage que la vue : l'export doit correspondre a l'affiche.
+        rows = self.transactions(type_filtre=type_filtre, recherche=recherche,
+                                 date_start=date_start, date_end=date_end,
+                                 annee=annee)
         with open(path, "w", newline="", encoding="utf-8-sig") as fh:
             writer = csv.writer(fh, delimiter=";")
-            writer.writerow(["Date", "Reference", "Beneficiaire", "Motif", "Categorie", "Type", "Montant", "Mode"])
+            writer.writerow(["Date", "Reference", "Beneficiaire", "Motif", "Categorie", "Type", "Montant", "Mode", "Annee"])
             for r in rows:
                 writer.writerow([r["date"], r["reference"], r["beneficiaire"], r["motif"],
-                                 r["categorie"], r["type"], r["montant"], r["mode_reglement"]])
+                                 r["categorie"], r["type"], r["montant"], r["mode_reglement"],
+                                 r.get("annee_scolaire") or "-"])
 
 
     def tarifs(self, classe_id=None):
@@ -157,6 +170,9 @@ class FinanceRepository(RepositoryBase):
         if annee_scolaire:
             attendu_sql += " AND annee_scolaire = ?"
             attendu_params.append(annee_scolaire)
+        # classe_id NULL (donnee incomplete) -> attendu 0 : comportement
+        # voulu, l'eleve sans classe n'est pas facturable tant qu'elle
+        # n'est pas renseignee.
         attendu = db.query_one(attendu_sql, attendu_params)["m"]
         paye_sql = "SELECT COALESCE(SUM(montant), 0) AS m FROM paiements WHERE eleve_id = ?"
         paye_params = [eleve_id]

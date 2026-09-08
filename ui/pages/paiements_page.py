@@ -1,5 +1,7 @@
 from functools import partial
 
+import datetime
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox,
@@ -10,7 +12,7 @@ from PyQt5.QtWidgets import (
 from repositories import repos
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _money_edit, _classe_items, _reload_combo,
-    _add_btn, _kpi_card, _make_table, _page_header,
+    _add_btn, _kpi_card, _make_table, _page_header, refuser_si_hors_annee,
 )
 from ui.widgets import fmt_money
 from core.config import PERIODES, C_EMPTY_STATE, STYLE_BTN_PRIMARY, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_GOLD, C_RED, C_RED_BG, C_RED_BORDER
@@ -319,6 +321,18 @@ def open_paiement_dialog(parent, ctx, on_created):
             return
         active = repos.annee_scolaire_active()
         annee = active["libelle"] if active else ""
+        if refuser_si_hors_annee(dlg, datetime.date.today().isoformat(),
+                                 "La date du paiement (aujourd'hui)"):
+            return
+        solde = repos.solde_eleve(eleve_id, annee)
+        if montant.value() > float(solde["solde"]):
+            reponse = QMessageBox.question(
+                dlg, "Sur-paiement",
+                f"Le solde restant de cet eleve est de "
+                f"{fmt_money(solde['solde'])} : ce paiement depasse le montant "
+                "attendu (trop-percu possible).\nEnregistrer quand meme ?")
+            if reponse != QMessageBox.Yes:
+                return
         repos.add_paiement(eleve_id, montant.value(), combo_mode.currentText(),
                            combo_type.currentText(), annee,
                            combo_trimestre.currentData() or "")

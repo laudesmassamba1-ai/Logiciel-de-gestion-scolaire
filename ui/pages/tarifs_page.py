@@ -90,8 +90,11 @@ def tarifs(page, ctx):
             lbl_kpi_max.findChild(QLabel, "kpi_value").setText("0 FCFA")
 
     def _delete_tarif(parent, ctx, t):
-        if QMessageBox.question(parent, "Tarif",
-                                f"Supprimer le tarif {t['type_frais']} ({t['classe_nom']}) ?") \
+        if QMessageBox.question(
+                parent, "Tarif",
+                f"Supprimer le tarif {t['type_frais']} ({t['classe_nom']}) ?\n\n"
+                "Attention : les calculs de solde scolarite des eleves de "
+                "cette classe seront modifies (frais attendus reduits).") \
                 == QMessageBox.Yes:
             repos.delete_tarif(t["id"])
             refresh()
@@ -152,6 +155,9 @@ def open_tarif_dialog(parent, ctx, on_created, tarif=None):
             QMessageBox.warning(dlg, "Tarif", "Le type de frais est obligatoire.")
             return
         # Anti-doublon : meme classe + type + annee deja tarifé.
+        # Le doublon n'est supprime qu'APRES l'enregistrement reussi du
+        # nouveau tarif : jamais de perte si la validation echoue ensuite.
+        doublon_id = None
         existants = repos.tarifs(classe_id=combo_classe.currentData())
         for t in existants:
             meme = (t["type_frais"].lower() == libelle_type.lower()
@@ -164,7 +170,7 @@ def open_tarif_dialog(parent, ctx, on_created, tarif=None):
                     "et cette annee. Le remplacer ?")
                 if reponse != QMessageBox.Yes:
                     return
-                repos.delete_tarif(t["id"])
+                doublon_id = t["id"]
                 break
         if tarif:
             repos.update_tarif(tarif["id"], combo_classe.currentData(),
@@ -172,6 +178,8 @@ def open_tarif_dialog(parent, ctx, on_created, tarif=None):
         else:
             repos.add_tarif(combo_classe.currentData(), libelle_type,
                             montant.value(), annee.text().strip())
+        if doublon_id is not None:
+            repos.delete_tarif(doublon_id)
         dlg.accept()
 
     btn_ok.clicked.connect(valider)

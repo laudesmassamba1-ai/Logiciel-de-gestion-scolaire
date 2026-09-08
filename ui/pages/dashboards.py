@@ -5,20 +5,78 @@ from PyQt5.QtWidgets import (
 )
 
 from api import client
+from core.config import C_GOLD, C_BLUE, C_RED, C_WARNING
 from repositories import repos
 from services import auth_service as auth, reports
+from ui import motion
 from ui.loader import apply_ui
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _today_fr, _replace_layout, _classe_items,
+    _styler_carte,
 )
 from ui.widgets import SimpleBarChart, SimplePieChart, fmt_money
 from ui.workers import run_async
+
+
+def _styler_dashboard(page, cartes):
+    """Style moderne des cartes (bande d'accent) puis apparitions
+    echelonnees a l'ouverture du tableau de bord."""
+    cibles = []
+    for nom, accent in cartes:
+        w = getattr(page, nom, None)
+        if w is None:
+            continue
+        _styler_carte(w, accent)
+        cibles.append(w)
+    motion.stagger(cibles, au_total=440, duree=320)
+
+
+KRPI_ADMIN = [
+    ("card_total_comptes", C_GOLD),
+    ("card_directeurs", C_BLUE),
+    ("card_gestionnaires", C_RED),
+    ("card_comptes_inactifs", C_WARNING),
+    ("card_activite", C_BLUE),
+    ("card_raccourcis", C_GOLD),
+]
+
+KRPI_GESTIONNAIRE = [
+    ("card_effectifs", C_GOLD),
+    ("card_inscriptions_jour", C_BLUE),
+    ("card_caisse_jour", C_RED),
+    ("card_taches", C_WARNING),
+    ("container_chart_statuts", C_BLUE),
+    ("card_actions_rapides", C_GOLD),
+    ("card_activite", C_GOLD),
+    ("card_dossiers_incomplets", C_RED),
+]
 
 
 def dashboard_directeur(page, ctx):
     if page.layout() is not None:
         return
     apply_ui("dashboards/dashboard_admin.ui", page)
+
+    _styler_dashboard(page, KRPI_ADMIN)
+
+    def _charts():
+        data = _directeur_charts()
+        if hasattr(page, "layout_chart_finances"):
+            fin = SimpleBarChart(titre="Flux financier par mois")
+            fin.set_data(data["fin_labels"], data["fin_values"])
+            _replace_layout(page.layout_chart_finances, fin)
+        if hasattr(page, "layout_chart_scolarite"):
+            scol = SimpleBarChart(titre="Effectifs par classe")
+            scol.set_data(data["scol_labels"], data["scol_values"])
+            _replace_layout(page.layout_chart_scolarite, scol)
+        if hasattr(page, "layout_chart_personnel"):
+            statuts = {}
+            for p in repos.personnel():
+                s = p["statut"] or "Autre"
+                statuts[s] = statuts.get(s, 0) + 1
+            per = SimpleBarChart(titre="Personnel par statut")
+            per.set_data(list(statuts.keys()), list(statuts.values()))
+            _replace_layout(page.layout_chart_personnel, per)
 
     def refresh():
         comptes = repos.utilisateurs()
@@ -36,14 +94,21 @@ def dashboard_directeur(page, ctx):
             page.list_dernieres_connexions.addItem(
                 f"{log['date_connexion']}  -  {log['nom_complet']} ({log['role']})")
         page.lbl_activite_empty.setVisible(not logs)
+        _charts()
 
     from ui.pages.comptes_page import open_compte_dialog, open_reset_password_dialog
 
-    page.btn_quick_nouveau_compte.clicked.connect(
-        lambda: open_compte_dialog(page, ctx))
+    def _ouvrir_compte():
+        open_compte_dialog(page, ctx)
+        refresh()
+
+    def _ouvrir_reset():
+        open_reset_password_dialog(page, ctx)
+        refresh()
+
+    page.btn_quick_nouveau_compte.clicked.connect(_ouvrir_compte)
     page.btn_goto_comptes.clicked.connect(lambda: ctx.navigate("comptes"))
-    page.btn_reset_password.clicked.connect(
-        lambda: open_reset_password_dialog(page, ctx))
+    page.btn_reset_password.clicked.connect(_ouvrir_reset)
 
     refresh()
     page.refresh = refresh
@@ -86,6 +151,9 @@ def dashboard_gestionnaire(page, ctx):
     if page.layout() is not None:
         return
     apply_ui("dashboards/dashboard_gestionnaire.ui", page)
+
+    _styler_dashboard(page, KRPI_GESTIONNAIRE)
+
     tokens = {"n": 0}
 
     def refresh():
@@ -157,12 +225,17 @@ def dashboard_gestionnaire(page, ctx):
     from ui.pages.caisse_page import open_transaction_dialog
     from ui.pages.certificat_dialog import open_certificat_dialog
 
-    page.btn_quick_inscrire.clicked.connect(
-        lambda: open_inscription_dialog(page, ctx))
-    page.btn_quick_recette.clicked.connect(
-        lambda: open_transaction_dialog(page, ctx, "entree"))
-    page.btn_quick_depense.clicked.connect(
-        lambda: open_transaction_dialog(page, ctx, "sortie"))
+    def _ouvrir_inscrire():
+        open_inscription_dialog(page, ctx)
+        refresh()
+
+    def _transaction(sens):
+        open_transaction_dialog(page, ctx, sens)
+        refresh()
+
+    page.btn_quick_inscrire.clicked.connect(_ouvrir_inscrire)
+    page.btn_quick_recette.clicked.connect(lambda: _transaction("entree"))
+    page.btn_quick_depense.clicked.connect(lambda: _transaction("sortie"))
     page.btn_quick_certificat.clicked.connect(
         lambda: open_certificat_dialog(page))
 

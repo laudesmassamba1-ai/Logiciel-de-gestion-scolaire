@@ -1,6 +1,5 @@
 import datetime
 import os
-import shutil
 import sqlite3
 from pathlib import Path
 
@@ -16,7 +15,18 @@ def backup_database(backup_path: str = None) -> str:
     src = Path(DB_PATH)
     if not src.exists():
         raise FileNotFoundError(f"Base de donnees introuvable : {DB_PATH}")
-    shutil.copy2(str(src), backup_path)
+    # API de sauvegarde SQLite (conn.backup) : copie coherente meme si la
+    # base est en cours d'ecriture (mode WAL), contrairement a copy2.
+    source = sqlite3.connect(str(src))
+    try:
+        destination = sqlite3.connect(backup_path)
+        try:
+            with destination:
+                source.backup(destination)
+        finally:
+            destination.close()
+    finally:
+        source.close()
     return backup_path
 
 
@@ -34,7 +44,18 @@ def restore_database(backup_path: str) -> bool:
         conn.close()
     dest = Path(DB_PATH)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(str(src), str(dest))
+    # Restauration egalement via l'API de sauvegarde : remplace le contenu
+    # de la base courante par celui du fichier, de facon transactionnelle.
+    source = sqlite3.connect(str(src))
+    try:
+        destination = sqlite3.connect(str(dest))
+        try:
+            with destination:
+                source.backup(destination)
+        finally:
+            destination.close()
+    finally:
+        source.close()
     return True
 
 

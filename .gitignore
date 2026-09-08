@@ -19,3 +19,4 @@ server/.jwt_secret
 server/venv/
 __pycache__/
 *.pyc
+executables/

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import os
 import sqlite3
+from contextlib import contextmanager
 
 from core.config import DB_PATH, DEFAULT_MATIERES, DOCS_DIR, VILLE_DEFAUT, PAYS_DEFAUT
 
@@ -190,6 +191,17 @@ CREATE TABLE IF NOT EXISTS file_attente_synchro (
     status       TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'FAILED')),
     uuid_client  TEXT
 );
+
+CREATE TABLE IF NOT EXISTS ia_memoire (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    type       TEXT NOT NULL DEFAULT 'qa' CHECK (type IN ('qa', 'fait')),
+    question   TEXT NOT NULL,
+    reponse    TEXT NOT NULL,
+    usage      INTEGER NOT NULL DEFAULT 0,
+    appris_le  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ia_memoire_question ON ia_memoire (question);
 """
 
 
@@ -259,6 +271,12 @@ class Database:
         queue_cols = [r[1] for r in conn.execute("PRAGMA table_info(file_attente_synchro)")]
         if "uuid_client" not in queue_cols:
             conn.execute("ALTER TABLE file_attente_synchro ADD COLUMN uuid_client TEXT")
+
+        # Chaque ecriture de caisse est rattachee a l'annee scolaire active :
+        # indispensable a la coherence comptable quand l'annee change.
+        trans_cols = [r[1] for r in conn.execute("PRAGMA table_info(transactions)")]
+        if "annee_scolaire" not in trans_cols:
+            conn.execute("ALTER TABLE transactions ADD COLUMN annee_scolaire TEXT")
 
 
     def _seed(self, conn):
@@ -361,7 +379,44 @@ class Database:
             conn.close()
 
 
+    @contextmanager
+    def transaction(self):
+        """Contexte transactionnel : commit si tout reussit, rollback sinon.
+
+        with db.transaction() as t:
+            t.execute("DELETE ...")
+            t.execute("INSERT ...")
+        """
+        conn = self.connect()
+
+        class _Txn:
+            def execute(self_, sql, params=()):
+                return conn.execute(sql, params)
+
+            def close(self_):
+                pass
+
+        txn = _Txn()
+        try:
+            yield txn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
     def enqueue(self, method, endpoint, payload, uuid_client=None):
+        # Dédoublonnage : un double-clic ou une revalidation ne doit pas
+        # empiler deux fois la meme operation en attente.
+        existe = self.query_one(
+            """SELECT id FROM file_attente_synchro
+               WHERE status = 'PENDING' AND method = ? AND endpoint = ?
+                 AND payload = ?""",
+            (method, endpoint, payload))
+        if existe:
+            return existe["id"]
         return self.execute(
             """INSERT INTO file_attente_synchro (endpoint, method, payload, status, uuid_client)
                VALUES (?, ?, ?, 'PENDING', ?)""",

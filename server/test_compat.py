@@ -18,6 +18,17 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent))
 warnings.filterwarnings("ignore")
 
+# Le bureau a aussi un main.py : selon l'ordre des suites dans une meme
+# session pytest, "import main" peut resoudre vers le MAUVAIS module.
+# On charge donc explicitement le main du SERVEUR sous un nom dedie.
+import importlib.util
+
+_spec = importlib.util.spec_from_file_location(
+    "serveur_main", Path(__file__).parent / "main.py")
+serveur_main = importlib.util.module_from_spec(_spec)
+sys.modules["serveur_main"] = serveur_main
+_spec.loader.exec_module(serveur_main)
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -97,9 +108,8 @@ class FauxConnexion:
 def client(tmp_path):
     fausse_conn = FauxConnexion()
     with patch.object(compat, "connexion", return_value=fausse_conn):
-        import main
-        with patch.object(main, "get_connection", return_value=fausse_conn):
-            yield TestClient(main.app), fausse_conn
+        with patch.object(serveur_main, "get_connection", return_value=fausse_conn):
+            yield TestClient(serveur_main.app), fausse_conn
 
 
 def dernier_update(conn, prefixe):
@@ -498,7 +508,7 @@ def test_consultation_audit_protegee(client):
     # Token falsifie : signature invalide -> 401
     faux = {"Authorization": "Bearer " + pyjwt.encode(
         {"user_id": 9, "role": "admin", "exp": time.time() + 3600},
-        "mauvaise-cle", algorithm="HS256")}
+        "x" * 40, algorithm="HS256")}
     assert c.get("/audit", headers=faux).status_code == 401
 
 

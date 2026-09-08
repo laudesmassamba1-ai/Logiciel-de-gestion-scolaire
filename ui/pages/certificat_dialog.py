@@ -49,7 +49,7 @@ def open_certificat_dialog(parent):
     if dlg.result() == QDialog.Accepted:
         eleve = repos.eleve_by_id(combo.currentData())
         if eleve:
-            eleve["classe_nom"] = ""
+            eleve["classe_nom"] = "-"
             classe = repos.classe_by_id(eleve["classe_id"]) if eleve["classe_id"] else None
             if classe:
                 eleve["classe_nom"] = classe["nom"]

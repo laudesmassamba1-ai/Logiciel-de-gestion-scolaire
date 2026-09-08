@@ -42,8 +42,13 @@ def personnel(page, ctx):
     search.setPlaceholderText("Rechercher un membre du personnel...")
     top.addWidget(search)
     top.addStretch(1)
+
+    def _ouvrir_dialog(employe=None):
+        open_personnel_dialog(page, ctx, employe)
+        fill()  # la liste doit reflechir l'employe cree/modifie
+
     btn_add = _btn("+ Nouvel Employe",
-                   lambda: open_personnel_dialog(page, ctx),
+                   _ouvrir_dialog,
                    STYLE_BTN_PRIMARY)
     if peut_gerer:
         top.addWidget(btn_add)
@@ -81,7 +86,7 @@ def personnel(page, ctx):
             cl = QHBoxLayout(cell)
             cl.setContentsMargins(2, 2, 2, 2)
             if peut_gerer:
-                cl.addWidget(_btn("Modifier", partial(open_personnel_dialog, page, ctx, p),
+                cl.addWidget(_btn("Modifier", partial(_ouvrir_dialog, p),
                                   _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)))
                 cl.addWidget(_btn("Supprimer", partial(_delete, page, ctx, p),
                                   _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
@@ -143,6 +148,10 @@ def open_personnel_dialog(parent, ctx, employe=None):
     if dlg.exec_() == QDialog.Accepted:
         if not nom.text().strip():
             QMessageBox.warning(dlg, "Personnel", "Le nom est obligatoire.")
+            return
+        if salaire.value() <= 0:
+            QMessageBox.warning(dlg, "Personnel",
+                                "Le salaire doit etre superieur a 0.")
             return
         data = (nom.text().strip(), fonction.text().strip(), tel.text().strip(),
                 email.text().strip(), salaire.value(), statut.currentText())

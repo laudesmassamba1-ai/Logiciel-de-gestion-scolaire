@@ -29,8 +29,11 @@ class Eleve:
 
     def to_dict(self):
         d = asdict(self)
-        if not d["uuid_client"]:
-            d["uuid_client"] = str(_uuid.uuid4())
+        # UUID genere UNE SEULE fois et conserve sur l'objet : deux appels
+        # successifs doivent renvoyer le meme identifiant.
+        if not self.uuid_client:
+            self.uuid_client = str(_uuid.uuid4())
+        d["uuid_client"] = self.uuid_client
         return d
 
 
@@ -55,14 +58,3 @@ class BodyAjouterEleve:
             "eleve": self.eleve.to_dict() if self.eleve else None,
             "paiement": self.paiement.to_dict() if self.paiement else None,
         }
-
-
-@dataclass
-class Parent:
-    nom: str = ""
-    prenom: str = ""
-    telephone: str = ""
-    lien: str = ""
-
-    def to_dict(self):
-        return asdict(self)

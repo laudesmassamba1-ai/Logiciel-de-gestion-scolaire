@@ -1,5 +1,7 @@
 from functools import partial
 
+import datetime
+
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
     QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
@@ -11,7 +13,7 @@ from services import reports
 from ui.loader import apply_ui
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _classe_items, _reload_combo, _fit_rows,
-    _fill_combos, _parse_money,
+    _fill_combos, _parse_money, refuser_si_hors_annee,
 )
 from ui.widgets import fmt_money
 from core.config import C_GOLD, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER
@@ -68,8 +70,11 @@ def eleves(page, ctx):
                 "Effectifs de toute l'école - filtrez par classe pour plus de lisibilite")
 
     def _delete_eleve(parent, ctx, eleve):
-        if QMessageBox.question(parent, "Supprimer",
-                                f"Supprimer l'élève {eleve['prenom']} {eleve['nom']} ?") \
+        if QMessageBox.question(
+                parent, "Supprimer",
+                f"Supprimer l'élève {eleve['prenom']} {eleve['nom']} ?\n\n"
+                "Attention : ses notes, presences et paiements seront "
+                "également supprimés.") \
                 == QMessageBox.Yes:
             repos.delete_eleve(eleve["id"])
             fill()
@@ -83,7 +88,12 @@ def eleves(page, ctx):
             page.combo_classe.setCurrentIndex(1)
 
     populate_class_combo()
-    page.btn_add_eleve.clicked.connect(lambda: open_inscription_dialog(page, ctx))
+
+    def _ouvrir_inscription(eleve=None):
+        open_inscription_dialog(page, ctx, eleve)
+        fill()  # la liste doit reflechir le dossier cree/modifie
+
+    page.btn_add_eleve.clicked.connect(_ouvrir_inscription)
     page.btn_apply_filter_eleves.clicked.connect(fill)
     page.search_eleve.textChanged.connect(fill)
     page.combo_classe.currentIndexChanged.connect(fill)
@@ -93,7 +103,7 @@ def eleves(page, ctx):
 
     def double_clicked(row, _col):
         if 0 <= row < len(getattr(page, "_rows", [])):
-            open_inscription_dialog(page, ctx, page._rows[row])
+            _ouvrir_inscription(page._rows[row])
 
     page.table_eleves.cellDoubleClicked.connect(double_clicked)
     page.table_eleves.setToolTip("Double-cliquez sur une ligne pour modifier le dossier")
@@ -131,16 +141,22 @@ def open_inscription_dialog(parent, ctx, eleve=None):
         else:
             lbl_matricule.setText(f"Matricule : {eleve['matricule']}")
 
+    # Dossier charge via la recherche de reinscription : dans ce cas on
+    # MET A JOUR l'eleve existant au lieu de creer un doublon.
+    reins_source = {"eleve": None}
+
     def _load_reins():
         found = repos.eleve_by_matricule(input_reins.text().strip())
         if not found:
             QMessageBox.warning(dlg, "Reinscription",
                                 f"Aucun eleve trouve avec le matricule {input_reins.text().strip()}.")
             return
+        reins_source["eleve"] = found
         _fill_from(found)
         dlg.radio_new.setChecked(False)
         dlg.radio_reins.setChecked(True)
-        lbl_matricule.setText(f"Reinscription de {found['prenom']} {found['nom']}")
+        lbl_matricule.setText(f"Reinscription de {found['prenom']} {found['nom']} "
+                              f"({found['matricule']})")
         input_reins.setEnabled(False)
         btn_reins.setEnabled(False)
 
@@ -236,6 +252,13 @@ def open_inscription_dialog(parent, ctx, eleve=None):
             QMessageBox.warning(dlg, "Inscription",
                                 "Selectionnez une classe (ou creez-en une).")
             return
+        source = reins_source["eleve"]
+        # Nouvelle inscription ou reinscription : l'ecriture date d'aujourd'hui,
+        # elle doit tomber dans l'annee scolaire active.
+        if not eleve and refuser_si_hors_annee(
+                dlg, datetime.date.today().isoformat(),
+                "La date d'inscription (aujourd'hui)"):
+            return
         sexe = dlg.combo_sexe.currentText().split(":")[-1].strip()
         data = {
             "nom": nom, "prenom": prenom, "sexe": sexe,
@@ -253,31 +276,58 @@ def open_inscription_dialog(parent, ctx, eleve=None):
             "check_acte": 1 if dlg.check_acte.isChecked() else 0,
             "check_photos": 1 if dlg.check_photos.isChecked() else 0,
             "check_bulletin": 1 if dlg.check_bulletin.isChecked() else 0,
-            "statut": eleve["statut"] if eleve else ("Inscrit" if dlg.radio_reins.isChecked() else "Pre-inscrit"),
         }
-        if eleve:
+        # Statut : la reinscription est explicite ; sinon on preserve le
+        # statut existant en edition, ou on applique le choix en creation.
+        if source:
+            data["statut"] = "Inscrit"
+            # Reinscription ne veut PAS dire redoublement : on preserve le
+            # flag existant (seul un avis pedagogique le change).
+            data["redoublant"] = source.get("redoublant", 0)
+            data["matricule"] = source["matricule"]
+        elif eleve:
+            data["statut"] = ("Inscrit" if dlg.radio_reins.isChecked()
+                              and eleve["statut"] != "Inscrit"
+                              else eleve["statut"])
+            data["redoublant"] = eleve["redoublant"]
             data["matricule"] = eleve["matricule"]
+        else:
+            data["statut"] = "Inscrit" if dlg.radio_reins.isChecked() else "Pre-inscrit"
+            data["redoublant"] = 0
+
+        def _encaisser_si_montant(matricule):
+            montant = _parse_money(dlg.input_montant_verse.text())
+            if not montant or montant <= 0:
+                return
+            mode = dlg.combo_mode_reglement.currentText().split(":")[-1].strip()
+            reference = repos.add_transaction(
+                "entree", montant, "Droits de scolarite - inscription",
+                "Inscription", f"{prenom} {nom}",
+                mode if mode and mode != "Especes" else "Especes")
+            if QMessageBox.question(
+                    dlg, "Inscription",
+                    f"{fmt_money(montant)} encaisse.\nImprimer le recu ?") \
+                    == QMessageBox.Yes:
+                reports.recu_paiement(
+                    {"prenom": prenom, "nom": nom, "matricule": matricule},
+                    montant, mode, reference)
+
+        if eleve:
             repos.update_eleve(eleve["id"], data)
             QMessageBox.information(dlg, "Inscription",
                                     f"Dossier de {prenom} {nom} mis a jour.")
+        elif source:
+            # Reinscription : mise a jour du dossier EXISTANT (pas de doublon)
+            repos.update_eleve(source["id"], data)
+            _encaisser_si_montant(source["matricule"])
+            QMessageBox.information(
+                dlg, "Reinscription",
+                f"{prenom} {nom} reinscrit. Matricule : {source['matricule']}")
         else:
             new_id = repos.add_eleve(data)
-            montant = _parse_money(dlg.input_montant_verse.text())
-            if montant and montant > 0:
-                mode = dlg.combo_mode_reglement.currentText().split(":")[-1].strip()
-                reference = repos.add_transaction(
-                    "entree", montant, "Droits de scolarite - inscription",
-                    "Inscription", f"{prenom} {nom}",
-                    mode if mode and mode != "Especes" else "Especes")
-                if QMessageBox.question(
-                        dlg, "Inscription",
-                        f"Eleve inscrit. Matricule : {data['matricule']}\n"
-                        f"{fmt_money(montant)} encaisse.\nImprimer le recu ?") \
-                        == QMessageBox.Yes:
-                    reports.recu_paiement(
-                        {"prenom": prenom, "nom": nom, "matricule": data["matricule"]},
-                        montant, mode, reference)
-            else:
+            _encaisser_si_montant(data["matricule"])
+            if not (dlg.input_montant_verse.text() or "").strip() or \
+                    _parse_money(dlg.input_montant_verse.text()) <= 0:
                 QMessageBox.information(
                     dlg, "Inscription",
                     f"Eleve inscrit. Matricule : {data['matricule']}")

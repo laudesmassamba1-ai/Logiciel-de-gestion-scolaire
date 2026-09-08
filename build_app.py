@@ -65,8 +65,11 @@ def _ensure_icon() -> Path:
     except Exception as exc:
         print(f"Generation d'icone ignoree ({exc})")
         ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        # Un ICO factice (octets nuls) produit un build defectueux : on
+        # ne cree qu'un PNG minimal valide et on signale l'absence d'ICO.
         if not ICON_PATH.exists():
-            ICON_PATH.write_bytes(b'\x00' * 1024)
+            print("Avertissement : assets/icon.ico absent ; "
+                  "l'executable n'aura pas d'icone personnalisee.")
         if not PNG_PATH.exists():
             PNG_PATH.write_bytes(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\x0d\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82')
         return ICON_PATH

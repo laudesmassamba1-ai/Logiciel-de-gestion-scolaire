@@ -61,7 +61,26 @@ def comptes(page, ctx):
         page.lbl_kpi3_valeur.setText(str(len([u for u in actifs if u["role"] == "gestionnaire"])))
         page.lbl_kpi4_valeur.setText(str(len([u for u in all_rows if not u["actif"]])))
 
+    def _est_dernier_directeur_actif(u):
+        """Un compte directeur actif doit toujours en rester au moins un."""
+        if u["role"] != "directeur" or not u["actif"]:
+            return False
+        return len([x for x in repos.utilisateurs()
+                    if x["role"] == "directeur" and x["actif"]]) <= 1
+
     def _toggle(parent, ctx, u):
+        moi = getattr(ctx, "user", None) or {}
+        if u["id"] == moi.get("id"):
+            QMessageBox.warning(parent, "Comptes",
+                                "Vous ne pouvez pas desactiver votre propre "
+                                "compte depuis cette session.")
+            return
+        if u["actif"] and _est_dernier_directeur_actif(u):
+            QMessageBox.warning(
+                parent, "Comptes",
+                "Impossible de desactiver le dernier compte directeur "
+                "actif : creez et activez d'abord un autre directeur.")
+            return
         repos.toggle_compte(u["id"], not u["actif"])
         refresh()
 
@@ -75,14 +94,30 @@ def comptes(page, ctx):
                                     f"Nouveau mot de passe : {new_pwd}")
 
     def _delete_compte(parent, ctx, u):
+        moi = getattr(ctx, "user", None) or {}
+        if u["id"] == moi.get("id"):
+            QMessageBox.warning(parent, "Comptes",
+                                "Vous ne pouvez pas supprimer votre propre "
+                                "compte depuis cette session.")
+            return
+        if _est_dernier_directeur_actif(u):
+            QMessageBox.warning(
+                parent, "Comptes",
+                "Impossible de supprimer le dernier compte directeur "
+                "actif : creez et activez d'abord un autre directeur.")
+            return
         if QMessageBox.question(parent, "Supprimer",
                                 f"Supprimer le compte de {u['nom_complet']} ?") \
                 == QMessageBox.Yes:
             repos.delete_compte(u["id"])
             refresh()
 
+    def _ouvrir_dialog():
+        open_compte_dialog(page, ctx)
+        refresh()
+
     if peut_gerer:
-        page.btn_add_compte.clicked.connect(lambda: open_compte_dialog(page, ctx))
+        page.btn_add_compte.clicked.connect(_ouvrir_dialog)
     else:
         page.btn_add_compte.setVisible(False)
     page.btn_apply_filter_compte.clicked.connect(refresh)

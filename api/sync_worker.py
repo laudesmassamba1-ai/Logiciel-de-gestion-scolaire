@@ -15,9 +15,15 @@ class SyncWorker(QThread):
     sync_done = pyqtSignal(int)
     sync_error = pyqtSignal(str)
 
+    # Le serveur est la source de verite pour la structure de l'ecole :
+    # on la rapatrie au plus toutes les PULL_INTERVAL secondes quand on
+    # est en ligne, pour que les modifications du directeur se propagent.
+    PULL_INTERVAL = 60
+
     def __init__(self, interval=15):
         super().__init__()
         self._interval = interval
+        self._last_pull = 0.0
 
 
     def run(self):
@@ -25,11 +31,25 @@ class SyncWorker(QThread):
             if api_disponible(force=True):
                 network.set_online()
                 self.status_changed.emit("online")
+                self._pull_structure()
                 self._drain_queue()
             else:
                 network.set_offline()
                 self.status_changed.emit("offline")
             time.sleep(self._interval)
+
+
+    def _pull_structure(self):
+        import time as _time
+        now = _time.monotonic()
+        if now - self._last_pull < self.PULL_INTERVAL:
+            return
+        try:
+            from services.sync_service import pull_structure
+            self._last_pull = now
+            pull_structure()
+        except Exception:
+            pass  # jamais bloquant : le poste reste utilisable hors-ligne
 
 
     def _drain_queue(self):

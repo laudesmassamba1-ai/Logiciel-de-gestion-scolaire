@@ -26,7 +26,6 @@ def programmes(page, ctx):
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    lay.setSpacing(16)
     _page_header(lay, "Matieres & Programmes",
                  "Matieres enseignees et affectations par classe")
 
@@ -68,8 +67,12 @@ def programmes(page, ctx):
         table_m.setVisible(bool(rows))
 
     def _delete_matiere(parent, ctx, mt):
-        if QMessageBox.question(parent, "Matiere",
-                                f"Supprimer la matiere {mt['nom']} ?") == QMessageBox.Yes:
+        if QMessageBox.question(
+                parent, "Matiere",
+                f"Supprimer la matiere {mt['nom']} ?\n\n"
+                "Attention : toutes les notes et affectations de programme "
+                "liees a cette matiere seront egalement supprimees.") \
+                == QMessageBox.Yes:
             repos.delete_matiere(mt["id"])
             fill_m()
 
@@ -133,7 +136,8 @@ def programmes(page, ctx):
         classe_id = combo_classe_a.currentData()
         matieres = repos.matieres()
         existants = {p["matiere_id"]: p for p in repos.programmes(classe_id)} if classe_id else {}
-        personnel_list = repos.personnel()
+        # Seuls les enseignants peuvent etre affectes a une matiere.
+        enseignants_list = repos.enseignants()
         table_a.setRowCount(len(matieres))
         lignes.clear()
         for i, mt in enumerate(matieres):
@@ -151,7 +155,7 @@ def programmes(page, ctx):
             table_a.setCellWidget(i, 2, coeff)
             ens = QComboBox()
             ens.addItem("-- Non affecte --", None)
-            for p in personnel_list:
+            for p in enseignants_list:
                 ens.addItem(p["nom_complet"], p["id"])
             if en_prog and existants[mt["id"]].get("enseignant_id"):
                 idx = ens.findData(existants[mt["id"]]["enseignant_id"])

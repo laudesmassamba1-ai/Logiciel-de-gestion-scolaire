@@ -1,5 +1,7 @@
 from functools import partial
 
+import datetime
+
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
@@ -10,7 +12,7 @@ from PyQt5.QtWidgets import (
 from repositories import repos
 from ui.loader import apply_ui
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _money_edit, _fit_rows,
+    _btn, _simple_btn_style, _money_edit, _fit_rows, refuser_si_hors_annee,
 )
 from ui.widgets import fmt_money
 from core.config import (
@@ -35,10 +37,24 @@ def caisse(page, ctx):
     page.date_start.setDate(now.addDays(-(now.day() - 1)))
     page.date_end.setDate(now)
 
+    # Filtre par annee scolaire : par defaut l'annee active, pour que la
+    # caisse affiche les ecritures de l'annee en cours (pas l'historique).
+    combo_annee = QComboBox()
+    combo_annee.addItem("Annee active", "active")
+    combo_annee.addItem("Toutes les annees", None)
+    for a in repos.annees_scolaires():
+        combo_annee.addItem(a["libelle"], a["libelle"])
+    combo_annee.setMaximumWidth(220)
+    page.filterLayout.addWidget(QLabel("Annee :"))
+    page.filterLayout.addWidget(combo_annee)
+
     lbl_empty = QLabel("Aucune transaction sur la periode selectionnee")
     lbl_empty.setStyleSheet(STYLE_EMPTY_STATE)
     lbl_empty.setAlignment(Qt.AlignCenter)
     page.mainLayout.addWidget(lbl_empty)
+
+    filtre_courant = {"t": None, "recherche": "", "debut": None, "fin": None,
+                      "annee": "active"}
 
     def refresh():
         type_filtre = page.combo_type.currentText()
@@ -49,10 +65,18 @@ def caisse(page, ctx):
             t = "sortie"
         else:
             t = None
+        annee_filtre = combo_annee.currentData()
+        if annee_filtre == "active":
+            active = repos.annee_scolaire_active()
+            annee_filtre = active["libelle"] if active else None
+        debut = page.date_start.date().toString("yyyy-MM-dd")
+        fin = page.date_end.date().toString("yyyy-MM-dd")
+        filtre_courant.update(t=t, recherche=recherche, debut=debut, fin=fin,
+                              annee=annee_filtre)
         rows = repos.transactions(
             type_filtre=t, recherche=recherche,
-            date_start=page.date_start.date().toString("yyyy-MM-dd"),
-            date_end=page.date_end.date().toString("yyyy-MM-dd"))
+            date_start=debut, date_end=fin,
+            annee=annee_filtre)
         page.table_transactions.setRowCount(len(rows))
         total_entrees = 0.0
         total_sorties = 0.0
@@ -102,14 +126,22 @@ def caisse(page, ctx):
     page.btn_apply_filter.clicked.connect(refresh)
     page.search_input.textChanged.connect(refresh)
     page.combo_type.currentIndexChanged.connect(refresh)
+    combo_annee.currentIndexChanged.connect(refresh)
+    # Les dates doivent rafraichir comme les autres filtres.
+    page.date_start.dateChanged.connect(refresh)
+    page.date_end.dateChanged.connect(refresh)
 
     def export_csv():
         from PyQt5.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(page, "Exporter CSV",
                                               "transactions.csv", "CSV (*.csv)")
-        if path:
-            repos.export_transactions_csv(path)
-            QMessageBox.information(page, "Export", f"Exporte vers {path}")
+        if not path:
+            return
+        f = filtre_courant
+        repos.export_transactions_csv(
+            path, type_filtre=f["t"], recherche=f["recherche"],
+            date_start=f["debut"], date_end=f["fin"], annee=f["annee"])
+        QMessageBox.information(page, "Export", f"Exporte vers {path}")
 
     page.btn_export.clicked.connect(export_csv)
 
@@ -156,6 +188,9 @@ def open_transaction_dialog(parent, ctx, type_trans, on_created=None):
     def valider():
         if montant.value() <= 0:
             QMessageBox.warning(dlg, "Caisse", "Le montant doit etre superieur a 0.")
+            return
+        if refuser_si_hors_annee(dlg, datetime.date.today().isoformat(),
+                                 "La date de l'ecriture (aujourd'hui)"):
             return
         repos.add_transaction(
             type_trans, montant.value(), motif.text().strip() or "Sans motif",

@@ -14,11 +14,21 @@ class PlanningRepository(RepositoryBase):
     def save_planning(self, classe_id, entries):
         self._route_write("DELETE", f"/planning/{classe_id}", {},
                           db.execute, "DELETE FROM planning WHERE classe_id = ?", (classe_id,))
+        # Transaction unique cote local : si un INSERT echoue, rien n'est
+        # supprime -> jamais de planning vide en cas d'erreur.
+        lignes = [(classe_id, jour, creneau, matiere, salle)
+                  for jour, creneau, matiere, salle in entries]
+        with db.transaction() as txn:
+            txn.execute("DELETE FROM planning WHERE classe_id = ?", (classe_id,))
+            for ligne in lignes:
+                txn.execute(
+                    """INSERT INTO planning (classe_id, jour, creneau, matiere, salle)
+                       VALUES (?, ?, ?, ?, ?)""", ligne)
+        # Push serveur apres commit local reussi.
         for jour, creneau, matiere, salle in entries:
             self._route_write(
                 "POST", "/planning",
                 {"classe_id": classe_id, "jour": jour, "creneau": creneau,
                  "matiere": matiere, "salle": salle},
                 db.execute,
-                "INSERT INTO planning (classe_id, jour, creneau, matiere, salle) VALUES (?, ?, ?, ?, ?)",
-                (classe_id, jour, creneau, matiere, salle))
+                "SELECT 1")

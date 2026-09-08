@@ -44,6 +44,13 @@ import compat
 compat.enregistrer_routes_compat(app)
 
 def get_connection():
+    # Mode "sans installation" : tout passe par le backend SQLite.
+    if os.environ.get("GS_DB_MODE", "").strip().lower() == "sqlite":
+        try:
+            from server.sqlite_backend import connexion_sqlite
+        except ImportError:
+            from sqlite_backend import connexion_sqlite
+        return connexion_sqlite()
     return mysql.connector.connect(
         host=DB_HOST,
         user=DB_USER,
@@ -53,6 +60,11 @@ def get_connection():
 
 @app.on_event("startup")
 def initialiser_base_au_demarrage():
+    # Mode SQLite ("sans installation") : le schema est applique
+    # automatiquement par le backend, rien a faire ici.
+    if os.environ.get("GS_DB_MODE", "").strip().lower() == "sqlite":
+        print(" Mode SQLite : base fichier, schema auto-applique.")
+        return
     conn = mysql.connector.connect(
         host=DB_HOST,
         user=DB_USER,
@@ -97,9 +109,37 @@ def hacher_mot_de_passe(mot_de_passe: str) -> str:
 
 
 def verifier_mot_de_passe(mot_de_passe_brut: str, hash_stocke: str) -> bool:
+    # Compatibilite desktop : les comptes crees hors serveur utilisent
+    # PBKDF2-HMAC-SHA256 au format "salt_hex:hash_hex" (cf. database/db.py).
+    # Un hash bcrypt ne contient jamais de ":".
+    if ":" in hash_stocke:
+        try:
+            import hashlib
+            import hmac as _hmac
+            salt_hex, h_hex = hash_stocke.split(":", 1)
+            calcule = hashlib.pbkdf2_hmac(
+                "sha256", mot_de_passe_brut.encode("utf-8"),
+                bytes.fromhex(salt_hex), 100000).hex()
+            return _hmac.compare_digest(calcule, h_hex)
+        except ValueError:
+            return False
     pwd_bytes = mot_de_passe_brut.encode("utf-8")[:72]
     hash_bytes = hash_stocke.encode("utf-8")
     return bcrypt.checkpw(pwd_bytes, hash_bytes)
+
+
+def _redoublant_sql(valeur) -> str:
+    """Coin retenu par l'ENUM MySQL eleve.redoublant : '0'/'1'.
+    Le bureau peut envoyer 0/1 (int) ou "0"/"1" (str)."""
+    s = str(valeur or 0)
+    return s if s in ("0", "1") else "0"
+
+
+def _oui_non_sql(valeur) -> str:
+    """Normalise un booleen/texte vers la valeur ENUM MySQL ('Oui'/'Non')."""
+    s = str(valeur or "").strip().lower()
+    return "Oui" if s in ("1", "oui", "true", "vrai", "yes", "present") else "Non"
+
 
 #affichage du nombre total d'élèves
 @app.get("/total_eleves")
@@ -162,7 +202,9 @@ def get_total_eleves_par_classe(recherche: Optional[str] = None) -> dict:
 
         nom_classe = res_classe[0] if res_classe else recherche
 
-        return {"nombre total d'élèves": {nom_classe: total_eleves}}
+        # Cle canonique + ancienne cle conservee pour compatibilite.
+        return {"total_eleves_par_classe": {nom_classe: total_eleves},
+                "nombre total d'élèves": {nom_classe: total_eleves}}
 
     finally:
         cursor.close()
@@ -208,7 +250,18 @@ def get_total_eleve_par_sexe_par_classe(classe: str) -> dict:
 def get_all_eleves_par_classe(classe: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nom, prenom, sexe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and  classe.classe = %s and est_supprime = 0",(classe, ))
+    # Le client peut transmettre un id numerique OU le libelle de classe.
+    base_sql = ("SELECT nom, prenom, sexe FROM eleve, inscription, classe "
+                "where inscription.classe_id=classe.id and "
+                "inscription.eleve_id=eleve.id and eleve.est_supprime = 0")
+    try:
+        filtre_id = int(classe)
+    except ValueError:
+        filtre_id = None
+    if filtre_id is not None:
+        cursor.execute(base_sql + " and classe.id = %s", (filtre_id,))
+    else:
+        cursor.execute(base_sql + " and classe.classe = %s", (classe,))
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -227,15 +280,24 @@ def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[st
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+    # WHERE dynamique : chaque parametre fourni filtre, les autres sont
+    # ignores (avant : prenom like None renvoyait des resultats faux).
+    conditions, params = [], []
     if recherche:
-        sql="""select eleve.id, nom, prenom, sexe,  classe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, eleve.statut, numero_parent from eleve, classe, inscription where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and nom like  %s and prenom like %s"""
-        motif=f"%{recherche}%"
-        motif1=f"%{recherche1}%"
-        cursor.execute(sql, (motif, motif1))
-
-    else:
-        sql="""select eleve.id, nom, prenom, sexe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, statut, numero_parent, classe from eleve, classe where eleve.classe_id=classe.id"""
-        cursor.execute(sql)
+        conditions.append("eleve.nom LIKE %s")
+        params.append(f"%{recherche}%")
+    if recherche1:
+        conditions.append("eleve.prenom LIKE %s")
+        params.append(f"%{recherche1}%")
+    sql = """select eleve.id, nom, prenom, sexe, classe.classe AS classe,
+             date_naissance, lieu_naissance, eleve.adresse AS adresse,
+             eleve.nom_parent AS nom_parent, redoublant, eleve.statut AS statut,
+             numero_parent
+             from eleve, inscription, classe
+             where inscription.eleve_id=eleve.id and inscription.classe_id=classe.id"""
+    if conditions:
+        sql += " and " + " and ".join(conditions)
+    cursor.execute(sql, tuple(params))
 
     eleve = cursor.fetchall()
 
@@ -328,8 +390,8 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
             eleve.lieu_naissance,
             eleve.adresse,
             eleve.nom_parent,
-            eleve.redoublant,
-            eleve.statut,
+            _redoublant_sql(eleve.redoublant),
+            compat._statut_eleve(eleve.statut),
             eleve.telephone_parent,
             uuid_client,
         )
@@ -365,10 +427,10 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
         """
         valeurs_paiement = (
             inscription_id,
-            paiement.type_frais,
+            compat._type_frais(paiement.type_frais),
             paiement.montant,
-            paiement.mode_paiement,
-            paiement.trimestre,
+            compat._mode_paiement(paiement.mode_paiement),
+            compat._trimestre(paiement.trimestre),
             paiement.mois,
             paiement.uuid_client,
         )
@@ -412,7 +474,7 @@ class EleveModifier(BaseModel):
 
 @app.put("/eleve/{eleve_id}")
 def modifier_eleve(eleve_id: int, eleve: EleveModifier):
-    nouvelles_donnees = eleve.dict(exclude_unset=True)
+    nouvelles_donnees = eleve.model_dump(exclude_unset=True)
 
     if not nouvelles_donnees:
         raise HTTPException(
@@ -430,6 +492,15 @@ def modifier_eleve(eleve_id: int, eleve: EleveModifier):
 
         # 2. Extraire classe_id s'il est présent (géré séparément dans 'inscription')
         nouvelle_classe_id = nouvelles_donnees.pop("classe_id", None)
+
+        # Normalisation des valeurs d'ENUM MySQL (le bureau envoie le
+        # vocabulaire métier : « Inscrit », « Exclu », redoublant 0/1).
+        if "statut" in nouvelles_donnees:
+            nouvelles_donnees["statut"] = compat._statut_eleve(
+                nouvelles_donnees["statut"])
+        if "redoublant" in nouvelles_donnees:
+            nouvelles_donnees["redoublant"] = _redoublant_sql(
+                nouvelles_donnees["redoublant"])
 
         # 3. Mise à jour dynamique de la table 'eleve'
         if nouvelles_donnees:
@@ -508,8 +579,12 @@ def restaurer_eleve(nom: str, prenom: str):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # On restaure l'élève en le démarquant comme non-supprimé
-    cursor.execute("UPDATE eleve SET est_supprime = FALSE WHERE nom = %s and prenom=%s", (nom, prenom))
+    # On restaure l'élève en le démarquant comme non-supprimé.
+    # ORDER BY id DESC LIMIT 1 : si plusieurs eleves partagent le meme
+    # nom/prenom, seul le plus recent est restaure (pas tous).
+    cursor.execute(
+        "UPDATE eleve SET est_supprime = FALSE WHERE nom = %s and prenom=%s "
+        "ORDER BY id DESC LIMIT 1", (nom, prenom))
     conn.commit()
 
     cursor.close()
@@ -591,7 +666,7 @@ def ajouter_classe(classe: classeAjouter):
     return {
         "message": "classe ajoutée avec succès",
         "id": nouvel_id,
-        "classe": classe.dict()
+        "classe": classe.model_dump()
     }
 
 class ClasseModifier(BaseModel):
@@ -602,7 +677,7 @@ class ClasseModifier(BaseModel):
 @app.put("/classe/{classe_id}")
 def put_une_classe(classe_id: int, classe_data: ClasseModifier):
     # Récupère UNIQUEMENT les champs envoyés dans Swagger/Postman
-    nouvelles_donnees = classe_data.dict(exclude_unset=True)
+    nouvelles_donnees = classe_data.model_dump(exclude_unset=True)
 
     if not nouvelles_donnees:
         raise HTTPException(
@@ -728,7 +803,7 @@ def ajouter_cycle(cycle: cycleAjouter):
     return {
         "message": "cycle ajouté avec succès",
         "id": nouvel_id,
-        "cycle": cycle.dict()
+        "cycle": cycle.model_dump()
     }
 
 
@@ -851,7 +926,7 @@ def ajouter_enseignant(enseignant: enseignantAjouter):
       enseignant.email,
       enseignant.diplome,
       enseignant.date_embauche,
-      enseignant.statut
+      compat._statut_enseignant(enseignant.statut)
     )
 
     cursor.execute(sql, valeurs)
@@ -863,7 +938,7 @@ def ajouter_enseignant(enseignant: enseignantAjouter):
     return {
         "message": "enseignant ajouté avec succès",
         "id": nouvel_id,
-        "enseignant": enseignant.dict()
+        "enseignant": enseignant.model_dump()
     }
 
 class enseignantModifier(BaseModel):
@@ -883,10 +958,14 @@ class enseignantModifier(BaseModel):
 @app.put("/modifierEnseignant/{id}")
 def put_un_enseignant(id: int, enseignant: enseignantModifier):
     #Extraire uniquement les champs envoyés
-    nouvelles_donnees = enseignant.dict(exclude_unset=True)
+    nouvelles_donnees = enseignant.model_dump(exclude_unset=True)
 
     if not nouvelles_donnees:
         raise HTTPException(status_code=400, detail="Aucun champ à modifier n'a été fourni")
+
+    if "statut" in nouvelles_donnees:
+        nouvelles_donnees["statut"] = compat._statut_enseignant(
+            nouvelles_donnees["statut"])
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -925,13 +1004,13 @@ def delete_un_enseignant(nom: str, prenom: str):
 
     #recuperer l'id de l'enseignant
     cursor.execute("select id from enseignant where nom=%s and prenom=%s", (nom, prenom))
-    id_enseignant=cursor.fetchone()[0]
-
-    cursor.execute("DELETE FROM enseignant WHERE id = %s", (id_enseignant,))
-
-    if id_enseignant == 0:
+    ligne = cursor.fetchone()
+    if ligne is None:
         conn.close()
         raise HTTPException(status_code=404, detail="enseignant non trouvé")
+    id_enseignant = ligne[0]
+
+    cursor.execute("DELETE FROM enseignant WHERE id = %s", (id_enseignant,))
 
     conn.commit()
     conn.close()
@@ -947,14 +1026,17 @@ def get_total_paiement()-> dict:
     total_paiement = cursor.fetchone()[0]
     cursor.close()
     conn.close()
-    return { "nombre total de paiements": total_paiement}
+    # Cle canonique + ancienne cle conservee pour compatibilite.
+    return {"total_paiement": total_paiement,
+            "nombre total de paiements": total_paiement}
 
 #affichage du montant total des paiements
 @app.get("/total_montant_paiement")
 def get_total_montant_paiement()-> dict:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT SUM(montant) FROM paiement")
+    # COALESCE : SUM renvoie NULL (pas 0) quand la table est vide.
+    cursor.execute("SELECT COALESCE(SUM(montant), 0) FROM paiement")
     total_montant = cursor.fetchone()[0]
     return {"total_montant_paiement": total_montant}
 
@@ -1124,10 +1206,10 @@ def ajouter_paiement(paiement: PaiementVersement):
 
     valeurs = (
         paiement.inscription_id,
-        paiement.type_frais,
+        compat._type_frais(paiement.type_frais),
         paiement.montant,
-        paiement.mode_paiement,
-        paiement.trimestre,
+        compat._mode_paiement(paiement.mode_paiement),
+        compat._trimestre(paiement.trimestre),
         paiement.mois,
         paiement.uuid_client
     )
@@ -1141,7 +1223,7 @@ def ajouter_paiement(paiement: PaiementVersement):
     return {
         "message": "paiement ajouté avec succès",
         "id": nouvel_id,
-        "paiement": paiement.dict()
+        "paiement": paiement.model_dump()
     }
 
 class paiementModifier(BaseModel):
@@ -1168,7 +1250,7 @@ def put_un_paiement(id: int, paiement: paiementModifier):
         raise HTTPException(status_code=404, detail="Paiement non trouvé")
 
     # Fusionner les nouvelles données reçues avec l'existant
-    nouvelles_donnees = paiement.dict(exclude_unset=True)
+    nouvelles_donnees = paiement.model_dump(exclude_unset=True)
     existant.update(nouvelles_donnees)
 
     # Mettre à jour la table
@@ -1288,7 +1370,7 @@ def ajouter_note(note: noteAjouter):
     return {
         "message": "note ajoutée avec succès",
         "id": nouvel_id,
-        "note": note.dict()
+        "note": note.model_dump()
     }
 
 class noteModifier(BaseModel):
@@ -1413,27 +1495,34 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
     cursor.execute("""
         SELECT matiere.nom, type_evaluation, note, note_sur, coefficient
         FROM note, matiere, programme, inscription, eleve
-        WHERE inscription.eleve_id=eleve.id and note.inscription_id=inscription.id and note.matiere_id=matiere.id and programme.matiere_id=matiere.id and eleve_id = %s AND trimestre = %s
+        WHERE inscription.eleve_id=eleve.id and note.inscription_id=inscription.id and note.matiere_id=matiere.id and programme.matiere_id=matiere.id and inscription.eleve_id = %s AND note.trimestre = %s
+        ORDER BY matiere.nom, note.type_evaluation
     """, (eleve_id, trimestre))
     notes = cursor.fetchall()
 
-    # Moyenne des devoirs de classe
+    # Moyenne des devoirs de classe (type_evaluation "Devoir 1"/"Devoir 2"/...)
     cursor.execute("""
         SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient) AS moyenne
         FROM note
-        JOIN programme ON note.programme_id = programme.id
-        WHERE eleve_id = %s AND trimestre = %s AND type_evaluation = 'devoir de classe'
+        JOIN inscription ON note.inscription_id = inscription.id
+        JOIN programme ON note.matiere_id = programme.matiere_id
+        WHERE inscription.eleve_id = %s AND note.trimestre = %s
+          AND LOWER(note.type_evaluation) LIKE 'devoir%'
     """, (eleve_id, trimestre))
-    moyenne_devoirs = cursor.fetchone()["moyenne"]
+    ligne_devoirs = cursor.fetchone()
+    moyenne_devoirs = ligne_devoirs["moyenne"] if ligne_devoirs else None
 
     # Moyenne de composition
     cursor.execute("""
         SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient) AS moyenne
         FROM note
-        JOIN programme ON note.programme_id = programme.id
-        WHERE eleve_id = %s AND trimestre = %s AND type_evaluation = 'composition'
+        JOIN inscription ON note.inscription_id = inscription.id
+        JOIN programme ON note.matiere_id = programme.matiere_id
+        WHERE inscription.eleve_id = %s AND note.trimestre = %s
+          AND LOWER(note.type_evaluation) = 'composition'
     """, (eleve_id, trimestre))
-    moyenne_composition = cursor.fetchone()["moyenne"]
+    ligne_composition = cursor.fetchone()
+    moyenne_composition = ligne_composition["moyenne"] if ligne_composition else None
 
     conn.close()
 
@@ -1549,8 +1638,8 @@ def ajouter_presence(presence: PresenceAjouter):
     """
     valeurs = (
         presence.eleve_id,
-        presence.statut,
-        presence.justifie,
+        compat._statut_presence(presence.statut),
+        _oui_non_sql(presence.justifie),
         presence.classe_id,
     )
     cursor.execute(sql, valeurs)
@@ -1561,7 +1650,7 @@ def ajouter_presence(presence: PresenceAjouter):
     return {
         "message": "Présence ajoutée avec succès",
         "id": nouvel_id,
-        "presence": presence.dict(),
+        "presence": presence.model_dump(),
     }
 
 #modèle des données attendues dans le corps de la requête (JSON) pour modifier une présence
@@ -1587,7 +1676,7 @@ def modifier_presence(id: int, presence: PresenceModifier):
     donnees_actuelles = dict(zip(colonnes, existant))
 
     # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
-    nouvelles_donnees = presence.dict(exclude_unset=True)
+    nouvelles_donnees = presence.model_dump(exclude_unset=True)
     donnees_actuelles.update(nouvelles_donnees)
 
     # Mettre à jour avec les valeurs fusionnées
@@ -1648,7 +1737,7 @@ def ajouter_matiere(matiere: matiereAjouter):
     return {
         "message": "Matière ajoutée avec succès",
         "id": nouvel_id,
-        "matiere": matiere.dict(),
+        "matiere": matiere.model_dump(),
     }
 
 #route pour modifier une matiere
@@ -1671,7 +1760,7 @@ def modifier_matiere(id: int, matiere: matiereModifier):
     donnees_actuelles = dict(zip(colonnes, existant))
 
     # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
-    nouvelles_donnees = matiere.dict(exclude_unset=True)
+    nouvelles_donnees = matiere.model_dump(exclude_unset=True)
     donnees_actuelles.update(nouvelles_donnees)
 
     # Mettre à jour avec les valeurs fusionnées
@@ -1785,7 +1874,7 @@ def associer_matiere_classe_enseignant(association: MatiereClasseEnseignant):
     return {
         "message": "Association ajoutée avec succès",
         "id": nouvel_id,
-        "association": association.dict(),
+        "association": association.model_dump(),
     }
 
 #route pour lister le programme d'une classe avec les matieres et les enseignants
@@ -1831,7 +1920,7 @@ def modifier_programme(id: int, programme: ProgrammeModifier):
     donnees_actuelles = dict(zip(colonnes, existant))
 
     # Fusionner : on garde l'ancienne valeur si rien n'a été envoyé
-    nouvelles_donnees = programme.dict(exclude_unset=True)
+    nouvelles_donnees = programme.model_dump(exclude_unset=True)
     donnees_actuelles.update(nouvelles_donnees)
 
     # Mettre à jour avec les valeurs fusionnées
@@ -1897,7 +1986,7 @@ def ajouter_annee_scolaire(annee_scolaire: AnneeScolaireAjouter):
     return {
         "message": "Année scolaire ajoutée avec succès",
         "id": nouvel_id,
-        "annee_scolaire": annee_scolaire.dict(),
+        "annee_scolaire": annee_scolaire.model_dump(),
     }
 
 #lister toutes les années scolaires
@@ -1936,13 +2025,15 @@ def creer_tarif_scolarite(tarif: TarifScolariteCreate):
 
         #recuperer l'annee scolaire en cours
         cursor.execute("select id from annee_scolaire where est_active= true")
-        annee_scolaire=cursor.fetchone()[0]
+        ligne_annee = cursor.fetchone()
 
-        if not annee_scolaire:
+        if ligne_annee is None:
             raise HTTPException(
                 status_code=400,
                 detail="Aucune année scolaire active n'est définie dans la base de données.",
             )
+
+        annee_scolaire = ligne_annee[0]
 
         sql = """
             INSERT INTO tarif_scolarite (classe_id, annee_scolaire_id, frais_inscription, montant_pension)
@@ -2045,7 +2136,7 @@ def lister_tarifs_annee_active():
     cursor.close()
     conn.close()
 
-    return tarifs
+    return {"tarifs": tarifs}
 
 #obtenir le tarif precis d'une classe
 @app.get("/tarifs-scolarite/classe/{classe_id}")
@@ -2178,7 +2269,7 @@ def obtenir_solde_eleve(inscription_id: int):
 
 #afficher le tarif mensuel d'un eleve
 @app.get("/inscriptions/{inscription_id}/suivi-mensuel")
-def suivi_mensuel_eleve(inscription_id: int, type_frais: str):
+def suivi_mensuel_eleve(inscription_id: int, type_frais: Optional[str] = None):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -2186,10 +2277,14 @@ def suivi_mensuel_eleve(inscription_id: int, type_frais: str):
         sql = """
             SELECT id, montant, mois, mode_paiement, date_paiement
             FROM paiement
-            WHERE inscription_id = %s AND type_frais = %s AND mois IS NOT NULL
-            ORDER BY date_paiement ASC
+            WHERE inscription_id = %s AND mois IS NOT NULL
         """
-        cursor.execute(sql, (inscription_id, type_frais))
+        params: list = [inscription_id]
+        if type_frais:
+            sql += " AND type_frais = %s"
+            params.append(type_frais)
+        sql += " ORDER BY date_paiement ASC"
+        cursor.execute(sql, params)
         paiements = cursor.fetchall()
 
         # Liste des mois déjà réglés
@@ -2221,6 +2316,19 @@ def hacher_mot_de_passe(mot_de_passe: str) -> str:
 
 
 def verifier_mot_de_passe(mot_de_passe_brut: str, hash_stocke: str) -> bool:
+    # Compatibilite desktop : hash PBKDF2 "salt_hex:hash_hex" (cf. db.py)
+    # en plus du format bcrypt natif serveur.
+    if ":" in hash_stocke:
+        try:
+            import hashlib
+            import hmac as _hmac
+            salt_hex, h_hex = hash_stocke.split(":", 1)
+            calcule = hashlib.pbkdf2_hmac(
+                "sha256", mot_de_passe_brut.encode("utf-8"),
+                bytes.fromhex(salt_hex), 100000).hex()
+            return _hmac.compare_digest(calcule, h_hex)
+        except ValueError:
+            return False
     pwd_bytes = mot_de_passe_brut.encode("utf-8")[:72]
     hash_bytes = hash_stocke.encode("utf-8")
     return bcrypt.checkpw(pwd_bytes, hash_bytes)
@@ -2364,7 +2472,7 @@ def lister_utilisateurs():
 
     try:
         sql = """
-            SELECT id, nom, prenom, telephone, email, role, statut, date_creation 
+            SELECT id, nom, prenom, telephone, email, role, statut, updated_at AS date_creation 
             FROM utilisateur 
             ORDER BY nom ASC
         """

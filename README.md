@@ -18,6 +18,10 @@ Application desktop de gestion scolaire pour les etablissements scolaires en Rep
 - **Export PDF** : bulletins, recus, certificats, fiches de paie, plannings
 - **Comptes utilisateurs** : authentification securisee, gestion des roles (admin, directeur, gestionnaire)
 - **Tableaux de bord** : statistiques et KPI adaptes a chaque role
+- **Assistant IA local (Kola)** : renseigne (effectifs, moyennes, caisse...),
+  calcule, cree, ouvre les sections, lit les donnees, apprend ce qu'on lui
+  enseigne et pilote la connexion multi-postes — 100% local, sans Internet,
+  sans carte graphique ni modele a telecharger
 - **Synchronisation** : file d'attente pour synchronisation avec un serveur distant (optionnel)
 
 ## Stack technique
@@ -170,6 +174,7 @@ Logiciel-de-gestion-scolaire/
   repositories/              # Couche d'acces aux donnees
   services/                  # Logique metier
     auth.py                  # Authentification et autorisation
+    assistant_ia.py          # Mini IA locale Kola (intentions + TF-IDF + memoire)
     backup.py                # Sauvegarde/Restauration
     pdf_export.py            # Generation PDF
     reports.py               # Rapports HTML
@@ -192,6 +197,7 @@ Logiciel-de-gestion-scolaire/
       paiements_page.py      # Paiements
       programmes_page.py     # Programmes
       statistiques_page.py   # Statistiques
+      assistant_page.py      # Fenetre de chat de l'assistante Kola
     ui_files/                # Fichiers .ui (Qt Designer)
   tests/                     # Tests unitaires (app bureau)
   server/                    # API de synchronisation (FastAPI + MySQL)

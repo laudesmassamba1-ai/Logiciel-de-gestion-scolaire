@@ -40,9 +40,16 @@ def _parametre_bd(nom, defaut):
 
 
 def connexion():
+    # Mode "sans installation" : fichier SQLite, aucun MySQL requis.
+    if os.environ.get("GS_DB_MODE", "").strip().lower() == "sqlite":
+        try:
+            from server.sqlite_backend import connexion_sqlite
+        except ImportError:
+            from sqlite_backend import connexion_sqlite
+        return connexion_sqlite()
     if not mysql_connector_disponible:
         raise HTTPException(status_code=500, detail="mysql-connector-python non installe")
-    return mysql.connect(
+    return mysql.connector.connect(
         host=_parametre_bd("GS_DB_HOST", "localhost"),
         user=_parametre_bd("GS_DB_USER", "root"),
         password=_parametre_bd("GS_DB_PASSWORD", ""),
@@ -190,6 +197,24 @@ def _statut_eleve(valeur):
         "inscrit": "actif", "en règle": "actif", "en regle": "actif",
         "radié": "exclu", "radie": "exclu", "exclus": "exclu",
         "suspendu": "inactif", "abandon": "inactif",
+    }
+    return correspondance.get(s, "actif")
+
+
+def _statut_enseignant(valeur):
+    """Traduit le statut métier d'un enseignant vers l'ENUM MySQL
+    ('actif'/'inactif') : le bureau envoie « Enseignant »/« Professeur »,
+    MySQL n'accepte que les valeurs de l'ENUM."""
+    s = _chaine(valeur, "actif").lower()
+    if s in ("actif", "inactif"):
+        return s
+    correspondance = {
+        "enseignant": "actif", "enseignants": "actif", "professeur": "actif",
+        "professeurs": "actif", "surveillant": "actif", "surveillants": "actif",
+        "vacataire": "actif", "stagiare": "actif", "stagiaire": "actif",
+        "congé": "inactif", "conge": "inactif", "en congé": "inactif",
+        "inactif": "inactif", "suspendu": "inactif", "licencié": "inactif",
+        "licencie": "inactif",
     }
     return correspondance.get(s, "actif")
 
@@ -847,6 +872,9 @@ def _modifier_enseignant(pid: int, payload: dict):
         ligne = curseur.fetchone()
         colonnes_resultat = [desc[0] for desc in curseur.description] if curseur.description else []
         fiche = dict(zip(colonnes_resultat, ligne)) if ligne else None
+        if fiche is None:
+            raise HTTPException(status_code=404,
+                                detail="Enseignant non trouvé après modification")
         return {"message": "enseignant modifié avec succès", "enseignant": fiche}
     except HTTPException:
         conn.rollback()
@@ -912,10 +940,16 @@ def _ajouter_paiement(payload: dict):
                 raise HTTPException(
                     status_code=400,
                     detail="Aucune année scolaire active : impossible d'enregistrer le paiement")
+            classe_id = _id_entier(payload.get("classe_id"))
+            if classe_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="classe_id obligatoire pour créer l'inscription "
+                           "d'un élève sans inscription existante")
             curseur.execute(
                 "INSERT INTO inscription (eleve_id, classe_id, annee_scolaire_id)"
                 " VALUES (%s, %s, %s)",
-                (eleve_id, _id_entier(payload.get("classe_id")) or 1, annee_id))
+                (eleve_id, classe_id, annee_id))
             inscription_id = curseur.lastrowid
         curseur.execute(
             """INSERT INTO paiement (inscription_id, type_frais, montant, mode_paiement,
@@ -1063,10 +1097,14 @@ def _ajouter_note(payload: dict):
                 raise HTTPException(status_code=400,
                                     detail="Aucune inscription trouvée pour cet élève "
                                            "et aucune année scolaire active")
-            classe_fallback = _id_entier(payload.get("classe_id")) or 1
+            classe_id = _id_entier(payload.get("classe_id"))
+            if classe_id is None:
+                raise HTTPException(status_code=400,
+                                    detail="classe_id obligatoire pour saisir des notes "
+                                           "pour un élève sans inscription existante")
             curseur.execute(
                 "INSERT INTO inscription (eleve_id, classe_id, annee_scolaire_id)"
-                " VALUES (%s, %s, %s)", (eleve_id, classe_fallback, annee_id))
+                " VALUES (%s, %s, %s)", (eleve_id, classe_id, annee_id))
             inscription_id = curseur.lastrowid
         for type_evaluation, valeur in composantes:
             curseur.execute(
@@ -1215,9 +1253,9 @@ def _supprimer_annee(annee_id: int):
 
 
 def _creer_compte(payload: dict):
-    """Forme bureau {nom, email, telephone, role, actif}.
-    Le mot de passe reste gere localement : un jeton aleatoire inutilisable
-    est stocke cote serveur."""
+    """Forme bureau {nom, email, telephone, role, actif[, password]}.
+    Le hash PBKDF2 du bureau est conserve s'il est fourni (le serveur sait
+    le verifier) ; sinon un jeton aleatoire inutilisable est stocke."""
     nom = _chaine(payload.get("nom"), "-")
     email = _chaine(payload.get("email"))
     identifiant = (email.split("@")[0] if "@" in email
@@ -1237,11 +1275,12 @@ def _creer_compte(payload: dict):
                 break
             identifiant = f"{base}{compteur}"
             compteur += 1
+        hash_stocke = _chaine(payload.get("password")) or hacher(_token_aleatoire())
         curseur.execute(
             """INSERT INTO utilisateur (nom, prenom, telephone, email, identifiant,
                mot_de_passe, role, statut) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             (nom, "-", _chaine(payload.get("telephone"), "00000000"),
-             email, identifiant, hacher(_token_aleatoire()), role,
+             email, identifiant, hash_stocke, role,
              "actif" if payload.get("actif", 1) else "inactif"))
         nouvel_id = curseur.lastrowid
         enregistrer_audit(curseur, None, "creation_compte",
@@ -1272,9 +1311,15 @@ def _definir_parametre(payload: dict):
     conn = connexion()
     curseur = conn.cursor()
     try:
-        curseur.execute(
-            """INSERT INTO parametre (cle, valeur) VALUES (%s, %s)
-               ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)""", (cle, valeur))
+        # Modulaire MySQL (ON DUPLICATE KEY) ET SQLite (sans upsert dedie) :
+        # on teste l'existence puis insert/update selon le backend.
+        curseur.execute("SELECT cle FROM parametre WHERE cle = %s", (cle,))
+        if curseur.fetchone() is not None:
+            curseur.execute("UPDATE parametre SET valeur = %s WHERE cle = %s",
+                            (valeur, cle))
+        else:
+            curseur.execute("INSERT INTO parametre (cle, valeur) VALUES (%s, %s)",
+                            (cle, valeur))
         conn.commit()
         return {"message": "Paramètre enregistré", "cle": cle}
     except Exception as exc:

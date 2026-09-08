@@ -54,7 +54,9 @@ def classes(page, ctx):
                                 _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)))
             lay.addWidget(_btn("Supprimer", partial(_delete_classe, page, ctx, c),
                                 _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
-            page.table_classes.setCellWidget(i, 7, cell)
+            # Colonne des actions = derniere colonne : resilient a toute
+            # evolution du nombre de colonnes du .ui.
+            page.table_classes.setCellWidget(i, page.table_classes.columnCount() - 1, cell)
         page._classe_rows = rows
         page.table_classes.resizeColumnsToContents()
         page.table_classes.horizontalHeader().setStretchLastSection(True)
@@ -64,24 +66,34 @@ def classes(page, ctx):
 
         page.lbl_kpi1_valeur.setText(str(len(all_rows)))
         page.lbl_kpi2_valeur.setText(str(sum(c["effectif"] for c in all_rows)))
-        page.lbl_kpi3_valeur.setText(str(len([c for c in all_rows if c["effectif"] >= c["capacite"]])))
+        page.lbl_kpi3_valeur.setText(
+            str(len([c for c in all_rows
+                     if c["capacite"] and c["effectif"] >= c["capacite"]])))
         page.lbl_kpi4_valeur.setText(str(len([c for c in all_rows if not c.get("titulaire")])))
 
     def _delete_classe(parent, ctx, c):
-        if QMessageBox.question(parent, "Supprimer",
-                                f"Supprimer la classe {c['nom']} et ses eleves ?") \
+        if QMessageBox.question(
+                parent, "Supprimer",
+                f"Supprimer la classe {c['nom']} ?\n\n"
+                "Attention : ses eleves ainsi que leurs notes, presences et "
+                "paiements, le planning et les tarifs associes seront "
+                "egalement supprimes.") \
                 == QMessageBox.Yes:
             repos.delete_classe(c["id"])
             fill()
 
-    page.btn_add_classe.clicked.connect(lambda: open_classe_dialog(page, ctx))
+    def _ouvrir_dialog(classe=None):
+        open_classe_dialog(page, ctx, classe)
+        fill()  # la table et les KPI doivent reflechir la classe creee/modifiee
+
+    page.btn_add_classe.clicked.connect(_ouvrir_dialog)
     page.btn_apply_filter_classe.clicked.connect(fill)
     page.input_search_classe.textChanged.connect(fill)
     page.combo_filter_niveau.currentIndexChanged.connect(fill)
 
     def double_clicked(row, _col):
         if 0 <= row < len(getattr(page, "_classe_rows", [])):
-            open_classe_dialog(page, ctx, page._classe_rows[row])
+            _ouvrir_dialog(page._classe_rows[row])
 
     page.table_classes.cellDoubleClicked.connect(double_clicked)
     page.table_classes.setToolTip("Double-cliquez sur une ligne pour modifier la classe")

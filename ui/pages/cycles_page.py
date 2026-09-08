@@ -1,5 +1,7 @@
 from functools import partial
 
+import sqlite3
+
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
@@ -61,8 +63,12 @@ def cycles_annees(page, ctx):
         table_cycles.setVisible(bool(rows))
 
     def _delete_cycle(parent, ctx, c):
-        if QMessageBox.question(parent, "Cycle",
-                                f"Supprimer le cycle {c['nom']} ?") == QMessageBox.Yes:
+        if QMessageBox.question(
+                parent, "Cycle",
+                f"Supprimer le cycle {c['nom']} ?\n\n"
+                "Attention : les classes rattachees a ce cycle seront "
+                "egalement supprimees (avec leurs eleves).") \
+                == QMessageBox.Yes:
             repos.delete_cycle(c["id"])
             fill_cycles()
 
@@ -145,10 +151,16 @@ def open_cycle_dialog(parent, ctx, cycle=None, on_created=None):
         if not nom.text().strip():
             QMessageBox.warning(dlg, "Cycle", "Le nom du cycle est obligatoire.")
             return
-        if cycle:
-            repos.update_cycle(cycle["id"], nom.text().strip(), description.text().strip())
-        else:
-            repos.add_cycle(nom.text().strip(), description.text().strip())
+        try:
+            if cycle:
+                repos.update_cycle(cycle["id"], nom.text().strip(), description.text().strip())
+            else:
+                repos.add_cycle(nom.text().strip(), description.text().strip())
+        except sqlite3.IntegrityError:
+            QMessageBox.warning(dlg, "Cycle",
+                                f"Un cycle nomme '{nom.text().strip()}' existe "
+                                "deja. Choisissez un autre nom.")
+            return
         if on_created:
             on_created()
 
@@ -189,20 +201,47 @@ def open_annee_dialog(parent, ctx, annee=None, on_created=None):
         if not libelle.text().strip():
             QMessageBox.warning(dlg, "Annee", "Le libelle est obligatoire.")
             return
-        if annee:
-            repos.update_annee_scolaire(annee["id"], libelle.text().strip(),
-                                        debut.date().toString("yyyy-MM-dd"),
-                                        fin.date().toString("yyyy-MM-dd"),
-                                        active.isChecked())
-            if active.isChecked():
-                repos.set_annee_active(annee["id"])
-        else:
-            new_id = repos.add_annee_scolaire(
-                libelle.text().strip(),
-                debut.date().toString("yyyy-MM-dd"),
-                fin.date().toString("yyyy-MM-dd"),
-                active.isChecked())
-            if active.isChecked():
-                repos.set_annee_active(new_id)
+        d, f = debut.date(), fin.date()
+        if f <= d:
+            QMessageBox.warning(dlg, "Annee",
+                                "La date de fin doit etre posterieure a la "
+                                "date de debut.")
+            return
+        # Anti-chevauchement : deux annees scolaires ne peuvent pas se
+        # recouvrir, sinon les gardes de dates deviennent ambigues.
+        d_iso, f_iso = d.toString("yyyy-MM-dd"), f.toString("yyyy-MM-dd")
+        for a in repos.annees_scolaires():
+            if annee and a["id"] == annee["id"]:
+                continue
+            a_debut = a.get("date_debut") or "0000-01-01"
+            a_fin = a.get("date_fin") or "9999-12-31"
+            if d_iso <= a_fin and a_debut <= f_iso:
+                QMessageBox.warning(
+                    dlg, "Annee",
+                    f"Les dates saisies chevauchent l'annee {a['libelle']} "
+                    f"({a_debut} → {a_fin}).\n"
+                    "Deux annees scolaires ne peuvent pas se recouvrir.")
+                return
+        try:
+            if annee:
+                repos.update_annee_scolaire(annee["id"], libelle.text().strip(),
+                                            d.toString("yyyy-MM-dd"),
+                                            f.toString("yyyy-MM-dd"),
+                                            active.isChecked())
+                if active.isChecked():
+                    repos.set_annee_active(annee["id"])
+            else:
+                new_id = repos.add_annee_scolaire(
+                    libelle.text().strip(),
+                    d.toString("yyyy-MM-dd"),
+                    f.toString("yyyy-MM-dd"),
+                    active.isChecked())
+                if active.isChecked():
+                    repos.set_annee_active(new_id)
+        except sqlite3.IntegrityError:
+            QMessageBox.warning(dlg, "Annee",
+                                f"Une annee '{libelle.text().strip()}' existe "
+                                "deja. Choisissez un autre libelle.")
+            return
         if on_created:
             on_created()

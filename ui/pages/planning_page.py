@@ -57,7 +57,17 @@ def planning(page, ctx):
 
     editing = {"on": False}
 
+    def _exit_edit():
+        if not editing["on"]:
+            return
+        editing["on"] = False
+        page.btn_edit_planning.setText("Modifier")
+        page.btn_edit_planning.setStyleSheet(STYLE_BTN_SECONDARY)
+
     def refresh():
+        # Changer de classe pendant l'edition : on sort du mode edition
+        # pour ne jamais enregistrer les modifications dans la mauvaise classe.
+        _exit_edit()
         _reload_combo(page.combo_classe_planning, _classe_items(avec_toutes=False))
         classe_id = page.combo_classe_planning.currentData()
         page.table_planning.clearContents()
@@ -96,6 +106,9 @@ def planning(page, ctx):
 
     def _finish_edit():
         classe_id = page.combo_classe_planning.currentData()
+        if not classe_id:
+            QMessageBox.warning(page, "Planning", "Choisissez d'abord une classe.")
+            return
         entries = []
         for row in range(8):
             creneau = page.table_planning.verticalHeaderItem(row).text() if \
@@ -109,8 +122,10 @@ def planning(page, ctx):
                 if item and item.text().strip():
                     texte = item.text()
                     if "(" in texte:
-                        matiere = texte.split("(")[0].strip()
-                        salle = texte.split("(")[1].rstrip(")").strip()
+                        # rsplit : une matiere peut contenir des parentheses.
+                        matiere, salle = texte.rsplit("(", 1)
+                        matiere = matiere.strip()
+                        salle = salle.rstrip(")").strip() or None
                     else:
                         matiere = texte
                     entries.append((jour, creneau, matiere, salle))
@@ -133,8 +148,13 @@ def planning(page, ctx):
         item = page.table_planning.item(row, col)
         if item and item.text().strip():
             texte = item.text()
-            current["matiere"] = texte.split("(")[0].strip()
-            current["salle"] = texte.split("(")[1].rstrip(")").strip() if "(" in texte else None
+            if "(" in texte:
+                # rsplit : une matiere peut contenir des parentheses.
+                matiere, salle = texte.rsplit("(", 1)
+                current["matiere"] = matiere.strip() or None
+                current["salle"] = salle.rstrip(")").strip() or None
+            else:
+                current["matiere"] = texte
         dlg = PlanningCellDialog(page, jour, creneau, repos.matieres(), current)
         if dlg.exec_() == QDialog.Accepted:
             matiere, salle = dlg.values()

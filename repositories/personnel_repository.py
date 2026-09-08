@@ -39,5 +39,8 @@ class PersonnelRepository(RepositoryBase):
                           db.execute, "DELETE FROM personnel WHERE id = ?", (pid,))
 
     def masse_salariale(self):
-        row = db.query_one("SELECT COALESCE(SUM(salaire), 0) AS s FROM personnel")
+        # Les inactifs ne sont plus payes : exclus de la masse salariale.
+        row = db.query_one(
+            """SELECT COALESCE(SUM(salaire), 0) AS s FROM personnel
+               WHERE statut IS NULL OR LOWER(statut) != 'inactif'""")
         return row["s"] if row else 0

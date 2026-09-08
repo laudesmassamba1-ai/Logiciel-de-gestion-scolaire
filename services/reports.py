@@ -1,10 +1,17 @@
 import datetime
+import html
 from pathlib import Path
 
 from core.config import CRENEAUX, DOCS_DIR, JOURS, VILLE_DEFAUT
 from database import db
 from repositories import repos
 from ui.widgets import fmt_money
+
+
+def echap(valeur):
+    """Echappe une donnee utilisateur avant insertion dans le HTML :
+    un nom contenant '<' ou un script ne doit jamais casser le rapport."""
+    return html.escape(str(valeur if valeur is not None else ""))
 
 STYLE = """
 body { font-family: 'Inter', 'Segoe UI', sans-serif; margin: 40px; color: #1e293b; }
@@ -24,12 +31,20 @@ def _open_in_browser(path: Path):
 
     from PyQt5.QtCore import QUrl
     from PyQt5.QtGui import QDesktopServices
-    QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+    ouvert = QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+    if not ouvert:
+        # Feedback explicite : l'utilisateur sait ou trouver son fichier
+        # meme si le navigateur ne s'ouvre pas.
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(
+            None, "Rapport genere",
+            f"Le fichier a ete cree ici :\n{path}\n\n"
+            "Ouvrez-le manuellement avec votre navigateur.")
 
 def _write(title, body_html, filename):
 
     path = DOCS_DIR / filename
-    html = (f"<html><head><meta charset='utf-8'><title>{title}</title>"
+    html = (f"<html><head><meta charset='utf-8'><title>{echap(title)}</title>"
             f"<style>{STYLE}</style></head><body>{body_html}</body></html>")
     path.write_text(html, encoding="utf-8")
     _open_in_browser(path)
@@ -41,9 +56,9 @@ def _entete_doc():
     pays = params.get("pays", "") or "Republique du Congo"
     ville = params.get("ville", "")
     now = datetime.datetime.now().strftime("%d/%m/%Y")
-    localite = f" - {ville}" if ville else ""
+    localite = f" - {echap(ville)}" if ville else ""
     return (f"<div class='header'><div><strong>Gestion Scolaire</strong>"
-            f"<div class='meta'>{pays}{localite}</div></div>"
+            f"<div class='meta'>{echap(pays)}{localite}</div></div>"
             f"<div class='meta'>Edite le {now}</div></div>")
 
 def export_eleves_csv(eleves):
@@ -71,7 +86,8 @@ def bulletins(classe_id, periode):
     for n in all_notes:
         key = (n["eleve_id"], n["matiere_id"])
         notes_index[key] = n
-    corps = [f"<h1>Bulletins - {nom_classe}</h1>", f"<p class='meta'>Periode : {periode} - Effectif : {len(eleves)}</p>"]
+    corps = [f"<h1>Bulletins - {echap(nom_classe)}</h1>",
+             f"<p class='meta'>Periode : {echap(periode)} - Effectif : {len(eleves)}</p>"]
     for eleve in eleves:
         lignes = ""
         total = 0.0
@@ -86,16 +102,16 @@ def bulletins(classe_id, periode):
                 coef = m["coefficient"] or 1
                 total += moy * coef
                 coefs += coef
-                lignes += (f"<tr><td>{m['nom']}</td><td>{d1}</td><td>{d2}</td>"
+                lignes += (f"<tr><td>{echap(m['nom'])}</td><td>{d1}</td><td>{d2}</td>"
                            f"<td>{comp}</td><td>{moy}</td></tr>")
             else:
-                lignes += (f"<tr><td>{m['nom']}</td><td>-</td><td>-</td>"
+                lignes += (f"<tr><td>{echap(m['nom'])}</td><td>-</td><td>-</td>"
                            f"<td>-</td><td>-</td></tr>")
 
         generale = round(total / coefs, 2) if coefs else 0
         appreciation = _appreciation(generale)
         corps.append(
-            f"<h3>{eleve['prenom']} {eleve['nom']} ({eleve['matricule']})</h3>"
+            f"<h3>{echap(eleve['prenom'])} {echap(eleve['nom'])} ({echap(eleve['matricule'])})</h3>"
             f"<table><tr><th>Matiere</th><th>Devoir 1</th><th>Devoir 2</th>"
             f"<th>Composition</th><th>Moyenne</th></tr>{lignes}"
             f"<tr><td><strong>Moyenne generale</strong></td><td colspan='3'></td>"
@@ -111,14 +127,14 @@ def recu_paiement(eleve, montant, mode, reference):
     corps = f"""
     {_entete_doc()}
     <h2 style="text-align:center;">RECU DE PAIEMENT</h2>
-    <p>Reçu N° <strong>{reference}</strong> en date du {date}</p>
+    <p>Reçu N° <strong>{echap(reference)}</strong> en date du {date}</p>
     <table>
-    <tr><th>Eleve</th><td>{eleve['prenom']} {eleve['nom']}</td></tr>
-    <tr><th>Matricule</th><td>{eleve['matricule']}</td></tr>
+    <tr><th>Eleve</th><td>{echap(eleve['prenom'])} {echap(eleve['nom'])}</td></tr>
+    <tr><th>Matricule</th><td>{echap(eleve['matricule'])}</td></tr>
     <tr><th>Montant</th><td><strong>{fmt_money(montant)}</strong></td></tr>
-    <tr><th>Mode de reglement</th><td>{mode}</td></tr>
+    <tr><th>Mode de reglement</th><td>{echap(mode)}</td></tr>
     </table>
-    <p style="margin-top:60px;">Fait a {ville}, le {date}</p>
+    <p style="margin-top:60px;">Fait a {echap(ville)}, le {date}</p>
     """
     return _write("Recu de paiement", corps, f"recu_{eleve['matricule']}_{reference}.html")
 
@@ -131,14 +147,14 @@ def certificat_scolarite(eleve, params):
     corps = f"""
     {_entete_doc()}
     <h2 style="text-align:center;">CERTIFICAT DE SCOLARITE</h2>
-    <p>Nous, soussignes, certifions que l'eleve <strong>{eleve['prenom']} {eleve['nom']}</strong>,
-    matricule <strong>{eleve['matricule']}</strong>, ne le {eleve['date_naissance'] or '-'}
-    a {eleve['lieu_naissance'] or '-'}, est regulierement inscrit(e) dans notre etablissement.</p>
+    <p>Nous, soussignes, certifions que l'eleve <strong>{echap(eleve['prenom'])} {echap(eleve['nom'])}</strong>,
+    matricule <strong>{echap(eleve['matricule'])}</strong>, ne le {eleve['date_naissance'] or '-'}
+    a {echap(eleve['lieu_naissance'] or '-')}, est regulierement inscrit(e) dans notre etablissement.</p>
     <table><tr><th>Classe</th><th>Statut</th><th>Date d'inscription</th></tr>
-    <tr><td>{eleve['classe_nom'] or '-'}</td><td>{eleve['statut']}</td>
-    <td>{eleve['date_inscription']}</td></tr></table>
-    <p style="margin-top:60px;">Fait a {ville}, le {date}<br>
-    {signataire}<br><em>{titre}</em></p>
+    <tr><td>{echap(eleve['classe_nom'] or '-')}</td><td>{echap(eleve['statut'])}</td>
+    <td>{echap(eleve['date_inscription'])}</td></tr></table>
+    <p style="margin-top:60px;">Fait a {echap(ville)}, le {date}<br>
+    {echap(signataire)}<br><em>{echap(titre)}</em></p>
     """
     return _write("Certificat de scolarite", corps, f"certificat_{eleve['matricule']}.html")
 
@@ -147,7 +163,7 @@ def paie():
     personnel = repos.personnel()
     masse = repos.masse_salariale()
     lignes = "".join(
-        f"<tr><td>{p['nom_complet']}</td><td>{p['fonction']}</td><td>{p['statut']}</td>"
+        f"<tr><td>{echap(p['nom_complet'])}</td><td>{echap(p['fonction'])}</td><td>{echap(p['statut'])}</td>"
         f"<td>{fmt_money(p['salaire'])}</td></tr>" for p in personnel)
     corps = (
         f"{_entete_doc()}<h1>Bulletins de paie - {datetime.date.today():%B %Y}</h1>"
@@ -161,8 +177,8 @@ def rapport_rh():
     personnel = repos.personnel()
     enseignants = repos.enseignants()
     lignes = "".join(
-        f"<tr><td>{p['nom_complet']}</td><td>{p['fonction']}</td><td>{p['telephone']}</td>"
-        f"<td>{p['statut']}</td></tr>" for p in personnel)
+        f"<tr><td>{echap(p['nom_complet'])}</td><td>{echap(p['fonction'])}</td><td>{echap(p['telephone'])}</td>"
+        f"<td>{echap(p['statut'])}</td></tr>" for p in personnel)
     corps = (
         f"{_entete_doc()}<h1>Rapport RH Mensuel</h1>"
         f"<p class='meta'>Effectif total : {len(personnel)} - Enseignants : {len(enseignants)}</p>"
@@ -181,24 +197,15 @@ def planning(classe):
         for jour in JOURS:
             entree = grid.get(jour, {}).get(creneau)
             if entree:
-                cells += f"<td>{entree['matiere'] or ''}{' (' + entree['salle'] + ')' if entree['salle'] else ''}</td>"
+                salle = f" ({echap(entree['salle'])})" if entree["salle"] else ""
+                cells += f"<td>{echap(entree['matiere'] or '')}{salle}</td>"
             else:
                 cells += "<td></td>"
         lignes += f"<tr><td><strong>{creneau}</strong></td>{cells}</tr>"
-    corps = f"{_entete_doc()}<h1>Emploi du temps - {classe['nom']}</h1>" \
+    corps = f"{_entete_doc()}<h1>Emploi du temps - {echap(classe['nom'])}</h1>" \
             f"<table><tr>{entetes}</tr>{lignes}</table>"
     return _write("Emploi du temps", corps, f"planning_{classe['nom'].replace(' ', '_')}.html")
 
 def _appreciation(moyenne):
-
-    if moyenne >= 16:
-        return "Excellent"
-    if moyenne >= 14:
-        return "Tres bien"
-    if moyenne >= 12:
-        return "Bien"
-    if moyenne >= 10:
-        return "Assez bien"
-    if moyenne >= 8:
-        return "Passable"
-    return "Insuffisant"
+    from services.appreciations import appreciation
+    return appreciation(moyenne)

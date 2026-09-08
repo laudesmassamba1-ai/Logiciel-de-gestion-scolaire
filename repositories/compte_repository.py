@@ -28,7 +28,10 @@ class CompteRepository(RepositoryBase):
             counter += 1
         self._route_write(
             "POST", "/comptes", {"nom": nom, "email": email, "telephone": telephone,
-                                  "role": role, "actif": 1 if actif else 0},
+                                  "role": role, "actif": 1 if actif else 0,
+                                  # Hash PBKDF2 transmis tel quel : le serveur
+                                  # sait aussi le verifier (format salt:hash).
+                                  "password": password_hash},
             db.execute,
             """INSERT INTO utilisateurs (nom_complet, username, email, telephone, password, role, actif)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",

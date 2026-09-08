@@ -127,7 +127,10 @@ def notes(page, ctx):
     table_notes.setHorizontalHeaderLabels([
         "Matricule", "Nom et Prenom", "Devoir 1 /20",
         "Devoir 2 /20", "Composition /20", "Moyenne", "Appreciation"])
-    table_notes.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed)
+    if ctx.can_edit("notes"):
+        table_notes.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed)
+    else:
+        table_notes.setEditTriggers(QTableWidget.NoEditTriggers)
     table_notes.setSelectionBehavior(QTableWidget.SelectRows)
     table_notes.setAlternatingRowColors(True)
     table_notes.setShowGrid(False)
@@ -185,6 +188,12 @@ def notes(page, ctx):
     if not ctx.can_edit("notes"):
         btn_save.setVisible(False)
 
+    # Selection reellement chargee dans la table (peut différer des combos
+    # si l'utilisateur les change sans recharger). On enregistre TOUJOURS
+    # par rapport a cette selection chargee, jamais par rapport aux combos.
+    etat1 = {"charge": None}
+    etat2 = {"charge": None}
+
     def recompute_row(row):
         d1 = _cell_float(table_notes.item(row, 2))
         d2 = _cell_float(table_notes.item(row, 3))
@@ -230,7 +239,11 @@ def notes(page, ctx):
         table_notes.blockSignals(True)
         table_notes.setRowCount(len(eleves_rows))
         for i, e in enumerate(eleves_rows):
-            table_notes.setItem(i, 0, QTableWidgetItem(e["matricule"]))
+            item_mat = QTableWidgetItem(e["matricule"])
+            # L'eleve est attache a sa ligne : la sauvegarde ne peut plus
+            # associer les notes au mauvais eleve via un simple index.
+            item_mat.setData(Qt.UserRole, e["id"])
+            table_notes.setItem(i, 0, item_mat)
             table_notes.setItem(i, 1, QTableWidgetItem(f"{e['prenom']} {e['nom']}"))
             note = notes_map.get(e["id"])
             for j, key in ((2, "devoir1"), (3, "devoir2"), (4, "composition")):
@@ -238,25 +251,41 @@ def notes(page, ctx):
                 table_notes.setItem(i, j, QTableWidgetItem("" if val == "" else str(val)))
             recompute_row(i)
         table_notes.blockSignals(False)
+        etat1["charge"] = {"classe_id": classe_id, "matiere_id": matiere_id,
+                           "periode": periode}
         lbl_status.setText(f"{len(eleves_rows)} eleves charges")
         table_notes.resizeColumnsToContents()
         lbl_empty.setVisible(len(eleves_rows) == 0)
 
     def save_notes():
-        classe_id = combo_classe.currentData()
-        matiere_id = combo_matiere.currentData()
-        periode = combo_periode.currentText()
-        if not classe_id or not matiere_id:
+        if etat1["charge"] is None:
+            QMessageBox.warning(page, "Notes",
+                                "Chargez d'abord les eleves avant d'enregistrer.")
             return
-        eleves_rows = repos.eleves(classe_id=classe_id)
+        sel = {"classe_id": combo_classe.currentData(),
+               "matiere_id": combo_matiere.currentData(),
+               "periode": combo_periode.currentText()}
+        if sel != etat1["charge"]:
+            QMessageBox.warning(
+                page, "Selection modifiee",
+                "La selection (classe/matiere/periode) a change depuis le "
+                "chargement. Cliquez 'Charger les Eleves' pour recharger, "
+                "puis enregistrez : evite d'ecrire les notes affichees sur "
+                "une autre selection.")
+            return
         saved = 0
-        for i, e in enumerate(eleves_rows):
+        for i in range(table_notes.rowCount()):
+            item_mat = table_notes.item(i, 0)
+            eleve_id = item_mat.data(Qt.UserRole) if item_mat else None
+            if eleve_id is None:
+                continue
             d1 = _cell_float(table_notes.item(i, 2))
             d2 = _cell_float(table_notes.item(i, 3))
             comp = _cell_float(table_notes.item(i, 4))
             if d1 is None and d2 is None and comp is None:
                 continue
-            repos.save_note(e["id"], matiere_id, periode, d1, d2, comp)
+            repos.save_note(eleve_id, sel["matiere_id"], sel["periode"],
+                            d1, d2, comp)
             saved += 1
         lbl_status.setText(f"{saved} notes enregistrees")
         QMessageBox.information(page, "Notes", f"{saved} notes enregistrees.")
@@ -360,8 +389,10 @@ def notes(page, ctx):
     bottom2.addWidget(btn_ev_save)
     tab_eleve_layout.addLayout(bottom2)
     btn_ev_save.setVisible(ctx.can_edit("notes"))
-
-    matieres_cache = {m["id"]: m for m in repos.matieres()}
+    if not ctx.can_edit("notes"):
+        # Lecture seule effective des deux tables de saisie
+        table_notes.setEditTriggers(QTableWidget.NoEditTriggers)
+        table_ev.setEditTriggers(QTableWidget.NoEditTriggers)
 
     def _ev_recompute_row(row):
         d1 = _cell_float(table_ev.item(row, 2))
@@ -398,9 +429,6 @@ def notes(page, ctx):
     table_ev.itemChanged.connect(_ev_on_item_changed)
 
     def load_eleve_notes():
-        matieres_cache.clear()
-        for m in repos.matieres():
-            matieres_cache[m["id"]] = m
         eleve_id = combo_ev_eleve.currentData()
         periode = combo_ev_periode.currentText()
         if not eleve_id:
@@ -411,7 +439,11 @@ def notes(page, ctx):
         table_ev.blockSignals(True)
         table_ev.setRowCount(len(all_matieres))
         for i, m in enumerate(all_matieres):
-            table_ev.setItem(i, 0, QTableWidgetItem(m["nom"]))
+            item_mat = QTableWidgetItem(m["nom"])
+            # La matiere est attachee a sa ligne par id : plus de recherche
+            # par nom (doublons/renommages ne corrompent plus la sauvegarde).
+            item_mat.setData(Qt.UserRole, m["id"])
+            table_ev.setItem(i, 0, item_mat)
             coeff_item = QTableWidgetItem(f"{m['coefficient']:.1f}")
             coeff_item.setFlags(coeff_item.flags() & ~Qt.ItemIsEditable)
             table_ev.setItem(i, 1, coeff_item)
@@ -421,6 +453,7 @@ def notes(page, ctx):
                 table_ev.setItem(i, j, QTableWidgetItem("" if val == "" else str(val)))
             _ev_recompute_row(i)
         table_ev.blockSignals(False)
+        etat2["charge"] = {"eleve_id": eleve_id, "periode": periode}
         table_ev.resizeColumnsToContents()
         table_ev.setVisible(True)
         lbl_ev_empty.setVisible(False)
@@ -430,21 +463,25 @@ def notes(page, ctx):
         lbl_ev_status.setText(f"{len(all_matieres)} matieres | {nb_notes} notes existantes")
 
     def save_eleve_notes():
-        eleve_id = combo_ev_eleve.currentData()
-        periode = combo_ev_periode.currentText()
-        if not eleve_id:
+        if etat2["charge"] is None:
+            QMessageBox.warning(page, "Notes",
+                                "Chargez d'abord les notes avant d'enregistrer.")
             return
+        sel = {"eleve_id": combo_ev_eleve.currentData(),
+               "periode": combo_ev_periode.currentText()}
+        if sel != etat2["charge"]:
+            QMessageBox.warning(
+                page, "Selection modifiee",
+                "L'eleve ou la periode a change depuis le chargement. "
+                "Cliquez 'Charger les Notes' pour recharger, puis enregistrez.")
+            return
+        eleve_id = sel["eleve_id"]
         saved = 0
         for i in range(table_ev.rowCount()):
             matiere_item = table_ev.item(i, 0)
             if not matiere_item:
                 continue
-            matiere_nom = matiere_item.text()
-            matiere_id = None
-            for mid, m in matieres_cache.items():
-                if m["nom"] == matiere_nom:
-                    matiere_id = mid
-                    break
+            matiere_id = matiere_item.data(Qt.UserRole)
             if not matiere_id:
                 continue
             d1 = _cell_float(table_ev.item(i, 2))
@@ -452,7 +489,8 @@ def notes(page, ctx):
             comp = _cell_float(table_ev.item(i, 4))
             if d1 is None and d2 is None and comp is None:
                 continue
-            repos.save_note(eleve_id, matiere_id, periode, d1, d2, comp)
+            repos.save_note(eleve_id, matiere_id, periode=sel["periode"],
+                            devoir1=d1, devoir2=d2, composition=comp)
             saved += 1
         lbl_ev_status.setText(f"{saved} notes enregistrees")
         QMessageBox.information(page, "Notes", f"{saved} notes enregistrees.")
@@ -633,6 +671,11 @@ def notes(page, ctx):
         lbl_moy_status.setText(status)
 
     def export_moyennes_csv():
+        if table_moy.rowCount() == 0:
+            QMessageBox.warning(
+                page, "Export",
+                "Calculez d'abord les moyennes : il n'y a rien a exporter.")
+            return
         from PyQt5.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(
             page, "Exporter les Moyennes", "moyennes_generales.csv", "CSV (*.csv)")
@@ -653,9 +696,26 @@ def notes(page, ctx):
     btn_calculer.clicked.connect(calculer_moyennes)
     btn_export_csv.clicked.connect(export_moyennes_csv)
 
+    # Le combo des moyennes suit la classe choisie dans le 1er onglet :
+    # sinon le calcul pouvait porter sur l'ancienne classe.
+    combo_classe.currentIndexChanged.connect(_sync_moy_classes)
+
     def _refresh_notes():
         _reload_combo(combo_classe, _classe_items(avec_toutes=False))
         _reload_combo(combo_matiere, [(m["nom"], m["id"]) for m in repos.matieres()])
         _sync_moy_classes()
+        # Onglet 2 : les combos classe/eleve doivent suivre les creations
+        # faites dans d'autres sections (eleves, classes).
+        courant = combo_ev_classe.currentData()
+        combo_ev_classe.blockSignals(True)
+        combo_ev_classe.clear()
+        for c in repos.classes():
+            combo_ev_classe.addItem(c["nom"], c["id"])
+        if courant is not None:
+            idx = combo_ev_classe.findData(courant)
+            if idx >= 0:
+                combo_ev_classe.setCurrentIndex(idx)
+        combo_ev_classe.blockSignals(False)
+        _on_ev_classe_changed()
 
     page.refresh = _refresh_notes

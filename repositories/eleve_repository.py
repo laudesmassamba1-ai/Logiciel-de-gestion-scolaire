@@ -52,6 +52,12 @@ class EleveRepository(RepositoryBase):
                                  db.execute, sql, tuple(data.get(c) for c in cols))
 
     def update_eleve(self, eleve_id, data):
+        data = dict(data)
+        data.setdefault("check_acte", 0)
+        data.setdefault("check_photos", 0)
+        data.setdefault("check_bulletin", 0)
+        data.setdefault("statut", "Inscrit")
+        data.setdefault("redoublant", 0)
         cols = [
             "matricule", "nom", "prenom", "sexe", "date_naissance", "lieu_naissance",
             "classe_id", "ecole_provenance", "pere_nom", "pere_tel", "mere_nom",
