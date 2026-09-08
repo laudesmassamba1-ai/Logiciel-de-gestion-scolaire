@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 APP_NAME = "Gestion Scolaire"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
