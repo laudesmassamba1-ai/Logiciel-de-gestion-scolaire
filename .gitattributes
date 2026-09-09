@@ -1,2 +1,6 @@
+# Paquets installeurs Debian/Windows livrés via LFS quand produits par CI.
+# Attention : la branche de livraison `exe` embarque les binaires en brut
+# (dossier executables/) ; ne pas re-coller un filtre LFS sur ces chemins
+# tant que git-lfs n'est pas installe sur les postes de build.
 installers/*.deb filter=lfs diff=lfs merge=lfs -text
-installers/*.exe filter=lfs diff=lfs merge=lfs -text
+executables/*.exe !filter !diff !merge -text
