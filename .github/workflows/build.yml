@@ -95,7 +95,7 @@ jobs:
       - name: Version de l'application
         id: version
         shell: bash
-        run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
+        run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, "."); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
 
       - name: Verifier les icones
         shell: bash
@@ -179,7 +179,7 @@ jobs:
 
       - name: Version de l'application
         id: version
-        run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
+        run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, "."); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
 
       - name: Verifier les icones
         run: |
