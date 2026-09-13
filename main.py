@@ -1,12 +1,13 @@
 import os
 import sys
+import threading
 import traceback
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QFontDatabase, QIcon
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
-from core.config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE, SYNC_ACTIVE
+from core.config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE, SYNC_ACTIVE, SERVEUR_AUTO
 from database import db
 from services import auth_service as auth
 from ui.login_view import FirstSetupDialog, LoginDialog
@@ -54,8 +55,9 @@ def _demande_connexion():
         setup = FirstSetupDialog()
         if setup.exec_() == FirstSetupDialog.Accepted:
             user = setup.user
-            auth.save_session(user["id"])
-            return user
+            if user is not None:
+                auth.save_session(user["id"])
+                return user
         return None
 
     # Session existante : reconnexion automatique du dernier utilisateur.
@@ -83,21 +85,33 @@ def main():
 
     db.init_db()
 
-    # Auto-démarrage du serveur si ce poste est l'hôte configuré pour le
-    # lancement automatique (serveur_auto=True dans sync.json). Fonctionne
-    # uniquement si la synchronisation est activée.
-    if SYNC_ACTIVE:
-        from services.serveur_local import demarrer_si_auto
-        from core import network
-        ok, message = demarrer_si_auto()
-        if ok:
-            network.set_sync_active(True)
-            network.set_online()
+    # Auto-demarrage du serveur si ce poste est l'hote et que l'option
+    # « Demarrer le serveur en meme temps que l'application » est active
+    # (serveur_auto=True dans sync.json). Tout se passe en arriere-plan :
+    # la fenetre apparait immediatement, la verrification du serveur et
+    # l'attente qu'il reponde ne bloquent plus le lancement (avant, le
+    # demarrage pouvait rester fige ~15 s, comme si l'application ne
+    # repondait pas).
+    if SERVEUR_AUTO:
+        from services import serveur_local as sl
+        from core import network as _network
+
+        def _auto_demarrer():
+            try:
+                ok, _ = sl.demarrer_si_auto()
+                if ok:
+                    _network.set_sync_active(True)
+                    _network.set_online()
+            except Exception as exc:
+                print("Serveur automatique : echec", exc)
+
+        threading.Thread(target=_auto_demarrer, daemon=True).start()
 
     # Thread de synchronisation (push de la file d'attente + pull de la
-    # structure modifiée par le directeur). Démarre dès que la sync est
-    # active (via sync.json ou variable d'environnement GS_SYNC_ACTIVE).
-    if SYNC_ACTIVE:
+    # structure modifiee par le directeur). Demarre des que la sync est
+    # active, ou des que le poste doit hoster le serveur : il idlera
+    # tant que le reseau n'est pas joignable.
+    if SYNC_ACTIVE or SERVEUR_AUTO:
         from api.sync_worker import SyncWorker
         _sync_worker = SyncWorker()
 

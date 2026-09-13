@@ -12,6 +12,8 @@ auto-increments peuvent differer entre le serveur et chaque machine.
 Chaque section est indépendante : un echec n'annule pas les autres.
 """
 
+import uuid
+
 from database import db
 
 
@@ -20,6 +22,31 @@ def _champ(row, *aliases, default=None):
         if cle in row and row[cle] is not None:
             return row[cle]
     return default
+
+
+def _bool_int(valeur):
+    """Convertit une valeur SQL/JSON ('1', 1, 'oui', 'vrai', True...) en 0/1."""
+    if valeur is None:
+        return 0
+    if isinstance(valeur, bool):
+        return 1 if valeur else 0
+    if isinstance(valeur, (int, float)):
+        return 1 if valeur else 0
+    return 1 if str(valeur).strip().lower() in ("1", "vrai", "oui", "actif",
+                                                "true", "yes") else 0
+
+
+def _coef_float(valeur):
+    """Convertit une valeur numerique (eventuellement '1,5' francais) en float."""
+    if valeur is None:
+        return 0.0
+    if isinstance(valeur, (int, float)):
+        return float(valeur)
+    texte = str(valeur).strip().replace(",", ".")
+    try:
+        return float(texte)
+    except ValueError:
+        return 0.0
 
 
 def _upsert(table, cle_where, params_where, colonnes, valeurs):
@@ -169,14 +196,18 @@ def pull_structure():
                     nom_parent = _champ(parent, "nom", "name", "cycle")
                     ligne = db.query_one("SELECT id FROM cycles WHERE nom = ?", (nom_parent,))
                     cycle_local = ligne["id"] if ligne else None
-            _upsert(
-                "classes", "nom = ?", (nom,),
-                ["niveau", "capacite", "salle", "titulaire", "cycle_id"],
-                [_champ(cl, "niveau"),
-                 int(_champ(cl, "capacite", default=50) or 50),
-                 _champ(cl, "salle"),
-                 _champ(cl, "titulaire"),
-                 cycle_local])
+            colonnes_classe = ["niveau", "capacite", "salle", "titulaire"]
+            valeurs_classe = [_champ(cl, "niveau"),
+                              int(_champ(cl, "capacite", default=50) or 50),
+                              _champ(cl, "salle"),
+                              _champ(cl, "titulaire")]
+            if cycle_local is not None:
+                # Le serveur a informe le cycle : on le synchronise. Sinon on
+                # garde le lien local existant (pull partiel / cycle inconnu).
+                colonnes_classe.append("cycle_id")
+                valeurs_classe.append(cycle_local)
+            _upsert("classes", "nom = ?", (nom,),
+                    colonnes_classe, valeurs_classe)
             resultat["classes"] += 1
         if noms_srv and not resultat["erreurs"]:
             # On ne supprime une classe locale que si le pull des cycles a
@@ -263,13 +294,402 @@ def pull_structure():
                         """INSERT INTO tarifs (classe_id, type_frais, montant, annee_scolaire)
                            VALUES (?, ?, ?, ?)""",
                         (classe_id, type_frais, montant, annee))
-            # Mirroir : retirer les tarifs locaux absents du serveur.
-            pour_supprimer = [tid for cle, tid in existants.items()
-                              if cle not in entrees]
-            for tid in pour_supprimer:
-                db.execute("DELETE FROM tarifs WHERE id = ?", (tid,))
+            # Mirroir : retirer les tarifs locaux absents du serveur — sauf
+            # ceux qui ont une operation PENDING dans la file (crees
+            # hors-ligne, encore non pousses) et sauf si le pull a echoue.
+            pends = set()
+            try:
+                for r in db.query(
+                        "SELECT payload FROM file_attente_synchro WHERE status = 'PENDING'"):
+                    import json as _json
+                    try:
+                        p = _json.loads(r["payload"])
+                    except (ValueError, TypeError):
+                        continue
+                    if isinstance(p, dict):
+                        pends.add((_champ(p, "classe_nom", "classe"),
+                                   _champ(p, "type_frais"),
+                                   _champ(p, "annee_scolaire") or ""))
+            except Exception:
+                pends = set()
+            pour_supprimer = [
+                cle for cle, tid in existants.items()
+                if cle not in entrees and cle not in pends]
+            if not resultat["erreurs"]:
+                for cle in pour_supprimer:
+                    db.execute("DELETE FROM tarifs WHERE id = ?",
+                               (existants[cle],))
             resultat["tarifs"] += len(entrees)
     except Exception as exc:
         resultat["erreurs"].append(f"tarifs: {exc}")
+
+    return resultat
+
+
+def _classe_id_par_nom(nom):
+    if not nom:
+        return None
+    ligne = db.query_one("SELECT id FROM classes WHERE nom = ?", (nom,))
+    return ligne["id"] if ligne else None
+
+
+def _matiere_id_par_nom(nom):
+    if not nom:
+        return None
+    ligne = db.query_one("SELECT id FROM matieres WHERE nom = ?", (nom,))
+    return ligne["id"] if ligne else None
+
+
+def _gen_matricule():
+    """Matricule local unique pour un eleve rapatrie sans matricule serveur."""
+    from datetime import date
+    prefix = f"ELEV{date.today().year}"
+    ligne = db.query_one(
+        "SELECT MAX(CAST(SUBSTR(matricule, ?) AS INTEGER)) AS max_num"
+        " FROM eleves WHERE matricule LIKE ?",
+        (len(prefix) + 1, f"{prefix}%"))
+    num = (ligne["max_num"] or 0) + 1
+    return f"{prefix}{num:04d}"
+
+
+def _eleve_id_local(serie, nom=None, prenom=None):
+    """Resout l'eleve local par uuid_client, puis par (nom, prenom)."""
+    uuid_client = serie.get("uuid_client") or serie.get("eleve_uuid")
+    if uuid_client:
+        ligne = db.query_one("SELECT id FROM eleves WHERE uuid_client = ?", (uuid_client,))
+        if ligne:
+            return ligne["id"]
+    if nom and prenom:
+        ligne = db.query_one(
+            "SELECT id FROM eleves WHERE nom = ? AND prenom = ?",
+            (nom, prenom))
+        if ligne:
+            return ligne["id"]
+    return None
+
+
+def pull_donnees():
+    """Rapatrie les donnees d'action depuis le serveur (eleves, personnel,
+    programmes, presences, notes, paiements).
+
+    Principe : UPSERT par cles naturelles, jamais de suppression. Une ligne
+    locale absente du serveur est conservee (l'upsert est purement additif).
+    Chaque section est independante : un echec n'annule pas les autres.
+    """
+    from api import client
+
+    resultat = {"eleves": 0, "personnel": 0, "programmes": 0,
+                "presences": 0, "notes": 0, "paiements": 0,
+                "erreurs": []}
+
+    # ---------- Eleves (classe resolue par nom) ----------
+    try:
+        data, err = client.eleves()
+        if err:
+            raise RuntimeError(err)
+        for e in data or []:
+            nom = _champ(e, "nom")
+            prenom = _champ(e, "prenom")
+            if not (nom or prenom):
+                continue
+            # Cle d'identite : uuid_client serveur. Une ligne locale creee
+            # hors-ligne sans uuid est rattachee par (nom, prenom) ; sinon
+            # l'eleve distant est cree localement (le pull est additif).
+            uuid_client = _champ(e, "uuid_client") or str(uuid.uuid4())
+            existant = db.query_one(
+                "SELECT id, uuid_client FROM eleves WHERE uuid_client = ?",
+                (uuid_client,))
+            if not existant and nom and prenom:
+                ligne_libre = db.query_one(
+                    "SELECT id, uuid_client FROM eleves WHERE nom = ? AND prenom = ?"
+                    " AND (uuid_client IS NULL OR uuid_client = '')",
+                    (nom, prenom))
+                if ligne_libre:
+                    db.execute("UPDATE eleves SET uuid_client = ? WHERE id = ?",
+                               (uuid_client, ligne_libre["id"]))
+                    existant = ligne_libre
+            if not existant:
+                matricule = _champ(e, "matricule") or _gen_matricule()
+                db.execute(
+                    """INSERT INTO eleves (uuid_client, matricule, nom, prenom, sexe,
+                                           date_naissance, lieu_naissance, adresse,
+                                           redoublant, statut)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (uuid_client, matricule,
+                     _champ(e, "nom"), _champ(e, "prenom"), _champ(e, "sexe"),
+                     _champ(e, "date_naissance"), _champ(e, "lieu_naissance"),
+                     _champ(e, "adresse"),
+                     _bool_int(_champ(e, "redoublant", default=0)),
+                     _champ(e, "statut", default="Inscrit")))
+                existant = db.query_one(
+                    "SELECT id, uuid_client FROM eleves WHERE uuid_client = ?",
+                    (uuid_client,))
+                resultat["eleves"] += 1
+            if not existant:
+                continue
+            colonnes = ["nom", "prenom", "sexe", "date_naissance", "lieu_naissance",
+                        "adresse", "redoublant", "statut"]
+            valeurs = [_champ(e, "nom"), _champ(e, "prenom"), _champ(e, "sexe"),
+                       _champ(e, "date_naissance"), _champ(e, "lieu_naissance"),
+                       _champ(e, "adresse"),
+                       _bool_int(_champ(e, "redoublant", default=0)),
+                       _champ(e, "statut", default="Inscrit")]
+            if _champ(e, "classe") is not None:
+                classe_id = _classe_id_par_nom(_champ(e, "classe"))
+                if classe_id:
+                    colonnes.append("classe_id")
+                    valeurs.append(classe_id)
+            assignments = ", ".join(f"{c} = ?" for c in colonnes)
+            db.execute(
+                f"UPDATE eleves SET {assignments} WHERE id = ?",
+                (*valeurs, existant["id"]))
+            if not existant["uuid_client"]:
+                db.execute(
+                    "UPDATE eleves SET uuid_client = ? WHERE id = ?",
+                    (uuid_client, existant["id"]))
+    except Exception as exc:
+        resultat["erreurs"].append(f"eleves: {exc}")
+
+    # ---------- Personnel (enseignants, par nom_complet) ----------
+    try:
+        data, err = client.enseignants()
+        if err:
+            raise RuntimeError(err)
+        for p in data or []:
+            nom = _champ(p, "nom")
+            prenom = _champ(p, "prenom")
+            if not nom:
+                continue
+            nom_complet = " ".join(x for x in (nom, prenom) if x)
+            _upsert(
+                "personnel", "nom_complet = ?", (nom_complet,),
+                ["nom_complet", "telephone", "email", "statut"],
+                [nom_complet, _champ(p, "telephone"), _champ(p, "email"),
+                 _champ(p, "statut", default="Actif")])
+            resultat["personnel"] += 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"personnel: {exc}")
+
+    # ---------- Programmes (par classe + matiere resolvee localement) ----------
+    try:
+        data, err = client.tous_les_programme()
+        if err:
+            raise RuntimeError(err)
+        for pr in data or []:
+            classe_id = _classe_id_par_nom(_champ(pr, "classe_nom", "classe"))
+            matiere_id = _matiere_id_par_nom(_champ(pr, "matiere_nom", "matiere"))
+            if not classe_id or not matiere_id:
+                continue
+            enseignant_id = None
+            enseignant_nom = _champ(pr, "enseignant_nom")
+            if enseignant_nom:
+                ligne = db.query_one(
+                    "SELECT id FROM personnel WHERE nom_complet LIKE ?",
+                    (f"{enseignant_nom}%",))
+                if ligne:
+                    enseignant_id = ligne["id"]
+            existant = db.query_one(
+                "SELECT id FROM programmes WHERE classe_id = ? AND matiere_id = ?",
+                (classe_id, matiere_id))
+            if existant:
+                db.execute(
+                    "UPDATE programmes SET enseignant_id = ?, coefficient = ? WHERE id = ?",
+                    (enseignant_id, _coef_float(
+                        _champ(pr, "coefficient", default=1)), existant["id"]))
+            else:
+                db.execute(
+                    """INSERT INTO programmes (classe_id, matiere_id, enseignant_id, coefficient)
+                       VALUES (?, ?, ?, ?)""",
+                    (classe_id, matiere_id, enseignant_id,
+                     _coef_float(_champ(pr, "coefficient", default=1))))
+            resultat["programmes"] += 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"programmes: {exc}")
+
+    # ---------- Presences (par eleve_uuid + date) ----------
+    try:
+        data, err = client.toutes_presence()
+        if err:
+            raise RuntimeError(err)
+        for p in data or []:
+            eleve_id = _eleve_id_local(p, _champ(p, "nom"), _champ(p, "prenom"))
+            date_presence = _champ(p, "date_presence", "date")
+            if not eleve_id or not date_presence:
+                continue
+            date = str(date_presence)[:10]
+            existant = db.query_one(
+                "SELECT id FROM presences WHERE eleve_id = ? AND date = ?",
+                (eleve_id, date))
+            statut = _champ(p, "statut", default="Present")
+            motif = _champ(p, "motif") or _champ(p, "justifie")
+            if existant:
+                db.execute(
+                    "UPDATE presences SET statut = ?, motif = ? WHERE id = ?",
+                    (statut, motif, existant["id"]))
+            else:
+                classe_id = db.query_one(
+                    "SELECT classe_id FROM eleves WHERE id = ?", (eleve_id,))
+                db.execute(
+                    """INSERT INTO presences (eleve_id, classe_id, date, statut, motif)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (eleve_id, classe_id["classe_id"] if classe_id else None,
+                     date, statut, motif))
+            resultat["presences"] += 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"presences: {exc}")
+
+    # ---------- Notes (agregees par eleve + matiere + periode) ----------
+    try:
+        data, err = client.note_syndication()
+        if err:
+            raise RuntimeError(err)
+        for n in data or []:
+            eleve_id = _eleve_id_local(n, _champ(n, "nom"), _champ(n, "prenom"))
+            matiere_id = _matiere_id_par_nom(_champ(n, "matiere_nom"))
+            if not eleve_id or not matiere_id:
+                continue
+            periode = _champ(n, "trimestre", default="1er Trimestre")
+            type_eval = str(_champ(n, "type_evaluation", default="") or "").lower()
+            if "devoir" in type_eval and "1" in type_eval:
+                champ = "devoir1"
+            elif "devoir" in type_eval and "2" in type_eval:
+                champ = "devoir2"
+            elif "composition" in type_eval:
+                champ = "composition"
+            else:
+                champ = "devoir1"
+            val = _champ(n, "note")
+            if val is None:
+                continue
+            existant = db.query_one(
+                "SELECT id, devoir1, devoir2, composition FROM notes "
+                "WHERE eleve_id = ? AND matiere_id = ? AND periode = ?",
+                (eleve_id, matiere_id, periode))
+            if existant:
+                actuel = dict(existant)
+                if actuel.get(champ) in (None, ""):
+                    db.execute(
+                        f"UPDATE notes SET {champ} = ? WHERE id = ?",
+                        (val, existant["id"]))
+            else:
+                db.execute(
+                    """INSERT INTO notes (eleve_id, matiere_id, periode, devoir1, devoir2, composition)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (eleve_id, matiere_id, periode,
+                     val if champ == "devoir1" else None,
+                     val if champ == "devoir2" else None,
+                     val if champ == "composition" else None))
+            resultat["notes"] += 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"notes: {exc}")
+
+    # ---------- Paiements (par eleve + montant + type_frais + trimestre) ----------
+    try:
+        data, err = client.paiement_syndication()
+        if err:
+            raise RuntimeError(err)
+        for p in data or []:
+            eleve_id = _eleve_id_local(p, _champ(p, "nom"), _champ(p, "prenom"))
+            if not eleve_id:
+                continue
+            montant = _coef_float(_champ(p, "montant", default=0))
+            type_frais = _champ(p, "type_frais", default="Scolarite")
+            trimestre = _champ(p, "trimestre", default="")
+            date_paiement = _champ(p, "date_paiement", default="")
+            annee_scolaire = _champ(p, "annee_scolaire") or ""
+            mode = _champ(p, "mode_paiement", "mode_reglement")
+
+            # Dedup precise : on prefere la date (2 paiements legitimes du meme
+            # montant/type a des dates differentes sont DISTINCTS).
+            date_locale = (str(date_paiement)[:10] if date_paiement else None)
+            if date_locale:
+                existant = db.query_one(
+                    """SELECT id FROM paiements
+                       WHERE eleve_id = ? AND montant = ? AND type_frais = ?
+                         AND date_paiement = ?""",
+                    (eleve_id, montant, type_frais, date_locale))
+            else:
+                # Sans date, on retombe sur (eleve, montant, type, trimestre) :
+                # risque d'ecrasement, mais c'est le seul rapprochement possible.
+                existant = db.query_one(
+                    """SELECT id FROM paiements
+                       WHERE eleve_id = ? AND montant = ? AND type_frais = ?
+                         AND (trimestre = ? OR (trimestre IS NULL AND ? = ''))""",
+                    (eleve_id, montant, type_frais, trimestre, trimestre))
+            if existant:
+                db.execute(
+                    "UPDATE paiements SET mode_reglement = ? WHERE id = ?",
+                    (mode, existant["id"]))
+            else:
+                db.execute(
+                    """INSERT INTO paiements (eleve_id, montant, mode_reglement,
+                                              type_frais, date_paiement, annee_scolaire, trimestre)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (eleve_id, montant, mode, type_frais, date_locale,
+                     annee_scolaire, trimestre))
+            resultat["paiements"] += 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"paiements: {exc}")
+
+    return resultat
+
+
+def pull_comptes():
+    """Rapatrie les comptes utilisateurs depuis le serveur.
+
+    Upsert par username (identifiant serveur) : si le compte existe deja
+    localement, seuls les champs metadata sont mis a jour (nom, email,
+    telephone, role, actif) — le mot de passe n'est JAMAIS ecrase pour
+    preserver le hash local. Si le compte est nouveau, il est cree avec le
+    hash du serveur, ce qui permet le login multi-poste.
+    Jamais destructif.
+    """
+    from api import client
+
+    resultat = {"ajoutes": 0, "mis_a_jour": 0, "erreurs": []}
+
+    try:
+        data, err = client.comptes_syndication()
+        if err:
+            raise RuntimeError(err)
+        for c in data or []:
+            nom = _champ(c, "nom") or ""
+            prenom = _champ(c, "prenom") or ""
+            username = (_champ(c, "identifiant")
+                        or (_champ(c, "email").split("@")[0]
+                            if _champ(c, "email") else "")
+                        or f"{nom.lower()}.{prenom.lower()}".strip("."))
+            if not username:
+                continue
+            password = _champ(c, "mot_de_passe") or ""
+            role = (_champ(c, "role") or "gestionnaire").lower()
+            if role not in ("directeur", "gestionnaire"):
+                role = "gestionnaire"
+            statut_brut = _champ(c, "statut")
+            actif = 1 if (statut_brut is None or _bool_int(statut_brut)
+                          or str(statut_brut).strip().lower()
+                          in ("actif", "active", "oui", "vrai", "yes")) else 0
+            nom_complet = f"{nom} {prenom}".strip()
+            telephone = _champ(c, "telephone")
+            email = _champ(c, "email")
+            existant = db.query_one(
+                "SELECT id FROM utilisateurs WHERE username = ?", (username,))
+            if existant:
+                db.execute(
+                    "UPDATE utilisateurs SET nom_complet=?, email=?, telephone=?, "
+                    "role=?, actif=? WHERE id=?",
+                    (nom_complet, email, telephone, role, actif, existant["id"]))
+                resultat["mis_a_jour"] += 1
+            else:
+                if not password:
+                    continue
+                db.execute(
+                    """INSERT INTO utilisateurs (nom_complet, username, email,
+                                                telephone, password, role, actif)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (nom_complet, username, email, telephone, password, role, actif))
+                resultat["ajoutes"] += 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"comptes: {exc}")
 
     return resultat

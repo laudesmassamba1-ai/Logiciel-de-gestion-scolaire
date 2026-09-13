@@ -1,5 +1,6 @@
 
 import csv
+from urllib.parse import quote
 
 from database import db
 from repositories.base import RepositoryBase, _gen_reference
@@ -51,8 +52,20 @@ class FinanceRepository(RepositoryBase):
         return reference
 
     def delete_transaction(self, transaction_id):
-        self._route_write("DELETE", f"/supprimerPaiement/{transaction_id}", {},
-                          db.execute, "DELETE FROM transactions WHERE id = ?", (transaction_id,))
+        ligne = db.query_one("SELECT * FROM transactions WHERE id = ?",
+                             (transaction_id,))
+        if not ligne:
+            return
+        if ligne["paiement_id"]:
+            # Encaissement d'eleve : l'ecriture de caisse ne doit pas
+            # survivre a son origine, on supprime aussi le paiement source.
+            self._supprimer_paiement(ligne["paiement_id"])
+            return
+        reference = ligne["reference"]
+        if reference:
+            self._route_write("DELETE", f"/supprimerPaiement/{quote(reference)}", {},
+                              db.execute, "DELETE FROM transactions WHERE id = ?",
+                              (transaction_id,))
 
     def caisse_totals(self):
 
@@ -89,9 +102,17 @@ class FinanceRepository(RepositoryBase):
         sql += " ORDER BY c.nom, t.type_frais"
         return db.query(sql, params)
 
+    def _classe_nom(self, classe_id):
+        if not classe_id:
+            return None
+        row = db.query_one("SELECT nom FROM classes WHERE id = ?", (classe_id,))
+        return row["nom"] if row else None
+
     def add_tarif(self, classe_id, type_frais, montant, annee_scolaire=""):
+        classe_nom = self._classe_nom(classe_id)
         payload = {"classe_id": classe_id, "type_frais": type_frais,
-                   "montant": montant, "annee_scolaire": annee_scolaire}
+                   "montant": montant, "annee_scolaire": annee_scolaire,
+                   "classe_nom": classe_nom}
         return self._route_write(
             "POST", "/tarifs-scolarite", payload,
             db.execute,
@@ -99,8 +120,10 @@ class FinanceRepository(RepositoryBase):
             (classe_id, type_frais, montant, annee_scolaire))
 
     def update_tarif(self, tarif_id, classe_id, type_frais, montant, annee_scolaire=""):
+        classe_nom = self._classe_nom(classe_id)
         payload = {"classe_id": classe_id, "type_frais": type_frais,
-                   "montant": montant, "annee_scolaire": annee_scolaire}
+                   "montant": montant, "annee_scolaire": annee_scolaire,
+                   "classe_nom": classe_nom}
         self._route_write(
             "PUT", f"/tarifs-scolarite/{tarif_id}", payload,
             db.execute,
@@ -108,7 +131,14 @@ class FinanceRepository(RepositoryBase):
             (classe_id, type_frais, montant, annee_scolaire, tarif_id))
 
     def delete_tarif(self, tarif_id):
-        self._route_write("DELETE", f"/tarifs-scolarite/{tarif_id}", {},
+        row = db.query_one(
+            """SELECT c.nom AS classe_nom, t.type_frais, t.annee_scolaire
+               FROM tarifs t LEFT JOIN classes c ON c.id = t.classe_id
+               WHERE t.id = ?""", (tarif_id,))
+        payload = {"classe_nom": row["classe_nom"] if row else None,
+                   "type_frais": row["type_frais"] if row else None,
+                   "annee_scolaire": row["annee_scolaire"] if row else None}
+        self._route_write("DELETE", f"/tarifs-scolarite/{tarif_id}", payload,
                           db.execute, "DELETE FROM tarifs WHERE id = ?", (tarif_id,))
 
 
@@ -144,22 +174,77 @@ class FinanceRepository(RepositoryBase):
         sql += " ORDER BY p.date_paiement DESC, p.id DESC"
         return db.query(sql, params)
 
+    def _creer_ecriture_caisse(self, paiement_id):
+        """Ecriture de caisse (type 'entree') liee a un paiement d'eleve.
+
+        C'est ce qui rend un encaissement visible dans la Caisse (qui ne
+        lit que la table `transactions`) et dans tous les agregats qui en
+        dependent : solde, export, encaissements du jour, tresorerie.
+        """
+        p = db.query_one(
+            """SELECT p.*, e.prenom, e.nom
+               FROM paiements p JOIN eleves e ON e.id = p.eleve_id
+               WHERE p.id = ?""", (paiement_id,))
+        if not p:
+            return
+        reference = _gen_reference("REC")
+        beneficiaire = (
+            f"{p['prenom'] or ''} {p['nom'] or ''}".strip() or "-")
+        db.execute(
+            """INSERT INTO transactions
+                   (date, reference, beneficiaire, motif, categorie, montant,
+                    type, mode_reglement, annee_scolaire, paiement_id)
+               VALUES (?, ?, ?, ?, ?, ?, 'entree', ?, ?, ?)""",
+            (p["date_paiement"], reference, beneficiaire,
+             p["type_frais"] or "Paiement", p["type_frais"] or "Autres",
+             p["montant"], p["mode_reglement"], p["annee_scolaire"], paiement_id))
+
+    def _supprimer_paiement(self, paiement_id):
+        """Supprime un paiement d'eleve et son ecriture de caisse liee.
+
+        Route la suppression vers le serveur quand l'eleve a un uuid_client
+        (dedoublonne par la cle composee), sinon suppression locale pure
+        (donnee importee sans identifiant serveur).
+        """
+        row = db.query_one(
+            """SELECT e.uuid_client AS uuid_client, p.montant, p.trimestre,
+                      p.type_frais, p.annee_scolaire
+               FROM paiements p JOIN eleves e ON e.id = p.eleve_id
+               WHERE p.id = ?""", (paiement_id,))
+        if row and row["uuid_client"]:
+            ref = "|".join(str(row.get(k) or "")
+                           for k in ("uuid_client", "montant", "trimestre",
+                                     "type_frais", "annee_scolaire"))
+            self._route_write("DELETE", f"/supprimerPaiement/{quote(ref)}", {},
+                              db.execute, "DELETE FROM paiements WHERE id = ?",
+                              (paiement_id,))
+        elif row:
+            db.execute("DELETE FROM paiements WHERE id = ?", (paiement_id,))
+        db.execute("DELETE FROM transactions WHERE paiement_id = ?", (paiement_id,))
+
     def add_paiement(self, eleve_id, montant, mode_reglement, type_frais,
                      annee_scolaire="", trimestre=""):
+        eleve = db.query_one(
+            "SELECT e.uuid_client, c.nom AS classe_nom FROM eleves e"
+            " LEFT JOIN classes c ON c.id = e.classe_id WHERE e.id = ?",
+            (eleve_id,))
         payload = {"eleve_id": eleve_id, "montant": montant,
                    "mode_reglement": mode_reglement, "type_frais": type_frais,
-                   "annee_scolaire": annee_scolaire, "trimestre": trimestre}
-        return self._route_write(
+                   "annee_scolaire": annee_scolaire, "trimestre": trimestre,
+                   "eleve_uuid": eleve["uuid_client"] if eleve else None,
+                   "classe_nom": eleve["classe_nom"] if eleve else None}
+        paiement_id = self._route_write(
             "POST", "/paiement", payload,
             db.execute,
             """INSERT INTO paiements (eleve_id, montant, mode_reglement, type_frais,
                                       date_paiement, annee_scolaire, trimestre)
                VALUES (?, ?, ?, ?, date('now', 'localtime'), ?, ?)""",
             (eleve_id, montant, mode_reglement, type_frais, annee_scolaire, trimestre))
+        self._creer_ecriture_caisse(paiement_id)
+        return paiement_id
 
     def delete_paiement(self, paiement_id):
-        self._route_write("DELETE", f"/supprimerPaiement/{paiement_id}", {},
-                          db.execute, "DELETE FROM paiements WHERE id = ?", (paiement_id,))
+        self._supprimer_paiement(paiement_id)
 
     def solde_eleve(self, eleve_id, annee_scolaire=""):
         eleve = db.query_one("SELECT * FROM eleves WHERE id = ?", (eleve_id,))

@@ -216,3 +216,148 @@ class SimplePieChart(_BaseChart):
                              Qt.AlignLeft | Qt.AlignVCenter, elide)
             y += row_h
         painter.end()
+
+
+class SimpleLineChart(_BaseChart):
+    """Courbes multi-series : UNE LIGNE COLOREE PAR SERIE.
+
+    ``set_series([(nom, [v1, v2, ...]), ...], labels)``
+    - chaque serie a sa propre couleur (CHART_COLORS) ;
+    - grille horizontale, valeurs min/max, legende avec point par serie ;
+    - lecture type « tresorerie / encaissements sur 12 mois ».
+    """
+
+    def __init__(self, parent=None, titre=""):
+        super().__init__(parent, titre)
+        self.series = []
+        self.setMinimumHeight(180)
+
+    def set_series(self, series, labels=None):
+
+        self.series = [
+            (nom, [float(v) if v is not None else 0.0 for v in valeurs])
+            for nom, valeurs in series]
+        if labels is not None:
+            self.labels = list(labels)
+        self.update()
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        y0 = self._draw_titre(painter, h)
+
+        if not self.series or not self.labels:
+            self._draw_empty(painter, y0, max(h - y0, 60))
+            painter.end()
+            return
+
+        font = QFont()
+        font.setPointSize(8)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+
+        flat = [v for _, vals in self.series for v in vals]
+        if not flat:
+            self._draw_empty(painter, y0, max(h - y0, 60))
+            painter.end()
+            return
+        vmin = min(flat)
+        vmax = max(flat)
+        if vmax - vmin <= 0:
+            vmax = vmin + 1
+        pad = (vmax - vmin) * 0.08
+        vmin -= pad
+        vmax += pad
+        span = vmax - vmin
+        if span <= 0:
+            span = 1.0
+
+        nb_points = max(len(vals) for _, vals in self.series)
+        n_legende = len(self.series)
+
+        left = 48
+        right = 10
+        top = y0 + 14
+        legend_h = (n_legende * 16 + 8) if n_legende > 1 else 26
+        bottom = h - 30 - legend_h
+        if bottom - top < 60:
+            bottom = top + 60
+        step_x = (w - left - right) / max(nb_points - 1, 1)
+
+        def _x(i):
+            return left + i * step_x
+
+        def _y(v):
+            return bottom - (v - vmin) / span * (bottom - top)
+
+        # Grille horizontale (4 divisions) + valeurs.
+        for i in range(5):
+            gy = top + (bottom - top) * i / 4
+            val = vmax - (vmax - vmin) * i / 4
+            pen = QPen(QColor(C_EMPTY_STATE) if i in (0, 4)
+                       else QColor(C_EMPTY_STATE).lighter(160), 1)
+            pen.setStyle(Qt.SolidLine if i in (0, 4) else Qt.DashLine)
+            painter.setPen(pen)
+            painter.drawLine(int(left), int(gy), int(w - right), int(gy))
+            painter.setPen(QColor(C_TEXT_MUTED))
+            texte = f"{val:,.0f}".replace(",", " ")
+            painter.drawText(2, int(gy) - 7, left - 8, 14,
+                             Qt.AlignRight, texte)
+
+        # Axe X : echantillonne au plus 10 etiquettes sans chevauchement.
+        pas = 1
+        while nb_points / pas > 10:
+            pas += 1
+        for ix in range(nb_points):
+            if ix % pas != 0 and ix != nb_points - 1:
+                continue
+            label_i = ix if ix < len(self.labels) else len(self.labels) - 1
+            label = str(self.labels[label_i])
+            slot = step_x * pas * 0.98
+            elide = fm.elidedText(label, Qt.ElideRight, int(max(slot, 24)))
+            painter.setPen(QColor(C_TEXT_MUTED))
+            painter.drawText(int(_x(ix) - slot / 2), int(bottom) + 5,
+                             int(slot), 16, Qt.AlignHCenter, elide)
+
+        # Une polyline coloriee par serie, traits renforces pour la lecture.
+        for i, (nom, vals) in enumerate(self.series):
+            couleur = _color(i)
+            for j in range(len(vals) - 1):
+                x1, y1 = _x(j), _y(vals[j])
+                x2, y2 = _x(j + 1), _y(vals[j + 1])
+                pen = QPen(couleur, 3 if i == 0 else 2)
+                pen.setCapStyle(Qt.RoundCap)
+                painter.setPen(pen)
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+            for j, v in enumerate(vals):
+                x, y = _x(j), _y(v)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(couleur)
+                painter.drawEllipse(int(x) - 3, int(y) - 3, 6, 6)
+
+        # Legende : pastille + nom + dernier point.
+        if n_legende > 1:
+            ly = (h - legend_h) + 4
+            ligne_max = (w - left - right) / n_legende
+            for i, (nom, vals) in enumerate(self.series):
+                x = left + i * ligne_max
+                couleur = _color(i)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(couleur)
+                painter.drawRoundedRect(int(x), int(ly), 10, 10, 3, 3)
+                painter.setPen(QColor(C_TEXT))
+                dernier = vals[-1] if vals else 0.0
+                t_leg = f"{nom} : {dernier:,.0f}".replace(",", " ")
+                elide = fm.elidedText(t_leg, Qt.ElideRight,
+                                      int(ligne_max - 14))
+                painter.drawText(int(x) + 14, int(ly), int(ligne_max - 14),
+                                 14, Qt.AlignLeft, elide)
+        else:
+            ly = h - legend_h + 4
+            painter.setPen(QColor(C_TEXT_MUTED))
+            dernier = self.series[0][1][-1] if self.series[0][1] else 0.0
+            painter.drawText(int(left), int(ly), w - left - right, 14,
+                             Qt.AlignRight,
+                             f"Dernier point : {dernier:,.0f}".replace(",", " "))
+        painter.end()

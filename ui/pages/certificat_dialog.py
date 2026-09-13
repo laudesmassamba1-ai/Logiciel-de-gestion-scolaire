@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
 
 from repositories import repos
 from services import reports
+from ui import toast
 
 
 def open_certificat_dialog(parent):
@@ -55,6 +56,6 @@ def open_certificat_dialog(parent):
                 eleve["classe_nom"] = classe["nom"]
             try:
                 reports.certificat_scolarite(eleve, repos.parametres())
-                QMessageBox.information(parent, "Certificat", "Certificat genere avec succes.")
+                toast.succes(parent, "Certificat genere avec succes.")
             except Exception as exc:
                 QMessageBox.warning(parent, "Certificat", f"Erreur : {exc}")

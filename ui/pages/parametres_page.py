@@ -9,11 +9,19 @@ from PyQt5.QtWidgets import (
 )
 
 from repositories import repos
+from ui import toast
 from ui.loader import apply_ui
 from ui.pages.helpers import (
-    _btn, _simple_btn_style,
+    _btn, _simple_btn_style, _styler_carte,
 )
-from core.config import STYLE_BTN_PRIMARY, C_TEXT, C_BORDER, C_GOLD, C_GOLD_BG, C_GOLD_PRESSED, C_GOLD_BORDER, C_RED, C_RED_BG, C_RED_BORDER, C_TEXT_MUTED, C_BG_ALT
+from core.config import (
+    STYLE_BTN_PRIMARY, STYLE_BTN_DANGER, STYLE_BTN_SECONDARY,
+    STYLE_GROUP_BOX, STYLE_HELP_MUTED, STYLE_LABEL_BOLD_MUTED,
+    STYLE_IMAGE_PLACEHOLDER, STYLE_LIST_CARD, STYLE_BTN_MINI_DANGER,
+    STYLE_BTN_ADD_SMALL,
+    C_GOLD_BG, C_GOLD_PRESSED, C_GOLD_BORDER,
+    C_RED_BG, C_RED, C_RED_BORDER,
+)
 
 
 def parametres(page, ctx):
@@ -30,14 +38,57 @@ def parametres(page, ctx):
         lay_refus.addWidget(refuse)
         return
     apply_ui("parametres/parametres.ui", page)
+    page.setStyleSheet("")
+    for _card in ("card_inputs", "card1", "card2", "card3", "previewCard"):
+        _carte = getattr(page, _card, None)
+        if _carte is not None:
+            _styler_carte(_carte)
+
+    page.btn_delete.setStyleSheet(STYLE_BTN_DANGER)
+    page.btn_update.setStyleSheet(STYLE_BTN_PRIMARY)
+
+    from PyQt5.QtWidgets import QSplitter
+    body = page.horizontalLayout_Body
+    split = QSplitter(Qt.Horizontal)
+    split.setObjectName("parametresSplit")
+    split.setHandleWidth(6)
+    split.setChildrenCollapsible(False)
+    body.removeWidget(page.scrollArea)
+    body.removeWidget(page.previewCard)
+    split.addWidget(page.scrollArea)
+    split.addWidget(page.previewCard)
+    split.setStretchFactor(0, 1)
+    split.setStretchFactor(1, 0)
+    split.setSizes([860, 300])
+    body.insertWidget(0, split, 1)
+
+    scroll_lay = page.verticalLayout_Scroll
+
+    def _enlever_stretch_final():
+        from PyQt5.QtWidgets import QSpacerItem
+        while scroll_lay.count():
+            dernier = scroll_lay.itemAt(scroll_lay.count() - 1)
+            if isinstance(dernier, QSpacerItem) and getattr(
+                    dernier, "stretch", lambda: 0)() > 0:
+                scroll_lay.removeItem(dernier)
+            else:
+                break
+
+    def _ajouter_au_scroll(widget):
+        _enlever_stretch_final()
+        scroll_lay.addWidget(widget)
+        scroll_lay.addStretch(1)
+
 
     from PyQt5.QtWidgets import QGroupBox, QListWidget, QLabel as QLbl
     from PyQt5.QtGui import QPixmap
     from PyQt5.QtCore import Qt as QtConst
 
     backup_group = QGroupBox("Sauvegarde & Restauration")
-    backup_group.setStyleSheet(f"QGroupBox {{ font-weight: bold; color: {C_TEXT}; border: 1px solid {C_BORDER}; border-radius: 8px; padding: 12px; margin-top: 8px; }}")
+    backup_group.setStyleSheet(STYLE_GROUP_BOX)
     backup_lay = QVBoxLayout(backup_group)
+    backup_lay.setContentsMargins(10, 10, 10, 10)
+    backup_lay.setSpacing(8)
 
     btn_row = QHBoxLayout()
     page.btn_backup = QPushButton("Creer une sauvegarde")
@@ -56,36 +107,38 @@ def parametres(page, ctx):
     backup_lay.addLayout(btn_row)
 
     page.list_backups = QListWidget()
-    page.list_backups.setMaximumHeight(120)
-    page.list_backups.setStyleSheet(f"QListWidget {{ border: 1px solid {C_BORDER}; border-radius: 6px; background: {C_BG_ALT}; }}")
+    page.list_backups.setMaximumHeight(96)
+    page.list_backups.setStyleSheet(STYLE_LIST_CARD)
     backup_lay.addWidget(page.list_backups)
 
     page.lbl_backups_empty = QLbl("Aucune sauvegarde disponible")
-    page.lbl_backups_empty.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 12px;")
+    page.lbl_backups_empty.setStyleSheet(STYLE_HELP_MUTED)
     page.lbl_backups_empty.setAlignment(Qt.AlignCenter)
     backup_lay.addWidget(page.lbl_backups_empty)
 
-    page.verticalLayout.addWidget(backup_group)
+    _ajouter_au_scroll(backup_group)
 
     sync_group = QGroupBox("Synchronisation serveur")
-    sync_group.setStyleSheet(backup_group.styleSheet())
+    sync_group.setStyleSheet(STYLE_GROUP_BOX)
     sync_lay = QVBoxLayout(sync_group)
+    sync_lay.setContentsMargins(10, 10, 10, 10)
+    sync_lay.setSpacing(8)
     lbl_sync = QLbl("Rapatrie du serveur la structure de l'ecole modifiee par "
                     "le directeur : cycles, classes, matieres, annees "
                     "scolaires et tarifs. La recuperation se fait aussi "
                     "automatiquement toutes les minutes quand le serveur "
                     "est joignable.")
-    lbl_sync.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 12px;")
+    lbl_sync.setStyleSheet(STYLE_HELP_MUTED)
     lbl_sync.setWordWrap(True)
     btn_sync = QPushButton("Recuperer maintenant depuis le serveur")
     btn_sync.setCursor(Qt.PointingHandCursor)
-    btn_sync.setStyleSheet(STYLE_BTN_PRIMARY)
+    btn_sync.setStyleSheet(STYLE_BTN_SECONDARY)
     row_sync = QHBoxLayout()
     row_sync.addWidget(btn_sync)
     row_sync.addStretch(1)
     sync_lay.addWidget(lbl_sync)
     sync_lay.addLayout(row_sync)
-    page.verticalLayout.addWidget(sync_group)
+    _ajouter_au_scroll(sync_group)
 
     def do_sync():
         from api.client import api_disponible
@@ -136,19 +189,22 @@ def parametres(page, ctx):
     for key, label_text in [("bandeau_haut", "Bandeau haut"), ("bandeau_bas", "Bandeau bas"), ("signature", "Signature")]:
         box = QVBoxLayout()
         lbl_title = QLbl(label_text)
-        lbl_title.setStyleSheet(f"font-weight: bold; color: {C_TEXT_MUTED}; font-size: 11px; border: none;")
+        lbl_title.setStyleSheet(STYLE_LABEL_BOLD_MUTED)
         lbl_title.setAlignment(Qt.AlignCenter)
         img_lbl = QLbl()
         img_lbl.setObjectName(f"lbl_image_{key}")
-        img_lbl.setFixedSize(200, 80)
-        img_lbl.setStyleSheet(f"border: 1px dashed {C_BORDER}; border-radius: 6px; background: {C_BG_ALT};")
+        img_lbl.setFixedSize(190, 72)
+        img_lbl.setStyleSheet(STYLE_IMAGE_PLACEHOLDER)
         img_lbl.setAlignment(Qt.AlignCenter)
         img_lbl.setText("Aucune image")
         setattr(page, f"lbl_image_{key}", img_lbl)
         box.addWidget(lbl_title)
         box.addWidget(img_lbl)
         img_lay.addLayout(box)
-    page.verticalLayout.addLayout(img_lay)
+
+    img_host = QWidget()
+    img_host.setLayout(img_lay)
+    _ajouter_au_scroll(img_host)
 
     images = {"bandeau_haut": None, "bandeau_bas": None, "signature": None}
     upload_map = {"bandeau_haut": page.btn_upload1,
@@ -165,7 +221,7 @@ def parametres(page, ctx):
                                     "bandeau_haut", "bandeau_bas", "signature")
                       if params.get(cle))
         page.lbl_progression.setText(
-            f"Progression de la configuration : {round(remplis / 7 * 100)}%")
+            f"Configuration : {round(remplis / 7 * 100)}%")
         _display_images(params)
         _load_appreciations()
 
@@ -218,10 +274,12 @@ def parametres(page, ctx):
     from PyQt5.QtGui import QFont
 
     app_group = QGroupBox("Appreciations (notes)")
-    app_group.setStyleSheet(f"QGroupBox {{ font-weight: bold; color: {C_TEXT}; border: 1px solid {C_BORDER}; border-radius: 8px; padding: 12px; margin-top: 8px; }}")
+    app_group.setStyleSheet(STYLE_GROUP_BOX)
     app_lay = QVBoxLayout(app_group)
+    app_lay.setContentsMargins(10, 10, 10, 10)
+    app_lay.setSpacing(8)
     lbl_app_help = QLbl("Configurez les seuils et libelles des appreciations affichees pour les notes.")
-    lbl_app_help.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 12px;")
+    lbl_app_help.setStyleSheet(STYLE_HELP_MUTED)
     lbl_app_help.setWordWrap(True)
     app_lay.addWidget(lbl_app_help)
 
@@ -236,15 +294,13 @@ def parametres(page, ctx):
         spin.setRange(0, 20)
         spin.setValue(seuil)
         spin.setFixedWidth(60)
-        spin.setStyleSheet(f"border: 1px solid {C_BORDER}; border-radius: 6px; padding: 4px 8px;")
         lbl_seuil = QLbl("/20  →")
-        lbl_seuil.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 12px; border: none;")
+        lbl_seuil.setStyleSheet(STYLE_HELP_MUTED)
         inp = QLineEdit(libelle)
         inp.setPlaceholderText("Nom de l'appreciation")
-        inp.setStyleSheet(f"border: 1px solid {C_BORDER}; border-radius: 6px; padding: 4px 8px;")
         btn_suppr = QPushButton("✕")
         btn_suppr.setFixedSize(26, 26)
-        btn_suppr.setStyleSheet(f"background: {C_RED_BG}; color: {C_RED}; border: 1px solid {C_RED_BORDER}; border-radius: 13px; font-size: 12px; font-weight: bold;")
+        btn_suppr.setStyleSheet(STYLE_BTN_MINI_DANGER)
         row.addWidget(spin)
         row.addWidget(lbl_seuil)
         row.addWidget(inp, 1)
@@ -265,11 +321,11 @@ def parametres(page, ctx):
 
     btn_ajouter_app = QPushButton("+ Ajouter un palier")
     btn_ajouter_app.setCursor(Qt.PointingHandCursor)
-    btn_ajouter_app.setStyleSheet(f"background: {C_GOLD_BG}; color: {C_GOLD_PRESSED}; border: 1px solid {C_GOLD_BORDER}; border-radius: 8px; padding: 6px 14px; font-weight: 600; font-size: 12px;")
+    btn_ajouter_app.setStyleSheet(STYLE_BTN_ADD_SMALL)
     btn_ajouter_app.clicked.connect(lambda: _ajouter_ligne_app())
     app_lay.addWidget(btn_ajouter_app)
 
-    page.verticalLayout.addWidget(app_group)
+    _ajouter_au_scroll(app_group)
 
     def _load_appreciations():
         from services.appreciations import lire_config
@@ -308,12 +364,12 @@ def parametres(page, ctx):
                 repos.set_parametre(key, str(dest))
         page.lbl_status.setText("Configuration mise a jour.")
         _save_appreciations()
-        QMessageBox.information(page, "Parametres", "Configuration enregistree.")
+        toast.succes(page, "Configuration enregistree.")
         load()
 
     def delete_config():
-        if QMessageBox.question(page, "Parametres",
-                                "Supprimer la configuration ?") == QMessageBox.Yes:
+        from ui.pages.helpers import confirmer
+        if confirmer(page, "Supprimer la configuration ?", "Parametres"):
             repos.delete_parametres()
             load()
             page.lbl_status.setText("Configuration supprimee.")
@@ -322,8 +378,7 @@ def parametres(page, ctx):
         from services.backup import backup_database
         try:
             path = backup_database()
-            QMessageBox.information(page, "Sauvegarde",
-                                    f"Sauvegarde creee avec succes :\n{path}")
+            toast.succes(page, f"Sauvegarde creee avec succes :\n{path}")
             _refresh_backups()
         except Exception as e:
             QMessageBox.critical(page, "Erreur", f"Echec de la sauvegarde :\n{e}")
@@ -335,9 +390,9 @@ def parametres(page, ctx):
             page, "Restaurer une sauvegarde", "", "Fichiers DB (*.db)")
         if not path:
             return
-        if QMessageBox.question(page, "Restauration",
-                                "Restaurer cette sauvegarde ?\n"
-                                "L'application redemarrera.") == QMessageBox.Yes:
+        from ui.pages.helpers import confirmer
+        if confirmer(page, "Restaurer cette sauvegarde ?\n"
+                      "L'application redemarrera.", "Restauration"):
             try:
                 restore_database(path)
                 QMessageBox.information(page, "Restauration",
@@ -366,8 +421,10 @@ def parametres(page, ctx):
         backups = list_backups()
         idx = page.list_backups.row(item)
         if 0 <= idx < len(backups):
-            if QMessageBox.question(page, "Supprimer",
-                                    f"Supprimer la sauvegarde {backups[idx]['name']} ?") == QMessageBox.Yes:
+            from ui.pages.helpers import confirmer
+            if confirmer(page,
+                         f"Supprimer la sauvegarde {backups[idx]['name']} ?",
+                         "Supprimer"):
                 delete_backup(backups[idx]["path"])
                 _refresh_backups()
 

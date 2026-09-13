@@ -13,51 +13,61 @@
   <property name="windowTitle">
    <string>Gestion Scolaire</string>
   </property>
-  <property name="styleSheet">
-   <string>
-    QMainWindow { background-color: #F5F3EF; }
+<property name="styleSheet">
+     <string>
+    QMainWindow { background-color: #E7EBF3; }
     #sidebar {
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #27304A, stop:1 #1B2132);
-        border-right: 1px solid #141A29;
+        background-color: #F2F5FA;
+        border-right: 1px solid #C9D2DF;
+        border-top: 1px solid #FFFFFF;
     }
     #lbl_logo {
-        color: #FFFFFF; font-size: 17px; font-weight: 800;
-        padding: 12px 22px 2px 22px; letter-spacing: 1.5px;
+        color: #20202A; font-size: 13px; font-weight: 800;
+        padding: 10px 18px 0px 20px; letter-spacing: 1px;
     }
     #lbl_logo_subtitle {
-        color: #F0C157; font-size: 10px; font-weight: 600;
-        padding: 0px 22px 12px 22px; letter-spacing: 1px;
+        color: #A57B0E; font-size: 10px; font-weight: 700;
+        padding: 0px 18px 8px 20px; letter-spacing: 0.8px;
     }
     #lbl_section_general, #lbl_section_scolarite,
     #lbl_section_finances, #lbl_section_administration {
-        color: #7E87A3; font-size: 9px; font-weight: 800;
-        letter-spacing: 2px; padding: 12px 22px 4px 24px;
+        color: #4A5568; font-size: 11px; font-weight: 800;
+        letter-spacing: 1.1px; margin: 0 10px;
+        padding: 10px 0px 4px 0px;
     }
     #sidebar QPushButton {
-        color: #D7DBE8; text-align: left; padding: 9px 16px;
-        border: none; margin: 2px 12px;
-        border-radius: 10px; font-size: 13px; font-weight: 500;
+        color: #3E4451; text-align: left; padding: 8px 9px;
+        border: 1px solid transparent; border-bottom: 2px solid transparent;
+        margin: 1px 8px;
+        border-radius: 10px; font-size: 12px; font-weight: 600;
         background: transparent;
     }
-    #sidebar QPushButton:hover { background-color: rgba(255,255,255,0.07); color: #FFFFFF; }
-    #sidebar QPushButton:pressed { background-color: rgba(255,255,255,0.12); }
+    #sidebar QPushButton:hover {
+        background-color: #FFFFFF; color: #2A2F3A;
+        border: 1px solid #D7DEEA; border-bottom: 2px solid #C2CBD8;
+    }
+    #sidebar QPushButton:pressed { background-color: #ECEFF5; }
     #sidebar QPushButton:checked {
-        background-color: rgba(244,186,63,0.16); color: #F6C866; font-weight: 700;
-        border-left: 3px solid #EAB43B;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 #F6C23E, stop:0.6 #DEA821, stop:1 #C28C0C);
+        color: #3F2B02; font-weight: 700;
+        border: 1px solid #B88E12; border-bottom: 2px solid #9A7007;
     }
     #userBox {
-        background-color: rgba(255,255,255,0.06);
-        border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; margin: 8px 14px;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 #FFFFFF, stop:0.7 #F5F8FC, stop:1 #E9EEF6);
+        border: 1px solid #D7DEEA; border-bottom: 2px solid #C2CBD8;
+        border-radius: 14px; margin: 8px 10px;
     }
-    #lbl_user_name { color: #FFFFFF; font-size: 13px; font-weight: 700; }
-    #lbl_user_role { color: #F0C157; font-size: 11px; font-weight: 600; }
+    #lbl_user_name { color: #20202A; font-size: 13px; font-weight: 700; }
+    #lbl_user_role { color: #A57B0E; font-size: 11px; font-weight: 700; }
     #btn_logout {
-        color: #AEB4C6; text-align: left; border: none; font-size: 12px;
-        font-weight: 600; padding: 6px 0px; background: transparent; border-radius: 8px;
+        color: #8A93A6; text-align: left; border: none; font-size: 12px;
+        font-weight: 600; padding: 5px 0px; background: transparent; border-radius: 8px;
     }
-    #btn_logout:hover { color: #FFFFFF; background-color: rgba(220,80,80,0.18); }
-   </string>
-  </property>
+    #btn_logout:hover { color: #B91C1C; background-color: #FDECEC; }
+    </string>
+    </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="mainLayout">
     <property name="spacing">
@@ -76,19 +86,19 @@
      <number>0</number>
     </property>
     <item>
-     <widget class="QFrame" name="sidebar">
-      <property name="minimumSize">
-       <size>
-        <width>252</width>
-        <height>0</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>252</width>
-        <height>16777215</height>
-       </size>
-      </property>
+<widget class="QFrame" name="sidebar">
+       <property name="minimumSize">
+        <size>
+         <width>150</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>380</width>
+         <height>16777215</height>
+        </size>
+       </property>
       <layout class="QVBoxLayout" name="verticalLayout">
        <property name="spacing">
         <number>2</number>
@@ -165,7 +175,7 @@
           <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="text">
-          <string>Liste des Eleves</string>
+          <string>Eleves</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -186,25 +196,12 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btn_nav_cycles">
-         <property name="cursor">
-          <cursorShape>PointingHandCursor</cursorShape>
-         </property>
-         <property name="text">
-          <string>Cycles &amp;&amp; Annees</string>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QPushButton" name="btn_nav_notes">
          <property name="cursor">
           <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="text">
-          <string>Notes et Bulletins</string>
+          <string>Notes &amp;&amp; Bulletins</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -251,6 +248,19 @@
         </widget>
        </item>
        <item>
+        <widget class="QPushButton" name="btn_nav_cycles">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>Cycles &amp;&amp; Annees</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QLabel" name="lbl_section_finances">
          <property name="text">
           <string>FINANCES</string>
@@ -263,20 +273,7 @@
           <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="text">
-          <string>Gestion Caisse</string>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btn_nav_tarifs">
-         <property name="cursor">
-          <cursorShape>PointingHandCursor</cursorShape>
-         </property>
-         <property name="text">
-          <string>Tarifs &amp;&amp; Scolarite</string>
+          <string>Caisse</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -290,6 +287,19 @@
          </property>
          <property name="text">
           <string>Paiements &amp;&amp; Suivi</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_tarifs">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>Tarifs &amp;&amp; Scolarite</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -317,12 +327,12 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btn_nav_parametres">
+        <widget class="QPushButton" name="btn_nav_comptes">
          <property name="cursor">
           <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="text">
-          <string>Parametres Etablissement</string>
+          <string>Comptes</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -330,12 +340,12 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btn_nav_comptes">
+        <widget class="QPushButton" name="btn_nav_parametres">
          <property name="cursor">
           <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="text">
-          <string>Gestion des Comptes</string>
+          <string>Parametres</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -359,16 +369,16 @@
         <widget class="QFrame" name="userBox">
          <layout class="QVBoxLayout" name="userBoxLayout">
           <property name="leftMargin">
-           <number>15</number>
-          </property>
-          <property name="topMargin">
            <number>12</number>
           </property>
+          <property name="topMargin">
+           <number>10</number>
+          </property>
           <property name="rightMargin">
-           <number>15</number>
+           <number>12</number>
           </property>
           <property name="bottomMargin">
-           <number>15</number>
+           <number>10</number>
           </property>
           <property name="spacing">
            <number>2</number>
@@ -405,11 +415,11 @@
     </item>
      <item>
       <widget class="QStackedWidget" name="stackedWidget">
-       <property name="styleSheet">
-        <string>background-color: #F5F3EF;</string>
-       </property>
-      </widget>
-     </item>
+<property name="styleSheet">
+         <string>QStackedWidget#stackedWidget { background-color: transparent; }</string>
+        </property>
+       </widget>
+      </item>
    </layout>
   </widget>
  </widget>

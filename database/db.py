@@ -278,6 +278,33 @@ class Database:
         if "annee_scolaire" not in trans_cols:
             conn.execute("ALTER TABLE transactions ADD COLUMN annee_scolaire TEXT")
 
+        # Chaque paiement d'eleve cree desormais une ecriture de caisse
+        # (type 'entree') liee par paiement_id. La Caisse ne lit que la table
+        # transactions : sans ce rattachement, un encaissement enregistre
+        # dans Paiements n'apparait jamais en Caisse. Cette migration cree
+        # a posteriori les ecritures manquantes pour les paiements deja
+        # enregistres (idempotente : rien si l'ecriture existe deja).
+        if "paiement_id" not in trans_cols:
+            conn.execute("ALTER TABLE transactions ADD COLUMN paiement_id INTEGER")
+            conn.execute(
+                """INSERT INTO transactions
+                       (date, reference, beneficiaire, motif, categorie, montant,
+                        type, mode_reglement, annee_scolaire, paiement_id)
+                   SELECT COALESCE(p.date_paiement, date('now', 'localtime')),
+                          'REC-' || upper(hex(randomblob(4))),
+                          TRIM(e.prenom || ' ' || e.nom),
+                          COALESCE(p.type_frais, 'Paiement'),
+                          COALESCE(p.type_frais, 'Autres'),
+                          p.montant,
+                          'entree',
+                          p.mode_reglement,
+                          p.annee_scolaire,
+                          p.id
+                     FROM paiements p
+                     JOIN eleves e ON e.id = p.eleve_id
+                     WHERE NOT EXISTS (
+                         SELECT 1 FROM transactions t WHERE t.paiement_id = p.id)""")
+
 
     def _seed(self, conn):
         for nom in DEFAULT_MATIERES:
@@ -424,8 +451,12 @@ class Database:
 
 
     def dequeue_pending(self, limit=50):
+        # PENDING *et* FAILED : un echec temporaire (serveur injoignable le
+        # temps de la resolution, reference pas encore arrivee) est rejoue
+        # au cycle suivant, sans jamais rester bloque silencieusement.
         return self.query(
-            """SELECT * FROM file_attente_synchro WHERE status = 'PENDING'
+            """SELECT * FROM file_attente_synchro
+               WHERE status IN ('PENDING', 'FAILED')
                ORDER BY id LIMIT ?""", (limit,))
 
 

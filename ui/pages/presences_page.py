@@ -1,33 +1,32 @@
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
-    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QComboBox, QPushButton,
-    QTableWidgetItem, QVBoxLayout, QWidget, QDateEdit,
+    QLabel, QLineEdit, QMessageBox, QComboBox, QPushButton, QDateEdit,
+    QTableWidgetItem,
 )
 
 from repositories import repos
+from ui import toast
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _classe_items, _reload_combo, _make_table,
-    _page_header, _kpi_card, refuser_si_hors_annee,
+    _simple_btn_style, _classe_items, _reload_combo,
+    refuser_si_hors_annee,
 )
+from ui.widgets import KPICard
+from ui.widgets.page_templates import ListPageTemplate
+from resources.design_tokens import Colors
 from core.config import (
-    C_EMPTY_STATE, STYLE_BTN_PRIMARY, STYLE_BTN_ADD,
-    C_RED, C_RED_BG, C_RED_BORDER, C_GOLD, C_WARNING,
+    STYLE_BTN_PRIMARY, STYLE_BTN_ADD,
+    C_RED, C_RED_BG, C_RED_BORDER,
 )
 
 
 def presences(page, ctx):
     if page.layout() is not None:
         return
-    page.setStyleSheet("")
-    lay = QVBoxLayout(page)
-    lay.setContentsMargins(20, 20, 20, 20)
-    lay.setSpacing(16)
-    _page_header(lay, "Presences", "Feuille de presence par classe et par jour")
+    tpl = ListPageTemplate(page, "Presences",
+                           "Feuille de presence par classe et par jour")
+    peut_editer = ctx.can_edit("presences")
 
-    filtre = QHBoxLayout()
     combo_classe = QComboBox()
-    for c in repos.classes():
-        combo_classe.addItem(c["nom"], c["id"])
     date_edit = QDateEdit()
     date_edit.setDisplayFormat("dd/MM/yyyy")
     date_edit.setCalendarPopup(True)
@@ -35,104 +34,92 @@ def presences(page, ctx):
     btn_charger = QPushButton("Charger")
     btn_charger.setCursor(Qt.PointingHandCursor)
     btn_charger.setStyleSheet(STYLE_BTN_PRIMARY)
-    filtre.addWidget(QLabel("Classe :"))
-    filtre.addWidget(combo_classe)
-    filtre.addWidget(QLabel("Date :"))
-    filtre.addWidget(date_edit)
-    filtre.addWidget(btn_charger)
+    tpl.ajouter_filtre(QLabel("Classe :"))
+    tpl.ajouter_filtre(combo_classe)
+    tpl.ajouter_filtre(QLabel("Date :"))
+    tpl.ajouter_filtre(date_edit)
+    tpl.ajouter_filtre(btn_charger)
 
     btn_all_present = QPushButton("Tout marquer present")
     btn_all_present.setCursor(Qt.PointingHandCursor)
     btn_all_present.setStyleSheet(STYLE_BTN_ADD)
-    btn_all_present.setToolTip("Marquer tous les eleves de la classe comme presents")
-    filtre.addWidget(btn_all_present)
-
+    btn_all_present.setToolTip(
+        "Marquer tous les eleves de la classe comme presents")
+    tpl.ajouter_filtre(btn_all_present)
     btn_all_absent = QPushButton("Tout marquer absent")
     btn_all_absent.setCursor(Qt.PointingHandCursor)
-    btn_all_absent.setStyleSheet(_simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER))
-    btn_all_absent.setToolTip("Marquer tous les eleves de la classe comme absents")
-    filtre.addWidget(btn_all_absent)
+    btn_all_absent.setStyleSheet(
+        _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER))
+    btn_all_absent.setToolTip(
+        "Marquer tous les eleves de la classe comme absents")
+    tpl.ajouter_filtre(btn_all_absent)
+    tpl.ajouter_space_filtre()
 
-    filtre.addStretch(1)
+    kpi = [
+        tpl.ajouter_kpi(KPICard("Presents", "0", Colors.PRIMARY), 0),
+        tpl.ajouter_kpi(KPICard("Absents", "0", Colors.DANGER), 1),
+        tpl.ajouter_kpi(KPICard("Retards", "0", Colors.WARNING), 2),
+    ]
+    tpl.table.setColumnCount(4)
+    tpl.table.setHorizontalHeaderLabels(
+        ["Matricule", "Eleve", "Statut", "Motif"])
+
     btn_save = QPushButton("Enregistrer les Presences")
     btn_save.setCursor(Qt.PointingHandCursor)
     btn_save.setStyleSheet(STYLE_BTN_PRIMARY)
-    if ctx.can_edit("presences"):
-        filtre.addWidget(btn_save)
-    lay.addLayout(filtre)
-
-    kpi_lay = QHBoxLayout()
-    lbl_presents = _kpi_card("Presents", "0", C_GOLD)
-    lbl_absents = _kpi_card("Absents", "0", C_RED)
-    lbl_retards = _kpi_card("Retards", "0", C_WARNING)
-    for w in (lbl_presents, lbl_absents, lbl_retards):
-        kpi_lay.addWidget(w)
-    lay.addLayout(kpi_lay)
-
-    from PyQt5.QtWidgets import QTableWidget
-    table = _make_table(["Matricule", "Eleve", "Statut", "Motif"])
-    table.setEditTriggers(QTableWidget.NoEditTriggers)
-    lay.addWidget(table)
-    lbl_empty = QLabel("Choisissez une classe et une date")
-    lbl_empty.setStyleSheet(f"color: {C_EMPTY_STATE}; padding: 30px;")
-    lbl_empty.setAlignment(Qt.AlignCenter)
-    lay.addWidget(lbl_empty)
+    if peut_editer:
+        tpl.header.ajouter_action(btn_save)
 
     etats = {}
-    # Selection reellement chargee dans la table : la sauvegarde doit
-    # correspondre exactement a ce qui est affiche (classe + date).
     charge = {"cle": None}
+
+    def _montrer_vide(message):
+        tpl.vide.set_message(message, "")
+        tpl.pile.setCurrentWidget(tpl.vide)
 
     def refresh():
         _reload_combo(combo_classe, _classe_items(avec_toutes=False))
         classe_id = combo_classe.currentData()
         date = date_edit.date().toString("yyyy-MM-dd")
+        etats.clear()
+        charge["cle"] = None
         if not classe_id:
-            table.setRowCount(0)
-            charge["cle"] = None
-            lbl_empty.setVisible(True)
-            table.setVisible(False)
+            _montrer_vide("Choisissez une classe et une date")
+            _maj_kpi()
             return
         eleves_rows = repos.eleves(classe_id=classe_id)
         if not eleves_rows:
-            table.setRowCount(0)
-            charge["cle"] = None
-            lbl_empty.setText("Aucun eleve dans cette classe")
-            lbl_empty.setVisible(True)
-            table.setVisible(False)
+            _montrer_vide("Aucun eleve dans cette classe")
+            _maj_kpi()
             return
         pres_rows = {p["eleve_id"]: p for p in repos.presences(classe_id, date)}
-        etats.clear()
-        table.blockSignals(True)
-        table.setRowCount(len(eleves_rows))
+        tpl.table.setRowCount(len(eleves_rows))
         for i, e in enumerate(eleves_rows):
-            table.setItem(i, 0, QTableWidgetItem(e["matricule"]))
-            table.setItem(i, 1, QTableWidgetItem(f"{e['prenom']} {e['nom']}"))
+            tpl.table.setItem(i, 0, QTableWidgetItem(e["matricule"]))
+            tpl.table.setItem(i, 1, QTableWidgetItem(f"{e['prenom']} {e['nom']}"))
             pres = pres_rows.get(e["id"])
             statut = pres["statut"] if pres else "Present"
-            motif = pres["motif"] or "" if pres else ""
+            motif = (pres.get("motif") or "") if pres else ""
             combo = QComboBox()
             combo.addItems(["Present", "Absent", "Retard"])
             combo.setCurrentText(statut)
-            table.setCellWidget(i, 2, combo)
+            tpl.table.setCellWidget(i, 2, combo)
             edit_motif = QLineEdit(motif)
             edit_motif.setPlaceholderText("Motif (si absent)")
-            table.setCellWidget(i, 3, edit_motif)
+            tpl.table.setCellWidget(i, 3, edit_motif)
             etats[i] = (e["id"], combo, edit_motif)
-        table.blockSignals(False)
         charge["cle"] = (classe_id, date)
-        table.resizeColumnsToContents()
-        lbl_empty.setVisible(False)
-        table.setVisible(True)
+        tpl.table.refresh_height()
+        tpl.pile.setCurrentWidget(tpl.table)
         _maj_kpi()
 
     def _maj_kpi():
         comptes = {"Present": 0, "Absent": 0, "Retard": 0}
         for _eid, combo, _motif in etats.values():
             comptes[combo.currentText()] = comptes.get(combo.currentText(), 0) + 1
-        lbl_presents.findChild(QLabel, "kpi_value").setText(str(comptes["Present"]))
-        lbl_absents.findChild(QLabel, "kpi_value").setText(str(comptes["Absent"]))
-        lbl_retards.findChild(QLabel, "kpi_value").setText(str(comptes["Retard"]))
+        kpi[0].set_value(str(comptes["Present"]))
+        kpi[1].set_value(str(comptes["Absent"]))
+        kpi[2].set_value(str(comptes["Retard"]))
 
     def _set_all(statut):
         for _eid, combo, _motif in etats.values():
@@ -145,7 +132,8 @@ def presences(page, ctx):
         classe_id = combo_classe.currentData()
         date = date_edit.date().toString("yyyy-MM-dd")
         if not etats or charge["cle"] is None:
-            QMessageBox.warning(page, "Presences", "Chargez d'abord la feuille de presence.")
+            QMessageBox.warning(page, "Presences",
+                                "Chargez d'abord la feuille de presence.")
             return
         if refuser_si_hors_annee(page, date, "La date de presence"):
             return
@@ -160,14 +148,12 @@ def presences(page, ctx):
         for eleve_id, combo, edit_motif in etats.values():
             repos.save_presence(eleve_id, classe_id, date,
                                 combo.currentText(), edit_motif.text().strip())
-        QMessageBox.information(page, "Presences", "Presences enregistrees.")
+        toast.succes(page, "Presences enregistrees.")
         refresh()
 
     btn_all_present.clicked.connect(lambda: _set_all("Present"))
     btn_all_absent.clicked.connect(lambda: _set_all("Absent"))
     combo_classe.currentIndexChanged.connect(refresh)
-    # Changer la date doit recharger la feuille : sinon les statuts affiches
-    # d'un jour pouvaient etre enregistres sous une autre date.
     date_edit.dateChanged.connect(refresh)
     btn_charger.clicked.connect(refresh)
     btn_save.clicked.connect(save)

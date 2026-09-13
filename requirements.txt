@@ -1,2 +1,15 @@
+# Application de bureau (PyQt5)
 PyQt5==5.15.11
+PyQt-Fluent-Widgets==1.11.3
 httpx==0.28.1
+qtawesome==1.4.2
+requests==2.34.2
+
+# Serveur FastAPI embarqué (synchro multi-postes)
+fastapi==0.141.1
+uvicorn==0.52.1
+python-dotenv==1.2.2
+mysql-connector-python==26.7.0
+passlib==1.7.4
+bcrypt==5.0.0
+PyJWT==2.13.0

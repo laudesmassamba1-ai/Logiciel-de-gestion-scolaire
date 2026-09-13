@@ -90,6 +90,8 @@ GETS = [
     "/lister_annees_scolaires", "/annee_scolaire_active", "/tarifs-scolarite",
     "/tarifs-scolarite/classe/1", "/inscriptions/1/solde",
     "/inscriptions/1/suivi-mensuel", "/utilisateurs", "/ping", "/audit",
+    "/lister_toutes_les_inscriptions", "/toutes_presence", "/tous_les_programme",
+    "/paiement-syndication", "/note-syndication",
 ]
 
 

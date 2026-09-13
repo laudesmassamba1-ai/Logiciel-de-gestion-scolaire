@@ -13,9 +13,7 @@
   <property name="windowTitle">
    <string>Espace Gestionnaire</string>
   </property>
-  <property name="styleSheet">
-   <string>background-color: #EDEAE4; font-family: 'Segoe UI', sans-serif;</string>
-  </property>
+<property name="styleSheet"><string>QWidget#PageGestionnaire { background-color: #E7EBF3; font-family: 'Segoe UI', sans-serif; }</string></property>
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
     <number>20</number>
@@ -90,9 +88,7 @@
      </property>
      <item>
       <widget class="QFrame" name="card_effectifs">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_effectifs { background-color: #FFFFFF; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card_effectifs">
         <property name="leftMargin">
          <number>15</number>
@@ -131,9 +127,7 @@
      </item>
      <item>
       <widget class="QFrame" name="card_inscriptions_jour">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_inscriptions_jour { background-color: #FFFFFF; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card_inscriptions">
         <property name="leftMargin">
          <number>15</number>
@@ -172,9 +166,7 @@
      </item>
      <item>
       <widget class="QFrame" name="card_caisse_jour">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_caisse_jour { background-color: #FFFFFF; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card_caisse">
         <property name="leftMargin">
          <number>15</number>
@@ -213,9 +205,7 @@
      </item>
      <item>
       <widget class="QFrame" name="card_taches">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_taches { background-color: #FFFFFF; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card_taches">
         <property name="leftMargin">
          <number>15</number>
@@ -262,9 +252,7 @@
        <height>280</height>
       </size>
      </property>
-     <property name="styleSheet">
-      <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-     </property>
+<property name="styleSheet"><string>QFrame#container_chart_statuts { background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
      <layout class="QVBoxLayout" name="layout_chart_statuts">
       <property name="leftMargin"><number>15</number></property>
       <property name="topMargin"><number>12</number></property>
@@ -275,9 +263,7 @@
    </item>
    <item>
     <widget class="QFrame" name="card_actions_rapides">
-     <property name="styleSheet">
-      <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-     </property>
+     <property name="styleSheet"><string>QFrame#card_actions_rapides { background-color: #FFFFFF; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
      <layout class="QVBoxLayout" name="layout_actions_rapides">
       <property name="leftMargin">
        <number>15</number>
@@ -338,7 +324,7 @@
            <cursorShape>PointingHandCursor</cursorShape>
           </property>
           <property name="styleSheet">
-           <string>background-color: #EDEAE4; color: #B91C1C; border: 1px solid #FECACA; border-radius: 6px; padding: 12px; font-weight: bold;</string>
+           <string>background-color: #E7EBF3; color: #B91C1C; border: 1px solid #FECACA; border-radius: 6px; padding: 12px; font-weight: bold;</string>
           </property>
           <property name="text">
            <string>+ Nouvelle Depense</string>
@@ -351,7 +337,7 @@
            <cursorShape>PointingHandCursor</cursorShape>
           </property>
           <property name="styleSheet">
-           <string>background-color: #EDEAE4; color: #111111; border: 1px solid #D5D2CB; border-radius: 6px; padding: 12px; font-weight: bold;</string>
+           <string>background-color: #E7EBF3; color: #111111; border: 1px solid #C4CCDA; border-radius: 6px; padding: 12px; font-weight: bold;</string>
           </property>
           <property name="text">
            <string>Imprimer un Certificat</string>
@@ -370,9 +356,7 @@
      </property>
      <item>
       <widget class="QFrame" name="card_activite">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_activite { background-color: #FFFFFF; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
        <layout class="QVBoxLayout" name="layout_activite">
         <property name="leftMargin">
          <number>15</number>
@@ -398,9 +382,7 @@
         </item>
         <item>
          <widget class="QListWidget" name="list_activite_recente">
-          <property name="styleSheet">
-           <string>border: none; font-size: 13px;</string>
-          </property>
+<property name="styleSheet"><string>QListWidget#list_activite_recente { border: none; font-size: 13px; }</string></property>
          </widget>
         </item>
         <item>
@@ -423,19 +405,11 @@
       <widget class="QFrame" name="card_dossiers_incomplets">
        <property name="minimumSize">
         <size>
-         <width>320</width>
+         <width>240</width>
          <height>0</height>
         </size>
        </property>
-       <property name="maximumSize">
-        <size>
-         <width>320</width>
-         <height>16777215</height>
-        </size>
-       </property>
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+<property name="styleSheet"><string>QFrame#card_dossiers_incomplets { background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px; }</string></property>
        <layout class="QVBoxLayout" name="layout_dossiers">
         <property name="leftMargin">
          <number>15</number>
@@ -461,9 +435,7 @@
         </item>
         <item>
          <widget class="QListWidget" name="list_dossiers_incomplets">
-          <property name="styleSheet">
-           <string>border: none; font-size: 13px;</string>
-          </property>
+<property name="styleSheet"><string>QListWidget#list_dossiers_incomplets { border: none; font-size: 13px; }</string></property>
          </widget>
         </item>
        </layout>

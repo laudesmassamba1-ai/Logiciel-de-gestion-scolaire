@@ -13,393 +13,363 @@
   <property name="windowTitle">
    <string>Parametres de l'Etablissement</string>
   </property>
-  <property name="styleSheet">
-   <string>background-color: #EDEAE4;</string>
-  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
-       <property name="spacing">
-        <number>15</number>
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_Header">
+     <item>
+      <widget class="QLabel" name="lbl_title">
+       <property name="styleSheet">
+        <string>color: #20202A; font-size: 20px; font-weight: 700; border: none;</string>
        </property>
-       <property name="leftMargin">
-        <number>20</number>
+       <property name="text">
+        <string>Parametres de l'Etablissement</string>
        </property>
-       <property name="topMargin">
-        <number>20</number>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_Header">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
        </property>
-       <property name="rightMargin">
-        <number>20</number>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
        </property>
-       <property name="bottomMargin">
-        <number>20</number>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLabel" name="lbl_breadcrumb">
+       <property name="styleSheet">
+        <string>color: #8A8A93; font-size: 12px; border: none;</string>
        </property>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_Header">
-         <item>
-          <widget class="QLabel" name="lbl_title">
-           <property name="styleSheet">
-            <string>color: #111111; font-size: 16px; font-weight: bold;</string>
-           </property>
-           <property name="text">
-            <string>Parametres de l'Etablissement</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer_Header">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
-          <widget class="QLabel" name="lbl_breadcrumb">
-           <property name="styleSheet">
-            <string>color: #6b7280; font-size: 12px;</string>
-           </property>
-           <property name="text">
-            <string>Parametres &gt; En-tete des documents</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_Body">
+       <property name="text">
+        <string>Parametres &gt; En-tete des documents</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_Body">
+     <property name="spacing">
+      <number>15</number>
+     </property>
+     <item>
+      <widget class="QScrollArea" name="scrollArea">
+<property name="styleSheet"><string>QScrollArea#scrollArea { border: none; background: transparent; }</string></property>
+       <property name="widgetResizable">
+        <bool>true</bool>
+       </property>
+       <widget class="QWidget" name="scrollAreaWidgetContents">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>804</width>
+          <height>420</height>
+         </rect>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_Scroll">
          <property name="spacing">
-          <number>15</number>
+          <number>10</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
          </property>
          <item>
-          <widget class="QScrollArea" name="scrollArea">
+          <widget class="QFrame" name="card1">
            <property name="styleSheet">
-            <string>border: none; background: transparent;</string>
+            <string>QFrame#card1 { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
            </property>
-           <property name="widgetResizable">
-            <bool>true</bool>
-           </property>
-           <widget class="QWidget" name="scrollAreaWidgetContents">
-            <property name="geometry">
-             <rect>
-              <x>0</x>
-              <y>0</y>
-              <width>804</width>
-              <height>350</height>
-             </rect>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_Scroll">
-             <property name="spacing">
-              <number>10</number>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QFrame" name="card1">
-               <property name="styleSheet">
-                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-               </property>
-               <layout class="QHBoxLayout" name="horizontalLayout_Card1">
-                <item>
-                 <widget class="QLabel" name="lbl_card1">
-                  <property name="styleSheet">
-                   <string>color: #374151; font-weight: bold; border: none;</string>
-                  </property>
-                  <property name="text">
-                   <string>Bandeau d'en-tete</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <spacer name="horizontalSpacer_Card1">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="btn_upload1">
-                  <property name="styleSheet">
-                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #D5D2CB; border-radius: 4px; padding: 6px 14px;</string>
-                  </property>
-                  <property name="text">
-                   <string>Televerser</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
-             </item>
-             <item>
-              <widget class="QFrame" name="card2">
-               <property name="styleSheet">
-                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-               </property>
-               <layout class="QHBoxLayout" name="horizontalLayout_Card2">
-                <item>
-                 <widget class="QLabel" name="lbl_card2">
-                  <property name="styleSheet">
-                   <string>color: #374151; font-weight: bold; border: none;</string>
-                  </property>
-                  <property name="text">
-                   <string>Bandeau de bas de page</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <spacer name="horizontalSpacer_Card2">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="btn_upload2">
-                  <property name="styleSheet">
-                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #D5D2CB; border-radius: 4px; padding: 6px 14px;</string>
-                  </property>
-                  <property name="text">
-                   <string>Televerser</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
-             </item>
-             <item>
-              <widget class="QFrame" name="card3">
-               <property name="styleSheet">
-                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-               </property>
-               <layout class="QHBoxLayout" name="horizontalLayout_Card3">
-                <item>
-                 <widget class="QLabel" name="lbl_card3">
-                  <property name="styleSheet">
-                   <string>color: #374151; font-weight: bold; border: none;</string>
-                  </property>
-                  <property name="text">
-                   <string>Image de signature</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <spacer name="horizontalSpacer_Card3">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="btn_upload3">
-                  <property name="styleSheet">
-                   <string>background-color: #f3f4f6; color: #374151; border: 1px solid #D5D2CB; border-radius: 4px; padding: 6px 14px;</string>
-                  </property>
-                  <property name="text">
-                   <string>Televerser</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
-             </item>
-             <item>
-              <widget class="QFrame" name="card_inputs">
-               <property name="styleSheet">
-                <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-               </property>
-               <layout class="QVBoxLayout" name="verticalLayout_Inputs">
-                <property name="spacing">
-                 <number>10</number>
-                </property>
-                <item>
-                 <widget class="QLineEdit" name="input_signer_name">
-                  <property name="styleSheet">
-                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
-                  </property>
-                  <property name="placeholderText">
-                   <string>Nom du signataire</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="input_signer_title">
-                  <property name="styleSheet">
-                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
-                  </property>
-                  <property name="placeholderText">
-                   <string>Titre du signataire</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="input_city">
-                  <property name="styleSheet">
-                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
-                  </property>
-                  <property name="placeholderText">
-                   <string>Ville de la lettre (ex. Brazzaville)</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="input_country">
-                  <property name="styleSheet">
-                   <string>border: 1px solid #D5D2CB; border-radius: 4px; padding: 8px; background: #FFFFFF; color: #111111;</string>
-                  </property>
-                  <property name="placeholderText">
-                   <string>Pays (ex. Republique du Congo)</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
-             </item>
-             <item>
-              <spacer name="verticalSpacer_Scroll">
-               <property name="orientation">
-                <enum>Qt::Vertical</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>20</width>
-                 <height>40</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </widget>
-          </widget>
-         </item>
-         <item>
-          <widget class="QFrame" name="previewCard">
-           <property name="maximumSize">
-            <size>
-             <width>320</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-           </property>
-           <layout class="QVBoxLayout" name="verticalLayout_Preview">
+           <layout class="QHBoxLayout" name="horizontalLayout_Card1">
             <item>
-             <widget class="QLabel" name="lbl_preview_title">
+             <widget class="QLabel" name="lbl_card1">
               <property name="styleSheet">
-               <string>font-weight: bold; color: #374151; border: none;</string>
+               <string>color: #373D4A; font-weight: 700; border: none;</string>
               </property>
               <property name="text">
-               <string>APERCU</string>
+               <string>Bandeau d'en-tete</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QLabel" name="lbl_progression">
-              <property name="styleSheet">
-               <string>color: #C8960C; font-weight: bold; border: none;</string>
-              </property>
-              <property name="text">
-               <string>Progression de la configuration: 100%</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="verticalSpacer_Preview">
+             <spacer name="horizontalSpacer_Card1">
               <property name="orientation">
-               <enum>Qt::Vertical</enum>
+               <enum>Qt::Horizontal</enum>
               </property>
               <property name="sizeHint" stdset="0">
                <size>
-                <width>20</width>
-                <height>40</height>
+                <width>40</width>
+                <height>20</height>
                </size>
               </property>
              </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btn_upload1">
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+              <property name="text">
+               <string>Televerser</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="card2">
+           <property name="styleSheet">
+            <string>QFrame#card2 { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+           </property>
+           <layout class="QHBoxLayout" name="horizontalLayout_Card2">
+            <item>
+             <widget class="QLabel" name="lbl_card2">
+              <property name="styleSheet">
+               <string>color: #373D4A; font-weight: 700; border: none;</string>
+              </property>
+              <property name="text">
+               <string>Bandeau de bas de page</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_Card2">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btn_upload2">
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+              <property name="text">
+               <string>Televerser</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="card3">
+           <property name="styleSheet">
+            <string>QFrame#card3 { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+           </property>
+           <layout class="QHBoxLayout" name="horizontalLayout_Card3">
+            <item>
+             <widget class="QLabel" name="lbl_card3">
+              <property name="styleSheet">
+               <string>color: #373D4A; font-weight: 700; border: none;</string>
+              </property>
+              <property name="text">
+               <string>Image de signature</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_Card3">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btn_upload3">
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+              <property name="text">
+               <string>Televerser</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="card_inputs">
+           <property name="styleSheet">
+            <string>QFrame#card_inputs { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_Inputs">
+            <property name="spacing">
+             <number>8</number>
+            </property>
+            <item>
+             <widget class="QLineEdit" name="input_signer_name">
+              <property name="placeholderText">
+               <string>Nom du signataire</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="input_signer_title">
+              <property name="placeholderText">
+               <string>Titre du signataire</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="input_city">
+              <property name="placeholderText">
+               <string>Ville de la lettre (ex. Brazzaville)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="input_country">
+              <property name="placeholderText">
+               <string>Pays (ex. Republique du Congo)</string>
+              </property>
+             </widget>
             </item>
            </layout>
           </widget>
          </item>
         </layout>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_BottomBar">
-         <item>
-          <widget class="QLabel" name="lbl_status">
-           <property name="styleSheet">
-            <string>color: #6b7280;</string>
-           </property>
-           <property name="text">
-            <string>Aucune modification en attente</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer_Bottom">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btn_delete">
-           <property name="styleSheet">
-            <string>color: #B91C1C; background: transparent; border: 1px solid #B91C1C; border-radius: 4px; padding: 8px 14px;</string>
-           </property>
-           <property name="text">
-            <string>Supprimer la configuration</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btn_update">
-           <property name="styleSheet">
-            <string>color: #000000; background-color: #C8960C; border-radius: 4px; padding: 8px 14px; font-weight: bold;</string>
-           </property>
-           <property name="text">
-            <string>Mettre a jour la configuration</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-      </layout>
+       </widget>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="previewCard">
+       <property name="minimumSize">
+        <size>
+         <width>240</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame#previewCard { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_Preview">
+        <item>
+         <widget class="QLabel" name="lbl_preview_title">
+          <property name="styleSheet">
+           <string>font-weight: 700; color: #373D4A; border: none;</string>
+          </property>
+          <property name="text">
+           <string>APERCU</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_progression">
+          <property name="styleSheet">
+           <string>color: #C8960C; font-weight: 700; border: none;</string>
+          </property>
+          <property name="text">
+           <string>Progression de la configuration: 100%</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_Preview">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_BottomBar">
+     <item>
+      <widget class="QLabel" name="lbl_status">
+       <property name="styleSheet">
+        <string>color: #8A8A93; border: none;</string>
+       </property>
+       <property name="text">
+        <string>Aucune modification en attente</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_Bottom">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_delete">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Supprimer la configuration</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_update">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Mettre a jour la configuration</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections/>

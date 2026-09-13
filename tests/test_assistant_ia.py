@@ -299,6 +299,84 @@ class TestTarifsEtPaiements:
         assert "Reste a payer : 10 000 FCFA" in rep["texte"]
 
 
+class TestMoyenneGeneraleEtClassement:
+    def _preparer(self, db):
+        db.execute("INSERT OR IGNORE INTO matieres (nom, coefficient) "
+                   "VALUES ('Maths', 1)")
+        db.execute("INSERT OR IGNORE INTO matieres (nom, coefficient) "
+                   "VALUES ('Francais', 3)")
+        m1 = db.query_one("SELECT id FROM matieres WHERE nom = 'Maths'")["id"]
+        m2 = db.query_one("SELECT id FROM matieres WHERE nom = 'Francais'")["id"]
+        e1 = _ajouter_eleve(db, "Mambou", "Junior", "6eme")
+        e2 = _ajouter_eleve(db, "Ngo", "Marie", "6eme", "F")
+        for eid in (e1, e2):
+            for mid in (m1, m2):
+                db.execute(
+                    """INSERT INTO notes (eleve_id, matiere_id, periode,
+                       devoir1, devoir2, composition) VALUES (?, ?, ?, ?, ?, ?)""",
+                    (eid, mid, "1er Trimestre", 10, 12, 14 if mid == m1 else 16))
+        # Maths 12.5, Francais 16 -> generale ponderee 15.12
+        return e1, e2
+
+    def test_moyenne_generale_de_l_ecole(self, base_vierge):
+        self._preparer(base_vierge)
+        ia = _assistant()
+        rep = ia.traiter("quelle est la moyenne generale ?")
+        assert "Moyenne generale de l'ecole : 13.00" in rep["texte"]
+        assert "sur 2 eleve(s) note(s)" in rep["texte"]
+
+    def test_classement_des_eleves(self, base_vierge):
+        self._preparer(base_vierge)
+        ia = _assistant()
+        rep = ia.traiter("classement des eleves")
+        assert "Classement des eleves" in rep["texte"]
+        assert rep["texte"].split("\n")[1].startswith("1. ")
+
+    def test_classement_de_la_classe(self, base_vierge):
+        self._preparer(base_vierge)
+        ia = _assistant()
+        rep = ia.traiter("classement des eleves de 6eme")
+        assert "Classement de la classe 6eme" in rep["texte"]
+        assert "2 eleve(s)" in rep["texte"] or "1." in rep["texte"]
+
+    def test_moyenne_generale_sans_notes(self, base_vierge):
+        ia = _assistant()
+        rep = ia.traiter("moyenne generale")
+        assert "Aucune note" in rep["texte"]
+
+
+class TestPaiementsGlobaux:
+    def _payer(self, db, nom, prenom, montant):
+        eid = _ajouter_eleve(db, nom, prenom, "6eme")
+        db.execute(
+            """INSERT INTO paiements (eleve_id, montant, type_frais,
+               date_paiement) VALUES (?, ?, 'Scolarite', date('now'))""",
+            (eid, montant))
+        return eid
+
+    def test_paiements_du_mois(self, base_vierge):
+        self._payer(base_vierge, "Mambou", "Junior", 20000)
+        self._payer(base_vierge, "Ngo", "Marie", 5000)
+        ia = _assistant()
+        rep = ia.traiter("combien ont paye ce mois ?")
+        assert "2 versement(s)" in rep["texte"]
+        assert "25 000 FCFA" in rep["texte"]
+
+    def test_qui_paie_le_moins_et_le_plus(self, base_vierge):
+        self._payer(base_vierge, "Mambou", "Junior", 20000)
+        self._payer(base_vierge, "Ngo", "Marie", 5000)
+        ia = _assistant()
+        rep = ia.traiter("qui paie le moins ?")
+        assert "le plus paye" in rep["texte"]
+        assert "Marie Ngo" in rep["texte"]
+        assert "Junior Mambou" in rep["texte"]
+
+    def test_aucun_paiement(self, base_vierge):
+        ia = _assistant()
+        rep = ia.traiter("qui paie le moins ?")
+        assert "Aucun paiement" in rep["texte"]
+
+
 class TestRoles:
     def test_navigation_autorisee(self, base_vierge):
         ia = _assistant(DIRECTEUR)
@@ -475,14 +553,22 @@ class TestLectureDonnees:
             assert isinstance(rep["texte"], str)
 
 
+@pytest.fixture()
+def mode_autonome(monkeypatch):
+    """Force la synchro OFF, independamment de data/sync.json reel."""
+    import core.network as network
+    monkeypatch.setattr(network, "_sync_active", False)
+    yield
+
+
 class TestMultipostes:
-    def test_etat_mode_autonome(self, base_vierge):
+    def test_etat_mode_autonome(self, base_vierge, mode_autonome):
         ia = _assistant()
         rep = ia.traiter("etat du serveur")
         assert "AUTONOME" in rep["texte"]
         assert rep["action"] == {"type": "ping_serveur"}
 
-    def test_question_donnees_distantes_sans_serveur(self, base_vierge):
+    def test_question_donnees_distantes_sans_serveur(self, base_vierge, mode_autonome):
         ia = _assistant()
         rep = ia.traiter("combien d'eleves sur le serveur ?")
         assert "Autonome" in rep["texte"] or "desactivee" in rep["texte"]

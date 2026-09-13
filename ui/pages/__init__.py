@@ -15,6 +15,8 @@ from ui.pages.helpers import (
     _replace_layout,
     _appreciation,
     _parse_money,
+    _actions_cell,
+    _fill_table_space,
 )
 
 from ui.pages.dashboards import (

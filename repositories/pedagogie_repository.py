@@ -17,8 +17,10 @@ class PedagogieRepository(RepositoryBase):
                                  (nom, coefficient))
 
     def update_matiere(self, matiere_id, nom, coefficient):
+        ancien = self.matiere_by_id(matiere_id)
         self._route_write("PUT", f"/modifierMatiere/{matiere_id}",
-                          {"nom": nom, "coefficient": coefficient},
+                          {"nom": nom, "coefficient": coefficient,
+                           "matiere_ancien_nom": ancien["nom"] if ancien else None},
                           db.execute,
                           "UPDATE matieres SET nom = ?, coefficient = ? WHERE id = ?",
                           (nom, coefficient, matiere_id))
@@ -26,7 +28,9 @@ class PedagogieRepository(RepositoryBase):
     def delete_matiere(self, matiere_id):
         db.execute("DELETE FROM programmes WHERE matiere_id = ?", (matiere_id,))
         db.execute("DELETE FROM notes WHERE matiere_id = ?", (matiere_id,))
-        self._route_write("DELETE", f"/supprimerMatiere/{matiere_id}", {},
+        ancien = self.matiere_by_id(matiere_id)
+        self._route_write("DELETE", f"/supprimerMatiere/{matiere_id}",
+                          {"matiere_nom": ancien["nom"] if ancien else None},
                           db.execute, "DELETE FROM matieres WHERE id = ?", (matiere_id,))
 
     def enseignants(self):
@@ -49,8 +53,15 @@ class PedagogieRepository(RepositoryBase):
         return db.query(sql, params)
 
     def save_programme(self, classe_id, matiere_id, enseignant_id, coefficient):
+        classe = db.query_one("SELECT nom FROM classes WHERE id = ?", (classe_id,))
+        matiere = db.query_one("SELECT nom FROM matieres WHERE id = ?", (matiere_id,))
+        enseignant = db.query_one(
+            "SELECT nom_complet FROM personnel WHERE id = ?", (enseignant_id,))
         payload = {"classe_id": classe_id, "matiere_id": matiere_id,
-                   "enseignant_id": enseignant_id, "coefficient": coefficient}
+                   "enseignant_id": enseignant_id, "coefficient": coefficient,
+                   "classe_nom": classe["nom"] if classe else None,
+                   "matiere_nom": matiere["nom"] if matiere else None,
+                   "enseignant_nom": enseignant["nom_complet"] if enseignant else None}
         return self._route_write(
             "POST", "/associerMatiereClasseEnseignant", payload,
             db.execute,
@@ -62,5 +73,13 @@ class PedagogieRepository(RepositoryBase):
             (classe_id, matiere_id, enseignant_id, coefficient))
 
     def delete_programme(self, prog_id):
-        self._route_write("DELETE", f"/supprimerProgramme/{prog_id}", {},
+        row = db.query_one(
+            """SELECT c.nom AS classe_nom, m.nom AS matiere_nom
+               FROM programmes p
+               JOIN classes c ON c.id = p.classe_id
+               JOIN matieres m ON m.id = p.matiere_id
+               WHERE p.id = ?""", (prog_id,))
+        self._route_write("DELETE", f"/supprimerProgramme/{prog_id}",
+                          {"classe_nom": row["classe_nom"] if row else None,
+                           "matiere_nom": row["matiere_nom"] if row else None},
                           db.execute, "DELETE FROM programmes WHERE id = ?", (prog_id,))

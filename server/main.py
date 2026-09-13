@@ -23,6 +23,7 @@ DB_USER = os.environ.get("GS_DB_USER", "root")
 # Aucun mot de passe par defaut : definir GS_DB_PASSWORD dans .env ou l'environnement
 DB_PASSWORD = os.environ.get("GS_DB_PASSWORD", "")
 DB_NAME = os.environ.get("GS_DB_NAME", "ecole")
+DB_PORT = int(os.environ.get("GS_DB_PORT", "3306"))
 
 app = FastAPI()
 
@@ -55,7 +56,8 @@ def get_connection():
         host=DB_HOST,
         user=DB_USER,
         password=DB_PASSWORD,
-        database=DB_NAME
+        database=DB_NAME,
+        port=DB_PORT
     )
 
 @app.on_event("startup")
@@ -68,7 +70,8 @@ def initialiser_base_au_demarrage():
     conn = mysql.connector.connect(
         host=DB_HOST,
         user=DB_USER,
-        password=DB_PASSWORD
+        password=DB_PASSWORD,
+        port=DB_PORT
     )
     cursor = conn.cursor()
 
@@ -251,7 +254,7 @@ def get_all_eleves_par_classe(classe: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     # Le client peut transmettre un id numerique OU le libelle de classe.
-    base_sql = ("SELECT nom, prenom, sexe FROM eleve, inscription, classe "
+    base_sql = ("SELECT eleve.id, nom, prenom, sexe FROM eleve, inscription, classe "
                 "where inscription.classe_id=classe.id and "
                 "inscription.eleve_id=eleve.id and eleve.est_supprime = 0")
     try:
@@ -270,7 +273,7 @@ def get_all_eleves_par_classe(classe: str)-> dict:
 def get_all_eleves()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT eleve.id, nom, prenom, sexe, classe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime = false")
+    cursor.execute("SELECT eleve.*, classe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime = false")
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -618,7 +621,10 @@ def get_total_classe()-> dict:
 def get_all_classe()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT classe, cycle.nom FROM classe, cycle where classe.cycle_id=cycle.id")
+    # On sélectionne directement les bonnes colonnes avec les bons alias :
+    # le client de synchro lit "nom" comme libelle de classe et "id" pour
+    # rattacher ses eleves (correction reprise depuis gestion_scolaire_api).
+    cursor.execute("SELECT id, classe AS nom, cycle_id FROM classe")
     classes = cursor.fetchall()
     return {"classes": classes}
 
@@ -2481,6 +2487,135 @@ def lister_utilisateurs():
     finally:
         cursor.close()
         conn.close()
+
+
+@app.get("/comptes-syndication")
+def comptes_syndication():
+    """Comptes utilisateurs avec identifiant et hash de mot de passe, pour
+    que chaque poste puisse proposer le meme login (multi-poste)."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT id, nom, prenom, telephone, email, identifiant,
+                   mot_de_passe, role, statut
+            FROM utilisateur
+            ORDER BY nom ASC, prenom ASC
+        """)
+        return {"comptes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ---------- Routes de syndication pour le pull multi-poste ----------
+
+@app.get("/lister_toutes_les_inscriptions")
+def lister_toutes_les_inscriptions():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT i.id, i.eleve_id, i.classe_id, i.annee_scolaire_id,
+                   i.date_inscription, i.statut, i.uuid_client,
+                   e.nom, e.prenom, e.uuid_client AS eleve_uuid,
+                   c.classe AS classe_nom, a.libelle AS annee_scolaire
+            FROM inscription i
+            JOIN eleve e ON e.id = i.eleve_id
+            JOIN classe c ON c.id = i.classe_id
+            JOIN annee_scolaire a ON a.id = i.annee_scolaire_id
+        """)
+        return {"inscriptions": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.get("/toutes_presence")
+def toutes_presence():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT p.id, p.eleve_id, p.classe_id, p.date_presence,
+                   p.statut, p.justifie, p.uuid_client,
+                   e.nom, e.prenom, e.uuid_client AS eleve_uuid,
+                   c.classe AS classe_nom
+            FROM presences p
+            JOIN eleve e ON e.id = p.eleve_id
+            JOIN classe c ON c.id = p.classe_id
+        """)
+        return {"presences": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.get("/tous_les_programme")
+def tous_les_programme():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT pr.id, pr.classe_id, pr.matiere_id, pr.enseignant_id,
+                   pr.coefficient,
+                   c.classe AS classe_nom,
+                   m.nom AS matiere_nom,
+                   COALESCE(en.nom, '') AS enseignant_nom,
+                   COALESCE(en.prenom, '') AS enseignant_prenom
+            FROM programme pr
+            JOIN classe c ON c.id = pr.classe_id
+            JOIN matiere m ON m.id = pr.matiere_id
+            LEFT JOIN enseignant en ON en.id = pr.enseignant_id
+        """)
+        return {"programmes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.get("/paiement-syndication")
+def paiement_syndication():
+    """Paiements avec les cles naturelles client (eleve_uuid, classe_nom)."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT pay.*, e.nom, e.prenom, e.uuid_client AS eleve_uuid,
+                   c.classe AS classe_nom, a.libelle AS annee_scolaire
+            FROM paiement pay
+            JOIN inscription i ON i.id = pay.inscription_id
+            JOIN eleve e ON e.id = i.eleve_id
+            JOIN classe c ON c.id = i.classe_id
+            LEFT JOIN annee_scolaire a ON a.id = i.annee_scolaire_id
+        """)
+        return {"paiements": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.get("/note-syndication")
+def note_syndication():
+    """Notes avec les cles naturelles client (eleve_uuid, matiere_nom)."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT n.id, n.matiere_id, n.type_evaluation, n.note, n.note_sur,
+                   n.date_evaluation, n.trimestre, n.uuid_client,
+                   e.uuid_client AS eleve_uuid, e.nom, e.prenom,
+                   m.nom AS matiere_nom
+            FROM note n
+            JOIN inscription i ON i.id = n.inscription_id
+            JOIN eleve e ON e.id = i.eleve_id
+            JOIN matiere m ON m.id = n.matiere_id
+        """)
+        return {"notes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
 
 #route pour savoir si le pc1 ou 2 est connecte au reseau
 @app.get("/ping")

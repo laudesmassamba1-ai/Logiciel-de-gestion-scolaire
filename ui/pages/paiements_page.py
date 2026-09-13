@@ -5,31 +5,55 @@ import datetime
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox,
-    QComboBox, QFormLayout, QPushButton, QTabWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QComboBox, QFormLayout, QPushButton, QTabWidget, QVBoxLayout, QWidget,
+    QStackedWidget,
 )
 
 from repositories import repos
+from ui import toast
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _money_edit, _classe_items, _reload_combo,
-    _add_btn, _kpi_card, _make_table, _page_header, refuser_si_hors_annee,
+    _add_btn, refuser_si_hors_annee, _actions_cell,
 )
-from ui.widgets import fmt_money
-from core.config import PERIODES, C_EMPTY_STATE, STYLE_BTN_PRIMARY, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_GOLD, C_RED, C_RED_BG, C_RED_BORDER
+from ui.widgets import fmt_money, KPICard, DataTable, EmptyState
+from resources.design_tokens import Colors
+from core.config import (
+    PERIODES, STYLE_BTN_PRIMARY, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER,
+    C_RED, C_RED_BG, C_RED_BORDER,
+)
+
+
+from PyQt5.QtWidgets import (
+    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox,
+    QComboBox, QFormLayout, QPushButton, QTabWidget,
+    QVBoxLayout, QWidget, QStackedWidget,
+)
+
+from repositories import repos
+from ui import toast
+from ui.pages.helpers import (
+    _btn, _simple_btn_style, _money_edit, _classe_items, _reload_combo,
+    _add_btn, refuser_si_hors_annee, _actions_cell,
+)
+from ui.widgets import fmt_money, KPICard, DataTable, EmptyState
+from resources.design_tokens import Colors
+from core.config import PERIODES, STYLE_BTN_PRIMARY, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER
 
 
 def paiements(page, ctx):
     if page.layout() is not None:
         return
-    page.setStyleSheet("")
+    from ui.widgets import PageHeader
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    _page_header(lay, "Paiements, Suivi & Bilans",
-                 "Encaissements, suivi mensuel des eleves et bilans")
+    lay.addWidget(PageHeader(
+        "Paiements, Suivi & Bilans",
+        "Encaissements, suivi mensuel des eleves et bilans"))
 
     tabs = QTabWidget()
-    lay.addWidget(tabs)
+    lay.addWidget(tabs, 1)
+    peut_editer = ctx.can_edit("paiements")
 
     def _annee_options(combo):
         combo.clear()
@@ -46,6 +70,7 @@ def paiements(page, ctx):
         for m in MODES:
             combo.addItem(m, m)
 
+    # ---------------- Onglet Paiements ----------------
     onglet_paiements = QWidget()
     lay_p = QVBoxLayout(onglet_paiements)
     filtre_p = QHBoxLayout()
@@ -66,25 +91,32 @@ def paiements(page, ctx):
     filtre_p.addWidget(QLabel("Mode :"))
     filtre_p.addWidget(combo_mode_p)
     filtre_p.addStretch(1)
-    btn_add_paiement = _add_btn("+ Nouveau Paiement", lambda: open_paiement_dialog(page, ctx, refresh_p))
-    if ctx.can_edit("paiements"):
+    btn_add_paiement = _add_btn(
+        "+ Nouveau Paiement",
+        lambda: open_paiement_dialog(page, ctx, refresh_p))
+    if peut_editer:
         filtre_p.addWidget(btn_add_paiement)
     lay_p.addLayout(filtre_p)
 
     kpi_p = QHBoxLayout()
-    lbl_p_nb = _kpi_card("Nombre de paiements", "0")
-    lbl_p_total = _kpi_card("Montant total", "0 FCFA", C_BLUE)
-    for w in (lbl_p_nb, lbl_p_total):
-        kpi_p.addWidget(w)
+    kpi_p_nb = KPICard("Nombre de paiements", "0")
+    kpi_p_total = KPICard("Montant total", "0", Colors.INFO)
+    kpi_p.addWidget(kpi_p_nb)
+    kpi_p.addWidget(kpi_p_total)
     lay_p.addLayout(kpi_p)
 
-    table_p = _make_table(["Date", "Matricule", "Eleve", "Classe", "Type frais",
-                           "Montant", "Mode", "Trimestre", "Actions"])
-    lay_p.addWidget(table_p)
-    lbl_empty_p = QLabel("Aucun paiement enregistre")
-    lbl_empty_p.setStyleSheet(f"color: {C_EMPTY_STATE}; padding: 30px;")
-    lbl_empty_p.setAlignment(Qt.AlignCenter)
-    lay_p.addWidget(lbl_empty_p)
+    table_p = DataTable()
+    table_p.setColumnCount(9)
+    table_p.setHorizontalHeaderLabels(
+        ["Date", "Matricule", "Eleve", "Classe", "Type frais",
+         "Montant", "Mode", "Trimestre", "Actions"])
+    vide_p = EmptyState(
+        "Aucun paiement enregistre",
+        "Enregistrez un paiement via le bouton ci-dessus.")
+    pile_p = QStackedWidget()
+    pile_p.addWidget(table_p)
+    pile_p.addWidget(vide_p)
+    lay_p.addWidget(pile_p, 1)
 
     def refresh_p():
         _reload_combo(combo_classe_p, _classe_items())
@@ -92,31 +124,26 @@ def paiements(page, ctx):
             classe_id=combo_classe_p.currentData(),
             type_frais=combo_type_p.currentData() or None,
             mode=combo_mode_p.currentData() or None)
-        table_p.setRowCount(len(rows))
+        valeurs = [[p["date_paiement"], p["matricule"],
+                    f"{p['prenom']} {p['nom']}", p["classe_nom"] or "-",
+                    p["type_frais"] or "-", fmt_money(p["montant"]),
+                    p["mode_reglement"] or "-", p["trimestre"] or "-", ""]
+                   for p in rows]
+        table_p.remplir(valeurs)
         for i, p in enumerate(rows):
-            values = [p["date_paiement"], p["matricule"], f"{p['prenom']} {p['nom']}",
-                      p["classe_nom"] or "-", p["type_frais"] or "-",
-                      fmt_money(p["montant"]), p["mode_reglement"] or "-",
-                      p["trimestre"] or "-"]
-            for j, val in enumerate(values):
-                table_p.setItem(i, j, QTableWidgetItem(str(val)))
-            cell = QWidget()
-            cl = QHBoxLayout(cell)
-            cl.setContentsMargins(2, 2, 2, 2)
-            if ctx.can_edit("paiements"):
-                cl.addWidget(_btn("Supprimer", partial(_delete_paiement, page, ctx, p),
-                                   _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
-            table_p.setCellWidget(i, 8, cell)
-        table_p.resizeColumnsToContents()
-        lbl_empty_p.setVisible(not rows)
-        table_p.setVisible(bool(rows))
-        lbl_p_nb.findChild(QLabel, "kpi_value").setText(str(len(rows)))
-        lbl_p_total.findChild(QLabel, "kpi_value").setText(
+            table_p.setCellWidget(i, 8, _actions_cell(*(
+                (_btn("Supprimer", partial(_delete_paiement, page, ctx, p),
+                      _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)),)
+                if peut_editer else ()
+            )))
+        pile_p.setCurrentWidget(vide_p if not rows else table_p)
+        kpi_p_nb.set_value(str(len(rows)))
+        kpi_p_total.set_value(
             fmt_money(sum(float(p["montant"]) for p in rows)))
 
     def _delete_paiement(parent, ctx, p):
-        if QMessageBox.question(parent, "Paiement",
-                                "Supprimer ce paiement ?") == QMessageBox.Yes:
+        from ui.pages.helpers import confirmer
+        if confirmer(parent, "Supprimer ce paiement ?", "Paiement"):
             repos.delete_paiement(p["id"])
             refresh_p()
 
@@ -125,6 +152,7 @@ def paiements(page, ctx):
     combo_mode_p.currentIndexChanged.connect(refresh_p)
     tabs.addTab(onglet_paiements, "Paiements")
 
+    # ---------------- Onglet Suivi Eleve ----------------
     onglet_suivi = QWidget()
     lay_s = QVBoxLayout(onglet_suivi)
     suivi_row = QHBoxLayout()
@@ -140,15 +168,22 @@ def paiements(page, ctx):
     lay_s.addLayout(suivi_row)
 
     solde_lay = QHBoxLayout()
-    lbl_attendu = _kpi_card("Total attendu", "0 FCFA", C_BLUE)
-    lbl_paye = _kpi_card("Total paye", "0 FCFA", C_GOLD)
-    lbl_solde = _kpi_card("Solde restant", "0 FCFA", C_RED)
+    lbl_attendu = KPICard("Total attendu", "0", Colors.INFO)
+    lbl_paye = KPICard("Total paye", "0", Colors.PRIMARY)
+    lbl_solde = KPICard("Solde restant", "0", Colors.DANGER)
     for w in (lbl_attendu, lbl_paye, lbl_solde):
         solde_lay.addWidget(w)
     lay_s.addLayout(solde_lay)
 
-    table_suivi = _make_table(["Mois", "Attendu", "Paye"])
-    lay_s.addWidget(table_suivi)
+    table_suivi = DataTable()
+    table_suivi.setColumnCount(3)
+    table_suivi.setHorizontalHeaderLabels(["Mois", "Attendu", "Paye"])
+    vide_suivi = EmptyState(
+        "Selectionnez un eleve pour afficher son suivi mensuel", "")
+    pile_s = QStackedWidget()
+    pile_s.addWidget(table_suivi)
+    pile_s.addWidget(vide_suivi)
+    lay_s.addWidget(pile_s, 1)
 
     def fill_eleves():
         combo_eleve_s.blockSignals(True)
@@ -163,27 +198,32 @@ def paiements(page, ctx):
         if not eleve_id:
             table_suivi.setRowCount(0)
             for w in (lbl_attendu, lbl_paye, lbl_solde):
-                w.findChild(QLabel, "kpi_value").setText("0 FCFA")
+                w.set_value(fmt_money(0))
+            vide_suivi.set_message(
+                "Selectionnez un eleve pour afficher son suivi mensuel", "")
+            pile_s.setCurrentWidget(vide_suivi)
             return
         active = repos.annee_scolaire_active()
         annee = active["libelle"] if active else ""
         solde = repos.solde_eleve(eleve_id, annee)
-        lbl_attendu.findChild(QLabel, "kpi_value").setText(fmt_money(solde["attendu"]))
-        lbl_paye.findChild(QLabel, "kpi_value").setText(fmt_money(solde["paye"]))
-        lbl_solde.findChild(QLabel, "kpi_value").setText(fmt_money(solde["solde"]))
+        lbl_attendu.set_value(fmt_money(solde["attendu"]))
+        lbl_paye.set_value(fmt_money(solde["paye"]))
+        lbl_solde.set_value(fmt_money(solde["solde"]))
         suivi = repos.suivi_mensuel(eleve_id, annee)
-        table_suivi.setRowCount(len(suivi))
-        for i, m in enumerate(suivi):
-            table_suivi.setItem(i, 0, QTableWidgetItem(m["mois"]))
-            table_suivi.setItem(i, 1, QTableWidgetItem(fmt_money(m["attendu"])))
-            table_suivi.setItem(i, 2, QTableWidgetItem(fmt_money(m["paye"])))
-        table_suivi.resizeColumnsToContents()
+        valeurs = [[m["mois"], fmt_money(m["attendu"]), fmt_money(m["paye"])]
+                   for m in suivi]
+        table_suivi.remplir(valeurs)
+        if not suivi:
+            vide_suivi.set_message(
+                "Aucun paiement enregistre pour cet eleve sur l'annee active", "")
+        pile_s.setCurrentWidget(vide_suivi if not suivi else table_suivi)
 
     combo_classe_s.currentIndexChanged.connect(fill_eleves)
     combo_eleve_s.currentIndexChanged.connect(refresh_suivi)
     fill_eleves()
     tabs.addTab(onglet_suivi, "Suivi Eleve")
 
+    # ---------------- Onglet Bilans ----------------
     onglet_bilans = QWidget()
     lay_b = QVBoxLayout(onglet_bilans)
     filtre_b = QHBoxLayout()
@@ -213,19 +253,28 @@ def paiements(page, ctx):
     filtre_b.addWidget(combo_classe_b)
     filtre_b.addWidget(QLabel("Mode :"))
     filtre_b.addWidget(combo_mode_b)
-    lay_b.addLayout(filtre_b)
 
     btn_bilan = QPushButton("Generer le Bilan")
     btn_bilan.setCursor(Qt.PointingHandCursor)
     btn_bilan.setStyleSheet(STYLE_BTN_PRIMARY)
     filtre_b.addWidget(btn_bilan)
-    lbl_bilan_total = QLabel("Total : 0 FCFA")
-    lbl_bilan_total.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {C_GOLD};")
+    lbl_bilan_total = QLabel(f"Total : {fmt_money(0)}")
+    lbl_bilan_total.setStyleSheet(
+        f"font-size: 18px; font-weight: bold; color: {Colors.PRIMARY};")
     lay_b.addWidget(lbl_bilan_total)
 
-    table_b = _make_table(["Date", "Matricule", "Eleve", "Classe", "Type frais",
-                           "Montant", "Mode", "Trimestre"])
-    lay_b.addWidget(table_b)
+    table_b = DataTable()
+    table_b.setColumnCount(8)
+    table_b.setHorizontalHeaderLabels(
+        ["Date", "Matricule", "Eleve", "Classe", "Type frais",
+         "Montant", "Mode", "Trimestre"])
+    vide_b = EmptyState(
+        "Aucun paiement ne correspond a ces criteres",
+        "Modifiez les filtres ou le trimestre pour voir d'autres encaissements.")
+    pile_b = QStackedWidget()
+    pile_b.addWidget(table_b)
+    pile_b.addWidget(vide_b)
+    lay_b.addWidget(pile_b, 1)
 
     def refresh_b():
         _reload_combo(combo_annee_b,
@@ -238,16 +287,15 @@ def paiements(page, ctx):
             type_frais=combo_type_b.currentData() or None,
             classe_id=combo_classe_b.currentData(),
             mode=combo_mode_b.currentData() or None)
-        table_b.setRowCount(len(rows))
-        for i, p in enumerate(rows):
-            values = [p["date_paiement"], p["matricule"], f"{p['prenom']} {p['nom']}",
-                      p["classe_nom"] or "-", p["type_frais"] or "-",
-                      fmt_money(p["montant"]), p["mode_reglement"] or "-",
-                      p["trimestre"] or "-"]
-            for j, val in enumerate(values):
-                table_b.setItem(i, j, QTableWidgetItem(str(val)))
-        table_b.resizeColumnsToContents()
-        lbl_bilan_total.setText(f"Total : {fmt_money(sum(float(p['montant']) for p in rows))}")
+        valeurs = [[p["date_paiement"], p["matricule"],
+                    f"{p['prenom']} {p['nom']}", p["classe_nom"] or "-",
+                    p["type_frais"] or "-", fmt_money(p["montant"]),
+                    p["mode_reglement"] or "-", p["trimestre"] or "-"]
+                   for p in rows]
+        table_b.remplir(valeurs)
+        pile_b.setCurrentWidget(vide_b if not rows else table_b)
+        lbl_bilan_total.setText(
+            f"Total : {fmt_money(sum(float(p['montant']) for p in rows))}")
 
     btn_bilan.clicked.connect(refresh_b)
     combo_annee_b.currentIndexChanged.connect(refresh_b)
@@ -326,18 +374,18 @@ def open_paiement_dialog(parent, ctx, on_created):
             return
         solde = repos.solde_eleve(eleve_id, annee)
         if montant.value() > float(solde["solde"]):
-            reponse = QMessageBox.question(
-                dlg, "Sur-paiement",
-                f"Le solde restant de cet eleve est de "
-                f"{fmt_money(solde['solde'])} : ce paiement depasse le montant "
-                "attendu (trop-percu possible).\nEnregistrer quand meme ?")
-            if reponse != QMessageBox.Yes:
+            from ui.pages.helpers import confirmer
+            if not confirmer(
+                    dlg,
+                    f"Le solde restant de cet eleve est de "
+                    f"{fmt_money(solde['solde'])} : ce paiement depasse le montant "
+                    "attendu (trop-percu possible).\nEnregistrer quand meme ?",
+                    "Sur-paiement"):
                 return
         repos.add_paiement(eleve_id, montant.value(), combo_mode.currentText(),
                            combo_type.currentText(), annee,
                            combo_trimestre.currentData() or "")
-        QMessageBox.information(dlg, "Paiement",
-                                f"{fmt_money(montant.value())} encaisse.")
+        toast.succes(dlg, f"{fmt_money(montant.value())} encaisse.")
         dlg.accept()
 
     buttons.accepted.disconnect()

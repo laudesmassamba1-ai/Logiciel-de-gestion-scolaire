@@ -1,20 +1,19 @@
 from functools import partial
 
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QComboBox, QFormLayout, QDoubleSpinBox, QTableWidgetItem, QVBoxLayout,
-    QWidget,
+    QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox,
+    QComboBox, QFormLayout, QVBoxLayout,
 )
 
 from repositories import repos
+from ui import toast
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _money_edit,
+    _btn, _simple_btn_style, _money_edit, _actions_cell, _adapter_hauteur,
 )
 from ui.widgets import fmt_money
+from ui.widgets.page_templates import ListPageTemplate
 from core.config import (
-    STYLE_BTN_PRIMARY, STYLE_TABLE, STYLE_EMPTY_STATE,
-    STYLE_HEADER_TITLE, STYLE_HEADER_SUBTITLE,
+    STYLE_BTN_PRIMARY,
     C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER,
 )
 
@@ -22,84 +21,52 @@ from core.config import (
 def personnel(page, ctx):
     if page.layout() is not None:
         return
-    page.setStyleSheet("")
-    lay = QVBoxLayout(page)
-    lay.setContentsMargins(20, 20, 20, 20)
-    lay.setSpacing(16)
+    tpl = ListPageTemplate(
+        page, "Personnel & RH", "Enseignants, administration et salaires")
     peut_gerer = ctx.can_edit("personnel")
 
-    header = QVBoxLayout()
-    titre = QLabel("Personnel & RH")
-    titre.setStyleSheet(STYLE_HEADER_TITLE)
-    sub = QLabel("Enseignants, administration et salaires")
-    sub.setStyleSheet(STYLE_HEADER_SUBTITLE)
-    header.addWidget(titre)
-    header.addWidget(sub)
-    lay.addLayout(header)
-
-    top = QHBoxLayout()
     search = QLineEdit()
     search.setPlaceholderText("Rechercher un membre du personnel...")
-    top.addWidget(search)
-    top.addStretch(1)
+    search.setMaximumWidth(360)
+    tpl.ajouter_filtre(search)
+    tpl.ajouter_space_filtre()
+
+    tpl.table.setColumnCount(6)
+    tpl.table.setHorizontalHeaderLabels(
+        ["Nom complet", "Fonction", "Telephone", "Email", "Salaire", "Actions"])
 
     def _ouvrir_dialog(employe=None):
         open_personnel_dialog(page, ctx, employe)
         fill()  # la liste doit reflechir l'employe cree/modifie
 
-    btn_add = _btn("+ Nouvel Employe",
-                   _ouvrir_dialog,
-                   STYLE_BTN_PRIMARY)
-    if peut_gerer:
-        top.addWidget(btn_add)
-    lay.addLayout(top)
-
-    from PyQt5.QtWidgets import QTableWidget
-    table = QTableWidget(0, 6)
-    table.setHorizontalHeaderLabels(
-        ["Nom complet", "Fonction", "Telephone", "Email", "Salaire", "Actions"])
-    table.setEditTriggers(QTableWidget.NoEditTriggers)
-    table.setSelectionBehavior(QTableWidget.SelectRows)
-    table.setAlternatingRowColors(True)
-    table.setShowGrid(False)
-    table.verticalHeader().setVisible(False)
-    table.verticalHeader().setDefaultSectionSize(42)
-    table.horizontalHeader().setStretchLastSection(True)
-    table.horizontalHeader().setMinimumSectionSize(80)
-    table.setStyleSheet(STYLE_TABLE)
-    lay.addWidget(table)
-
-    lbl_empty = QLabel("Aucun membre du personnel enregistre")
-    lbl_empty.setStyleSheet(STYLE_EMPTY_STATE)
-    lbl_empty.setAlignment(Qt.AlignCenter)
-    lay.addWidget(lbl_empty)
+    def _delete(parent, ctx, p):
+        from ui.pages.helpers import confirmer
+        if confirmer(parent, f"Supprimer {p['nom_complet']} ?", "Personnel"):
+            repos.delete_personnel(p["id"])
+            toast.succes(parent, "Employe supprime.")
+            fill()
 
     def fill():
         rows = repos.personnel(search.text().strip())
-        table.setRowCount(len(rows))
+        valeurs = [[p["nom_complet"], p["fonction"] or "-", p["telephone"] or "-",
+                    p["email"] or "-", fmt_money(p["salaire"]), ""] for p in rows]
+        tpl.remplir(
+            valeurs,
+            message_vide="Aucun membre du personnel enregistre",
+            sous_titre_vide="Ajoutez les enseignants et l'administration "
+                            "pour suivre les salaires.")
         for i, p in enumerate(rows):
-            values = [p["nom_complet"], p["fonction"] or "-", p["telephone"] or "-",
-                      p["email"] or "-", fmt_money(p["salaire"])]
-            for j, val in enumerate(values):
-                table.setItem(i, j, QTableWidgetItem(str(val)))
-            cell = QWidget()
-            cl = QHBoxLayout(cell)
-            cl.setContentsMargins(2, 2, 2, 2)
-            if peut_gerer:
-                cl.addWidget(_btn("Modifier", partial(_ouvrir_dialog, p),
-                                  _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)))
-                cl.addWidget(_btn("Supprimer", partial(_delete, page, ctx, p),
-                                  _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
-            table.setCellWidget(i, 5, cell)
-        table.resizeColumnsToContents()
-        lbl_empty.setVisible(not rows)
-        table.setVisible(bool(rows))
+            tpl.table.setCellWidget(i, 5, _actions_cell(*(
+                (
+                    _btn("Modifier", partial(_ouvrir_dialog, p),
+                         _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)),
+                    _btn("Supprimer", partial(_delete, page, ctx, p),
+                         _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)),
+                ) if peut_gerer else ()
+            )))
 
-    def _delete(parent, ctx, p):
-        if QMessageBox.question(parent, "Personnel",
-                                f"Supprimer {p['nom_complet']} ?") == QMessageBox.Yes:
-            repos.delete_personnel(p["id"])
-            fill()
+    btn_add = _btn("+ Nouvel Employe", _ouvrir_dialog, STYLE_BTN_PRIMARY)
+    tpl.header.ajouter_action(btn_add)
 
     search.textChanged.connect(fill)
     fill()
@@ -133,7 +100,6 @@ def open_personnel_dialog(parent, ctx, employe=None):
     form.addRow("Statut :", statut)
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.accepted.connect(dlg.accept)
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
     if employe:
@@ -145,7 +111,8 @@ def open_personnel_dialog(parent, ctx, employe=None):
         idx = statut.findText(employe["statut"] or "Contrat")
         if idx >= 0:
             statut.setCurrentIndex(idx)
-    if dlg.exec_() == QDialog.Accepted:
+
+    def valider():
         if not nom.text().strip():
             QMessageBox.warning(dlg, "Personnel", "Le nom est obligatoire.")
             return
@@ -159,3 +126,9 @@ def open_personnel_dialog(parent, ctx, employe=None):
             repos.update_personnel(employe["id"], *data)
         else:
             repos.add_personnel(*data)
+        toast.succes(dlg, "Employe enregistre.")
+        dlg.accept()
+
+    buttons.accepted.connect(valider)
+    _adapter_hauteur(dlg)
+    dlg.exec_()

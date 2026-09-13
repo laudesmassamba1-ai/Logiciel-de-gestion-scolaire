@@ -1,17 +1,21 @@
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QComboBox, QFormLayout, QTableWidgetItem, QVBoxLayout,
+    QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox,
+    QComboBox, QFormLayout, QPushButton, QTableWidgetItem, QVBoxLayout,
 )
 
 from repositories import repos
 from services import reports
-from ui.loader import apply_ui
+from ui import toast
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _classe_items, _reload_combo, _fill_combos, _fit_rows,
+    _classe_items, _reload_combo,
 )
+from ui.widgets.page_templates import ListPageTemplate
 from core.config import (
     CRENEAUX, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY,
 )
+
+JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
 
 
 class PlanningCellDialog(QDialog):
@@ -46,14 +50,43 @@ class PlanningCellDialog(QDialog):
         return self.combo.currentData(), self.salle.text().strip()
 
 
+def _creneau(table, row):
+    item = table.verticalHeaderItem(row)
+    return item.text() if item else CRENEAUX[row]
+
+
+def _jour(table, col):
+    item = table.horizontalHeaderItem(col)
+    return item.text() if item else JOURS[col]
+
+
 def planning(page, ctx):
     if page.layout() is not None:
         return
-    apply_ui("planning/planning.ui", page)
-    _fit_rows(page.table_planning)
-    _fill_combos(page.combo_classe_planning, [])
-    for c in repos.classes():
-        page.combo_classe_planning.addItem(c["nom"], c["id"])
+    tpl = ListPageTemplate(page, "Planning",
+                           "Emploi du temps par classe (edit : double-clic)")
+    peut_editer = ctx.can_edit("planning")
+
+    combo_classe = QComboBox()
+    tpl.ajouter_filtre(QLabel("Classe :"))
+    tpl.ajouter_filtre(combo_classe)
+    tpl.ajouter_space_filtre()
+
+    table = tpl.table
+    table.setColumnCount(len(JOURS))
+    table.setHorizontalHeaderLabels(JOURS)
+    table.setRowCount(len(CRENEAUX))
+    table.setVerticalHeaderLabels(CRENEAUX)
+
+    btn_edit = QPushButton("Modifier")
+    btn_edit.setCursor(Qt.PointingHandCursor)
+    btn_edit.setStyleSheet(STYLE_BTN_SECONDARY)
+    btn_print = QPushButton("Imprimer")
+    btn_print.setCursor(Qt.PointingHandCursor)
+    btn_print.setStyleSheet(STYLE_BTN_SECONDARY)
+    if peut_editer:
+        tpl.header.ajouter_action(btn_edit)
+    tpl.header.ajouter_action(btn_print)
 
     editing = {"on": False}
 
@@ -61,68 +94,59 @@ def planning(page, ctx):
         if not editing["on"]:
             return
         editing["on"] = False
-        page.btn_edit_planning.setText("Modifier")
-        page.btn_edit_planning.setStyleSheet(STYLE_BTN_SECONDARY)
+        btn_edit.setText("Modifier")
+        btn_edit.setStyleSheet(STYLE_BTN_SECONDARY)
 
     def refresh():
-        # Changer de classe pendant l'edition : on sort du mode edition
-        # pour ne jamais enregistrer les modifications dans la mauvaise classe.
         _exit_edit()
-        _reload_combo(page.combo_classe_planning, _classe_items(avec_toutes=False))
-        classe_id = page.combo_classe_planning.currentData()
-        page.table_planning.clearContents()
+        _reload_combo(combo_classe, _classe_items(avec_toutes=False))
+        classe_id = combo_classe.currentData()
+        table.clearContents()
         if not classe_id:
-            page.lbl_empty_state_planning.setVisible(True)
-            page.table_planning.setVisible(False)
+            tpl.vide.set_message("Choisissez une classe",
+                                 "Selectionnez une classe pour voir son emploi "
+                                 "du temps.")
+            tpl.pile.setCurrentWidget(tpl.vide)
             return
-        page.lbl_empty_state_planning.setVisible(False)
-        page.table_planning.setVisible(True)
+        tpl.pile.setCurrentWidget(table)
         grid = repos.planning_for(classe_id)
-        for row in range(8):
-            creneau = page.table_planning.verticalHeaderItem(row).text() if \
-                page.table_planning.verticalHeaderItem(row) else CRENEAUX[row]
-            for col in range(6):
-                jour = page.table_planning.horizontalHeaderItem(col).text()
+        for row in range(len(CRENEAUX)):
+            creneau = _creneau(table, row)
+            for col in range(len(JOURS)):
+                jour = _jour(table, col)
                 entree = grid.get((jour, creneau))
                 if entree:
                     texte = entree["matiere"] or ""
                     if entree.get("salle"):
                         texte += f" ({entree['salle']})"
-                    page.table_planning.setItem(row, col, QTableWidgetItem(texte))
-
-    def toggle_edit():
-        if editing["on"]:
-            _finish_edit()
-        else:
-            _start_edit()
+                    table.setItem(row, col, QTableWidgetItem(texte))
+        table.refresh_height()
 
     def _start_edit():
-        if not page.combo_classe_planning.currentData():
+        if not combo_classe.currentData():
             QMessageBox.warning(page, "Planning", "Choisissez d'abord une classe.")
             return
         editing["on"] = True
-        page.btn_edit_planning.setText("Enregistrer le Planning")
-        page.btn_edit_planning.setStyleSheet(STYLE_BTN_PRIMARY)
+        btn_edit.setText("Enregistrer le Planning")
+        btn_edit.setStyleSheet(STYLE_BTN_PRIMARY)
 
     def _finish_edit():
-        classe_id = page.combo_classe_planning.currentData()
+        classe_id = combo_classe.currentData()
         if not classe_id:
             QMessageBox.warning(page, "Planning", "Choisissez d'abord une classe.")
             return
         entries = []
-        for row in range(8):
-            creneau = page.table_planning.verticalHeaderItem(row).text() if \
-                page.table_planning.verticalHeaderItem(row) else CRENEAUX[row]
+        for row in range(len(CRENEAUX)):
+            creneau = _creneau(table, row)
             if "Pause" in creneau:
                 continue
-            for col in range(6):
-                jour = page.table_planning.horizontalHeaderItem(col).text()
-                item = page.table_planning.item(row, col)
+            for col in range(len(JOURS)):
+                jour = _jour(table, col)
+                item = table.item(row, col)
                 matiere = salle = None
                 if item and item.text().strip():
                     texte = item.text()
                     if "(" in texte:
-                        # rsplit : une matiere peut contenir des parentheses.
                         matiere, salle = texte.rsplit("(", 1)
                         matiere = matiere.strip()
                         salle = salle.rstrip(")").strip() or None
@@ -131,25 +155,23 @@ def planning(page, ctx):
                     entries.append((jour, creneau, matiere, salle))
         repos.save_planning(classe_id, entries)
         editing["on"] = False
-        page.btn_edit_planning.setText("Modifier")
-        page.btn_edit_planning.setStyleSheet(STYLE_BTN_SECONDARY)
-        QMessageBox.information(page, "Planning", "Emploi du temps enregistre.")
+        btn_edit.setText("Modifier")
+        btn_edit.setStyleSheet(STYLE_BTN_SECONDARY)
+        toast.succes(page, "Emploi du temps enregistre.")
         refresh()
 
     def cell_double_clicked(row, col):
         if not editing["on"]:
             return
-        creneau = page.table_planning.verticalHeaderItem(row).text() if \
-            page.table_planning.verticalHeaderItem(row) else CRENEAUX[row]
+        creneau = _creneau(table, row)
         if "Pause" in creneau:
             return
-        jour = page.table_planning.horizontalHeaderItem(col).text()
+        jour = _jour(table, col)
         current = {"matiere": None, "salle": None}
-        item = page.table_planning.item(row, col)
+        item = table.item(row, col)
         if item and item.text().strip():
             texte = item.text()
             if "(" in texte:
-                # rsplit : une matiere peut contenir des parentheses.
                 matiere, salle = texte.rsplit("(", 1)
                 current["matiere"] = matiere.strip() or None
                 current["salle"] = salle.rstrip(")").strip() or None
@@ -161,20 +183,21 @@ def planning(page, ctx):
             texte = matiere if matiere else ""
             if matiere and salle:
                 texte += f" ({salle})"
-            page.table_planning.setItem(row, col, QTableWidgetItem(texte))
+            table.setItem(row, col, QTableWidgetItem(texte))
 
     def print_planning():
-        classe_id = page.combo_classe_planning.currentData()
+        classe_id = combo_classe.currentData()
         classe = repos.classe_by_id(classe_id) if classe_id else None
         if not classe:
             QMessageBox.warning(page, "Planning", "Choisissez une classe.")
             return
         reports.planning(classe)
 
-    page.btn_edit_planning.clicked.connect(toggle_edit)
-    page.table_planning.cellDoubleClicked.connect(cell_double_clicked)
-    page.btn_print_planning.clicked.connect(print_planning)
-    page.combo_classe_planning.currentIndexChanged.connect(refresh)
+    btn_edit.clicked.connect(
+        lambda: _finish_edit() if editing["on"] else _start_edit())
+    table.cellDoubleClicked.connect(cell_double_clicked)
+    btn_print.clicked.connect(print_planning)
+    combo_classe.currentIndexChanged.connect(refresh)
 
     refresh()
     page.refresh = refresh

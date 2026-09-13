@@ -64,21 +64,40 @@ class EleveRepository(RepositoryBase):
             "mere_tel", "tuteur_nom", "tuteur_tel", "adresse", "redoublant",
             "check_acte", "check_photos", "check_bulletin", "statut",
         ]
+        tuple_vals = tuple(data.get(c) for c in cols) + (eleve_id,)
+        uuid_client = self._eleve_uuid(eleve_id)
+        payload = dict(data)
+        payload["eleve_uuid"] = uuid_client
+        classe_nom = self._classe_nom(data.get("classe_id"))
+        if classe_nom:
+            payload["classe_nom"] = classe_nom
         set_clause = ", ".join(f"{c} = ?" for c in cols)
-        self._route_write("PUT", f"/modifierEleve/{eleve_id}", data,
+        self._route_write("PUT", f"/modifierEleve/{eleve_id}", payload,
                           db.execute,
                           f"UPDATE eleves SET {set_clause} WHERE id = ?",
-                          tuple(data.get(c) for c in cols) + (eleve_id,))
+                          tuple_vals)
 
     def delete_eleve(self, eleve_id):
-        self._route_write("DELETE", f"/eleve/{eleve_id}/notes", {},
+        uuid_client = self._eleve_uuid(eleve_id)
+        payload = {"eleve_uuid": uuid_client}
+        self._route_write("DELETE", f"/eleve/{eleve_id}/notes", payload,
                           db.execute, "DELETE FROM notes WHERE eleve_id = ?", (eleve_id,))
-        self._route_write("DELETE", f"/eleve/{eleve_id}/presences", {},
+        self._route_write("DELETE", f"/eleve/{eleve_id}/presences", payload,
                           db.execute, "DELETE FROM presences WHERE eleve_id = ?", (eleve_id,))
-        self._route_write("DELETE", f"/eleve/{eleve_id}/paiements", {},
+        self._route_write("DELETE", f"/eleve/{eleve_id}/paiements", payload,
                           db.execute, "DELETE FROM paiements WHERE eleve_id = ?", (eleve_id,))
-        self._route_write("DELETE", f"/eleve/{eleve_id}", {},
+        self._route_write("DELETE", f"/eleve/{eleve_id}", payload,
                           db.execute, "DELETE FROM eleves WHERE id = ?", (eleve_id,))
+
+    def _eleve_uuid(self, eleve_id):
+        row = db.query_one("SELECT uuid_client FROM eleves WHERE id = ?", (eleve_id,))
+        return row["uuid_client"] if row else None
+
+    def _classe_nom(self, classe_id):
+        if not classe_id:
+            return None
+        row = db.query_one("SELECT nom FROM classes WHERE id = ?", (classe_id,))
+        return row["nom"] if row else None
 
     def next_matricule(self):
         year = __import__("datetime").date.today().year

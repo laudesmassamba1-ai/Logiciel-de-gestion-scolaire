@@ -13,12 +13,10 @@
   <property name="windowTitle">
    <string>Espace Administration</string>
   </property>
-  <property name="styleSheet">
-   <string>background-color: #EDEAE4; font-family: 'Segoe UI', sans-serif;</string>
-  </property>
+<property name="styleSheet"><string>QWidget#PageAdmin { background-color: #E7EBF3; font-family: 'Segoe UI', sans-serif; }</string></property>
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
-    <number>20</number>
+    <number>16</number>
    </property>
    <property name="leftMargin">
     <number>20</number>
@@ -39,7 +37,7 @@
        <item>
         <widget class="QLabel" name="lbl_title">
          <property name="styleSheet">
-          <string>color: #000000; font-size: 24px; font-weight: bold;</string>
+          <string>color: #20202A; font-size: 20px; font-weight: 700; border: none;</string>
          </property>
          <property name="text">
           <string>Administration du Systeme</string>
@@ -49,7 +47,7 @@
        <item>
         <widget class="QLabel" name="lbl_subtitle">
          <property name="styleSheet">
-          <string>color: #333333; font-size: 13px;</string>
+          <string>color: #8A8A93; font-size: 13px; border: none;</string>
          </property>
          <property name="text">
           <string>Gestion des comptes et de l'acces a l'application</string>
@@ -76,9 +74,6 @@
        <property name="cursor">
         <cursorShape>PointingHandCursor</cursorShape>
        </property>
-       <property name="styleSheet">
-        <string>background-color: #C8960C; color: #000000; border: none; border-radius: 6px; padding: 10px 18px; font-weight: bold;</string>
-       </property>
        <property name="text">
         <string>+ Nouveau Compte</string>
        </property>
@@ -93,18 +88,16 @@
      </property>
      <item>
       <widget class="QFrame" name="card_total_comptes">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_total_comptes { background-color: #FFFFFF; color: #20202A; border: 1px solid #E1E6EF; border-radius: 12px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card1">
         <property name="leftMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="topMargin">
          <number>12</number>
         </property>
         <property name="rightMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="bottomMargin">
          <number>12</number>
@@ -112,7 +105,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi1_titre">
           <property name="styleSheet">
-           <string>color: #333333; font-size: 11px; font-weight: bold; border: none;</string>
+           <string>color: #6B7280; font-size: 11px; font-weight: 700; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>COMPTES ACTIFS</string>
@@ -122,7 +115,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi1_valeur">
           <property name="styleSheet">
-           <string>color: #000000; font-size: 22px; font-weight: bold; border: none;</string>
+           <string>color: #20202A; font-size: 22px; font-weight: 800; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>0</string>
@@ -134,18 +127,16 @@
      </item>
      <item>
       <widget class="QFrame" name="card_directeurs">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_directeurs { background-color: #FFFFFF; color: #20202A; border: 1px solid #E1E6EF; border-radius: 12px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card2">
         <property name="leftMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="topMargin">
          <number>12</number>
         </property>
         <property name="rightMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="bottomMargin">
          <number>12</number>
@@ -153,7 +144,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi2_titre">
           <property name="styleSheet">
-           <string>color: #333333; font-size: 11px; font-weight: bold; border: none;</string>
+           <string>color: #6B7280; font-size: 11px; font-weight: 700; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>DIRECTEURS</string>
@@ -163,7 +154,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi2_valeur">
           <property name="styleSheet">
-           <string>color: #1E40AF; font-size: 22px; font-weight: bold; border: none;</string>
+           <string>color: #2563EB; font-size: 22px; font-weight: 800; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>0</string>
@@ -175,18 +166,16 @@
      </item>
      <item>
       <widget class="QFrame" name="card_gestionnaires">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_gestionnaires { background-color: #FFFFFF; color: #20202A; border: 1px solid #E1E6EF; border-radius: 12px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card3">
         <property name="leftMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="topMargin">
          <number>12</number>
         </property>
         <property name="rightMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="bottomMargin">
          <number>12</number>
@@ -194,7 +183,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi3_titre">
           <property name="styleSheet">
-           <string>color: #333333; font-size: 11px; font-weight: bold; border: none;</string>
+           <string>color: #6B7280; font-size: 11px; font-weight: 700; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>GESTIONNAIRES</string>
@@ -204,7 +193,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi3_valeur">
           <property name="styleSheet">
-           <string>color: #C8960C; font-size: 22px; font-weight: bold; border: none;</string>
+           <string>color: #C8960C; font-size: 22px; font-weight: 800; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>0</string>
@@ -216,18 +205,16 @@
      </item>
      <item>
       <widget class="QFrame" name="card_comptes_inactifs">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
+       <property name="styleSheet"><string>QFrame#card_comptes_inactifs { background-color: #FFFFFF; color: #20202A; border: 1px solid #E1E6EF; border-radius: 12px; }</string></property>
        <layout class="QVBoxLayout" name="layout_card4">
         <property name="leftMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="topMargin">
          <number>12</number>
         </property>
         <property name="rightMargin">
-         <number>15</number>
+         <number>14</number>
         </property>
         <property name="bottomMargin">
          <number>12</number>
@@ -235,7 +222,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi4_titre">
           <property name="styleSheet">
-           <string>color: #333333; font-size: 11px; font-weight: bold; border: none;</string>
+           <string>color: #6B7280; font-size: 11px; font-weight: 700; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>COMPTES INACTIFS</string>
@@ -245,7 +232,7 @@
         <item>
          <widget class="QLabel" name="lbl_kpi4_valeur">
           <property name="styleSheet">
-           <string>color: #B91C1C; font-size: 22px; font-weight: bold; border: none;</string>
+           <string>color: #DC2626; font-size: 22px; font-weight: 800; border: none; qproperty-alignment: AlignCenter;</string>
           </property>
           <property name="text">
            <string>0</string>
@@ -258,32 +245,33 @@
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="bottomLayout">
-     <property name="spacing">
-      <number>15</number>
-     </property>
-     <item>
-      <widget class="QFrame" name="card_activite">
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
-       <layout class="QVBoxLayout" name="layout_activite">
-        <property name="leftMargin">
-         <number>15</number>
-        </property>
-        <property name="topMargin">
-         <number>15</number>
-        </property>
-        <property name="rightMargin">
-         <number>15</number>
-        </property>
-        <property name="bottomMargin">
-         <number>15</number>
+    <widget class="QFrame" name="card_activite">
+     <property name="styleSheet"><string>QFrame#card_activite { background-color: #FFFFFF; color: #20202A; border: 1px solid #E1E6EF; border-radius: 12px; }</string></property>
+     <layout class="QVBoxLayout" name="layout_activite">
+      <property name="leftMargin">
+       <number>14</number>
+      </property>
+      <property name="topMargin">
+       <number>12</number>
+      </property>
+      <property name="rightMargin">
+       <number>14</number>
+      </property>
+      <property name="bottomMargin">
+       <number>12</number>
+      </property>
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <layout class="QHBoxLayout" name="activiteHeader">
+        <property name="spacing">
+         <number>8</number>
         </property>
         <item>
          <widget class="QLabel" name="lbl_activite_titre">
           <property name="styleSheet">
-           <string>color: #000000; font-weight: bold; font-size: 14px; border: none;</string>
+           <string>color: #20202A; font-weight: 700; font-size: 14px; border: none;</string>
           </property>
           <property name="text">
            <string>Dernieres Connexions</string>
@@ -291,78 +279,22 @@
          </widget>
         </item>
         <item>
-         <widget class="QListWidget" name="list_dernieres_connexions">
-          <property name="styleSheet">
-           <string>border: none; font-size: 13px;</string>
+         <spacer name="activiteSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
           </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="lbl_activite_empty">
-          <property name="styleSheet">
-           <string>color: #333333; font-size: 12px; padding: 10px; qproperty-alignment: AlignCenter; border: none;</string>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
           </property>
-          <property name="text">
-           <string>Aucune connexion enregistree</string>
-          </property>
-          <property name="visible">
-           <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget>
-     </item>
-     <item>
-      <widget class="QFrame" name="card_raccourcis">
-       <property name="minimumSize">
-        <size>
-         <width>280</width>
-         <height>800</height>
-        </size>
-       </property>
-       <property name="maximumSize">
-        <size>
-         <width>280</width>
-         <height>16777215</height>
-        </size>
-       </property>
-       <property name="styleSheet">
-        <string>background-color: transparent; color: #000000; border: 1px solid #000000; border-radius: 8px;</string>
-       </property>
-       <layout class="QVBoxLayout" name="layout_raccourcis">
-        <property name="leftMargin">
-         <number>15</number>
-        </property>
-        <property name="topMargin">
-         <number>15</number>
-        </property>
-        <property name="rightMargin">
-         <number>15</number>
-        </property>
-        <property name="bottomMargin">
-         <number>15</number>
-        </property>
-        <property name="spacing">
-         <number>8</number>
-        </property>
-        <item>
-         <widget class="QLabel" name="lbl_raccourcis_titre">
-          <property name="styleSheet">
-           <string>color: #000000; font-weight: bold; font-size: 14px; border: none;</string>
-          </property>
-          <property name="text">
-           <string>Raccourcis</string>
-          </property>
-         </widget>
+         </spacer>
         </item>
         <item>
          <widget class="QPushButton" name="btn_goto_comptes">
           <property name="cursor">
            <cursorShape>PointingHandCursor</cursorShape>
-          </property>
-          <property name="styleSheet">
-           <string>text-align: left; background-color: #EDEAE4; color: #111111; border: 1px solid #D5D2CB; border-radius: 6px; padding: 10px 14px;</string>
           </property>
           <property name="text">
            <string>Voir tous les comptes</string>
@@ -374,20 +306,60 @@
           <property name="cursor">
            <cursorShape>PointingHandCursor</cursorShape>
           </property>
-          <property name="styleSheet">
-           <string>text-align: left; background-color: #EDEAE4; color: #111111; border: 1px solid #D5D2CB; border-radius: 6px; padding: 10px 14px;</string>
-          </property>
           <property name="text">
            <string>Reinitialiser un mot de passe</string>
           </property>
          </widget>
         </item>
        </layout>
-      </widget>
-     </item>
-    </layout>
+      </item>
+      <item>
+       <widget class="QTableWidget" name="table_dernieres_connexions">
+        <property name="editTriggers">
+         <set>QAbstractItemView::NoEditTriggers</set>
+        </property>
+        <property name="selectionBehavior">
+         <enum>QAbstractItemView::SelectRows</enum>
+        </property>
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+        <property name="showGrid">
+         <bool>false</bool>
+        </property>
+        <column>
+         <property name="text">
+          <string>Utilisateur</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Role</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Date de connexion</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_activite_empty">
+        <property name="styleSheet">
+         <string>color: #8A8A93; font-size: 12px; padding: 20px; qproperty-alignment: AlignCenter; border: none;</string>
+        </property>
+        <property name="text">
+         <string>Aucune connexion enregistree</string>
+        </property>
+        <property name="visible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
-
   </layout>
  </widget>
  <resources/>

@@ -65,7 +65,7 @@ _STYLE_ENVOI = (
     "QPushButton:disabled { background-color: #D8D3C8; color: #F5F3EF; }")
 _STYLE_ENTETE_BTN = (
     "QPushButton { background: transparent; border: none; font-size: 13px;"
-    " color: #8A6D1F; padding: 4px 7px; border-radius: 8px; }"
+    " color: #8A6D1F; padding: 4px 7px; border-radius: 12px; }"
     "QPushButton:hover { background-color: rgba(0,0,0,0.07); }")
 
 _AVATAR_ASSISTANT = (
@@ -137,8 +137,9 @@ class AssistantChatDialog(QDialog):
         self.ctx = ctx
         self.moteur = AssistantIA(ctx.user)
         self.setWindowTitle(f"{NOM_ASSISTANT} — Assistante locale")
-        self.resize(md.DIALOGUE_LARGEUR, md.DIALOGUE_HAUTEUR)   # 377 x 610
-        self.setMinimumSize(md.MINI_LARGEUR, md.MINI_HAUTEUR)   # 233 x 377
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
+        self.resize(1000, 720)
+        self.setMinimumSize(520, 420)
         self.setModal(False)
         self.setAttribute(Qt.WA_DeleteOnClose, False)
         self.setStyleSheet(f"QDialog {{ background-color: {C_BG}; }}")
@@ -157,6 +158,7 @@ class AssistantChatDialog(QDialog):
         self._derniere_question = None
         self._boutons_feedback = []
         self._tous_feedback = []
+        self._en_cours = False
 
     # ------------------------------------------------------------------
     # Construction de l'interface
@@ -347,7 +349,7 @@ class AssistantChatDialog(QDialog):
             bouton.setToolTip(astuce)
             bouton.setStyleSheet(
                 f"{_STYLE_CHIP} padding: 0px; margin: 0px;"
-                " border-radius: 10px;")
+                " border-radius: 12px;")
             bouton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             bouton.setCheckable(True)
             bouton.clicked.connect(self._fabriquer_noter(note, bouton))
@@ -357,6 +359,8 @@ class AssistantChatDialog(QDialog):
 
     def _fabriquer_noter(self, note, bouton):
         def _noter(_=False):
+            if getattr(self, "_en_cours", False):
+                return
             # Un seul avis par conversation : desactive TOUS les boutons de
             # feedback (meme sur les anciennes bulles) pour que le vote
             # reste attribue a la derniere reponse du moteur.
@@ -434,6 +438,8 @@ class AssistantChatDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _envoyer(self):
+        if getattr(self, "_en_cours", False):
+            return
         texte = self.champ.toPlainText().strip()
         if not texte:
             return
@@ -441,36 +447,55 @@ class AssistantChatDialog(QDialog):
         self._traiter_message(texte)
 
     def _maj_etat_envoi(self):
-        self.btn_envoi.setEnabled(bool(self.champ.toPlainText().strip()))
+        self.btn_envoi.setEnabled(
+            bool(self.champ.toPlainText().strip()) and
+            not getattr(self, "_en_cours", False))
 
     def _traiter_message(self, texte):
+        # Pas de pile de questions : si une reponse est en cours (calcul,
+        # LLM, reseau), on ignore l'envoi pour laisser le thread finir.
+        if getattr(self, "_en_cours", False):
+            return
+        self._en_cours = True
         self._derniere_question = texte
         self._boutons_feedback = []
         self._bulle_utilisateur(texte)
-        try:
-            reponse = self.moteur.traiter(texte)
-        except Exception as exc:
-            reponse = {"texte": f"Erreur interne de l'assistant : {exc}\n"
-                                "La demande n'a pas abouti.",
-                       "action": None, "choix": None}
         self._maj_chips(None)
-
-        # Delai naturel proportionnel a la longueur de la reponse
-        # (bornes et pas de la suite de Fibonacci).
-        contenu = reponse.get("texte") or ""
-        delai = max(md.fib(13), min(md.fib(16),
-                                    md.fib(13) + md.section(len(contenu) * 2)))
+        self._maj_etat_envoi()
         self._indicateur_ecriture(True)
 
-        def _reveler():
-            self._indicateur_ecriture(False)
-            action = reponse.get("action")
-            if action:
-                QTimer.singleShot(md.fib(8), lambda: self._executer_action(action))
-            bulle = self._bulle_assistante("")
-            self._ecrire_progressivement(bulle, contenu, reponse)
+        def _travailler():
+            return self.moteur.traiter(texte)
 
-        self._minuteur_revelation = QTimer.singleShot(delai, _reveler)
+        def _resultat(reponse):
+            self._en_cours = False
+            self._maj_etat_envoi()
+            self._indicateur_ecriture(False)
+            if isinstance(reponse, Exception):
+                reponse = {
+                    "texte": f"Erreur interne de l'assistant : {reponse}\n"
+                             "La demande n'a pas abouti.",
+                    "action": None, "choix": None}
+
+            # Delai naturel proportionnel a la longueur de la reponse
+            # (bornes et pas de la suite de Fibonacci).
+            contenu = reponse.get("texte") or ""
+            delai = max(md.fib(13), min(md.fib(16),
+                                        md.fib(13) + md.section(len(contenu) * 2)))
+            self._indicateur_ecriture(True)
+
+            def _reveler():
+                self._indicateur_ecriture(False)
+                action = reponse.get("action")
+                if action:
+                    QTimer.singleShot(md.fib(8),
+                                      lambda: self._executer_action(action))
+                bulle = self._bulle_assistante("")
+                self._ecrire_progressivement(bulle, contenu, reponse)
+
+            self._minuteur_revelation = QTimer.singleShot(delai, _reveler)
+
+        run_async(_travailler, _resultat)
 
     def _ecrire_progressivement(self, bulle, contenu, reponse):
         """Revele la reponse par petits paquets (effet ChatGPT)."""
@@ -513,6 +538,8 @@ class AssistantChatDialog(QDialog):
         self._defiler_bas()
 
     def _nouvelle_discussion(self):
+        if getattr(self, "_en_cours", False):
+            return
         if self._minuteur_ecriture is not None:
             self._minuteur_ecriture.stop()
             self._minuteur_ecriture = None
@@ -689,7 +716,7 @@ class _ChampMultiligne(QTextEdit):
         self.setFixedHeight(md.CHAMP)
         self.setTabChangesFocus(True)
         self.setStyleSheet(
-            "QTextEdit { border: 1px solid #C9BFA8; border-radius: 17px;"
+            "QTextEdit { border: 2px solid #C9BFA8; border-radius: 12px;"
             f" padding: {md.fib(3)}px {md.MARGE}px; background: white;"
             f" font-size: {md.POLICE_TEXTE}px; }}"
             "QTextEdit:focus { border: 2px solid #E0A800; }")
@@ -717,6 +744,10 @@ _instance = {}
 def ouvrir_assistant_ia(parent, ctx):
     """Ouvre (ou ramene au premier plan) la fenetre de chat.
 
+    La premiere ouverture se fait en plein ecran (maximisee) : l'assistante
+    gagne de la place pour afficher l'historique et les suggestions. Les
+    ouvertures suivantes retrouvent la taille choisie par l'utilisateur.
+
     NB : show() seul suffit rarement sous GNOME/XWayland (prevention du vol
     de focus) : sans raise_() + activateWindow() la fenetre s'ouvrait
     DERRIERE la fenetre principale et le clic semblait ne rien faire."""
@@ -734,7 +765,7 @@ def ouvrir_assistant_ia(parent, ctx):
             _instance.pop(cle, None)
     fenetre = AssistantChatDialog(parent, ctx)
     _instance[cle] = fenetre
-    fenetre.show()
+    fenetre.showMaximized()
     fenetre.raise_()
     fenetre.activateWindow()
     return fenetre

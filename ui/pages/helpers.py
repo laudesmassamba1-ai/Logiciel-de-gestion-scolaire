@@ -1,10 +1,11 @@
 import datetime
 from functools import partial
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtWidgets import (
     QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QTableWidgetItem, QVBoxLayout, QTableWidget, QHeaderView,
+    QWidget, QSizePolicy,
 )
 
 from core.config import (
@@ -36,8 +37,32 @@ def _btn(text, callback, style=None, max_h=None):
         b.setMaximumHeight(max_h)
     if style:
         b.setStyleSheet(style)
+    if text.startswith("+"):
+        _poser_icone_plus(b, style)
     b.clicked.connect(callback)
     return b
+
+
+def _poser_icone_plus(btn, style=None):
+    """Icone '+' gauche sur les boutons d'ajout (qtawesome, optionnel)."""
+    try:
+        import qtawesome as qta
+    except ImportError:
+        return
+    style = style or ""
+    if "#C8960C" in style or "DEA821" in style or "#DAA520" in style:
+        couleur = "#6B4E00"
+    elif "#FEF2F2" in style:
+        couleur = "#B91C1C"
+    elif "color: #FFFFFF" in style or "color: #ffffff" in style:
+        couleur = "#FFFFFF"
+    else:
+        couleur = "#8A8A93"
+    try:
+        btn.setIcon(qta.icon("fa5s.plus", color=couleur))
+        btn.setIconSize(QSize(15, 15))
+    except Exception:
+        pass
 
 
 def _simple_btn_style(bg=None, fg=None, border=None):
@@ -45,7 +70,21 @@ def _simple_btn_style(bg=None, fg=None, border=None):
     fg = fg or C_TEXT_SECONDARY
     border = border or C_BORDER
     return (f"background-color: {bg}; color: {fg}; border: 1px solid {border};"
-            " border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600;")
+            " border-radius: 12px; padding: 6px 12px; font-size: 12px; font-weight: 600;")
+
+
+def _adapter_hauteur(dlg):
+    """Ajuste la hauteur d'un dialogue au contenu reel, sans jamais
+    depasser l'ecran disponible (evite contenu rogne ou boutons hors champ)."""
+    from PyQt5.QtWidgets import QApplication
+    lay = dlg.layout()
+    if lay is None:
+        return
+    besoin = max(lay.sizeHint().height(), lay.minimumSize().height())
+    dispo = QApplication.primaryScreen().availableGeometry().height() - 48
+    hauteur = min(besoin, max(dispo, 360))
+    dlg.setMinimumHeight(hauteur)
+    dlg.resize(dlg.width(), hauteur)
 
 
 def _money_edit(value=0, minimum=0, maximum=100000000):
@@ -99,6 +138,45 @@ def _fit_rows(t):
     t.verticalHeader().setDefaultSectionSize(40)
 
 
+def _fill_table_space(t):
+    """Repartit la largeur disponible sur toute la table, sans couper.
+
+    Les colonnes gardent la taille suffisante pour leur contenu (aucun
+    texte tronque) puis la place restante est distribuee de maniere egale.
+    Sur un ecran large, la table ne laisse plus un gros vide a droite.
+    """
+    header = t.horizontalHeader()
+    header.setSectionResizeMode(QHeaderView.Interactive)
+    t.resizeColumnsToContents()
+    count = header.count()
+    if count == 0:
+        return
+    disponible = header.width()
+    utilise = sum(header.sectionSize(i) for i in range(count))
+    if utilise >= disponible:
+        return
+    extra = (disponible - utilise) // count
+    for i in range(count):
+        header.resizeSection(i, header.sectionSize(i) + extra)
+    header.setSectionResizeMode(QHeaderView.Interactive)
+
+
+def _actions_cell(*btns):
+    """Cellule d'actions alignees a droite (ideale en derniere colonne).
+
+    Les boutons restent proches du bord droit au lieu de flotter sur un
+    gros espace vide au milieu de la ligne.
+    """
+    cell = QWidget()
+    lay = QHBoxLayout(cell)
+    lay.setContentsMargins(4, 2, 6, 2)
+    lay.setSpacing(6)
+    lay.addStretch(1)
+    for b in btns:
+        lay.addWidget(b)
+    return cell
+
+
 def _make_table(headers):
     t = QTableWidget(0, len(headers))
     t.setHorizontalHeaderLabels(headers)
@@ -107,7 +185,7 @@ def _make_table(headers):
     t.setAlternatingRowColors(True)
     t.setShowGrid(False)
     t.verticalHeader().setVisible(False)
-    t.verticalHeader().setDefaultSectionSize(42)
+    t.verticalHeader().setDefaultSectionSize(40)
     t.horizontalHeader().setStretchLastSection(True)
     t.horizontalHeader().setMinimumSectionSize(80)
     t.setStyleSheet(STYLE_TABLE)
@@ -137,36 +215,52 @@ def _page_header(parent_lay, titre, sous_titre):
 
 def _kpi_card(label, valeur, couleur=C_PRIMARY):
     frame = QFrame()
+    frame.setMaximumHeight(92)
+    frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
     frame.setStyleSheet(
-        f"background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        f" stop:0 #FFFFFF, stop:1 #FAF9F6); border: 1px solid #E6E3DB;"
-        f" border-radius: 14px; border-top: 3px solid {couleur};")
+        f"background-color: #FFFFFF;"
+        f" border: 3px solid {couleur}; border-radius: 16px;")
     v = QVBoxLayout(frame)
-    v.setContentsMargins(16, 14, 16, 14)
-    v.setSpacing(2)
+    v.setContentsMargins(16, 8, 16, 8)
+    v.setSpacing(4)
     val = QLabel(str(valeur))
     val.setObjectName("kpi_value")
-    val.setStyleSheet(f"font-size: 23px; font-weight: 800; color: {couleur};")
+    val.setStyleSheet(f"font-size: 22px; font-weight: 800; color: {couleur};")
     lab = QLabel(label)
-    lab.setStyleSheet(f"font-size: 11px; color: {C_TEXT_MUTED}; font-weight: 500;")
+    lab.setStyleSheet(f"font-size: 11px; color: {C_TEXT_MUTED}; font-weight: 600;")
     v.addWidget(val)
     v.addWidget(lab)
     return frame
 
 
 def _styler_carte(frame, accent=None):
-    """Style moderne d'une carte existante (bande d'accent or en haut).
+    """Style moderne d'une carte existante (contour colore uniforme).
 
     Utilisee par les tableaux de bord dont les frames viennent des .ui.
+    Le selecteur est porte par l'objectName de la frame : une regle
+    "QFrame { ... }" nue cascade sur les QLabel enfants (ils deviennent
+    eux aussi des cadres), seule une regle "QFrame#nom" est ciblee.
     """
     if accent is None:
         accent = C_PRIMARY
     try:
+        nom = frame.objectName() or "carteStylee"
+        frame.setObjectName(nom)
         frame.setStyleSheet(
-            f"QFrame {{ background-color: qlineargradient(x1:0, y1:0,"
-            f" x2:0, y2:1, stop:0 #FFFFFF, stop:1 #FAF9F6);"
-            f" border: 1px solid #E6E3DB; border-radius: 14px;"
-            f" border-top: 3px solid {accent}; }}")
+            f"QFrame#{nom} {{ background-color: #FFFFFF;"
+            f" border: 3px solid {accent}; border-radius: 16px; }}")
+    except RuntimeError:
+        pass
+
+
+def _borner_carte_kpi(frame, hauteur=94):
+    """Borne la hauteur d'une carte KPI (chiffre + libelle) chargee depuis
+    un .ui, pour qu'elle ne s'etire jamais verticalement."""
+    if frame is None:
+        return
+    try:
+        frame.setMaximumHeight(hauteur)
+        frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
     except RuntimeError:
         pass
 
@@ -181,12 +275,55 @@ def _replace_layout(layout, widget):
         w = item.widget()
         if w:
             w.deleteLater()
-    layout.addWidget(widget)
+        else:
+            sub = item.layout()
+            if sub:
+                _replace_layout(sub, None)
+    if widget is not None:
+        layout.addWidget(widget)
 
 
 def _appreciation(moyenne):
     from services.appreciations import appreciation
     return appreciation(moyenne)
+
+
+def _empty_state(texte, sous_titre="", bouton=None, hauteur=180):
+    """Etat vide compact : message centre (et optionnellement un bouton
+    d'action), jamais un grand cadre vide.
+
+    `bouton` est un QPushButton deja construit (facon _add_btn/_btn).
+    """
+    box = QFrame()
+    box.setMaximumHeight(hauteur)
+    box.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+    box.setStyleSheet(
+        "QFrame { background: rgba(255,255,255,0.55);"
+        " border: 1px dashed #C4CCDA; border-radius: 12px; }")
+    lay = QVBoxLayout(box)
+    lay.setContentsMargins(20, 16, 20, 16)
+    lay.setSpacing(6)
+    msg = QLabel(texte)
+    msg.setStyleSheet(
+        f"color: {C_EMPTY_STATE}; font-size: 14px; font-weight: 600;"
+        " border: none; background: transparent;")
+    msg.setAlignment(Qt.AlignCenter)
+    msg.setWordWrap(True)
+    lay.addWidget(msg)
+    if sous_titre:
+        sub = QLabel(sous_titre)
+        sub.setStyleSheet(
+            f"color: {C_TEXT_MUTED}; font-size: 12px;"
+            " border: none; background: transparent;")
+        sub.setAlignment(Qt.AlignCenter)
+        lay.addWidget(sub)
+    if bouton is not None:
+        bouton_lay = QHBoxLayout()
+        bouton_lay.addStretch(1)
+        bouton_lay.addWidget(bouton)
+        bouton_lay.addStretch(1)
+        lay.addLayout(bouton_lay)
+    return box
 
 
 def _parse_money(text):
@@ -215,6 +352,33 @@ def date_dans_annee_active(date_iso):
     debut = str(a["date_debut"])
     fin = str(a.get("date_fin") or "9999-12-31")
     return bool(date_iso) and debut <= date_iso <= fin
+
+
+def _boite_confirmer(parent, texte, titre="Confirmation"):
+    """Construit (sans exec) la boite « Oui / Non » française.
+
+    Factoree hors de confirmer() pour permettre aux tests d'inspecter la
+    structure (boutons, defaut) sans boucle modale, qui peut planter dans
+    l'environnement offscreen de la CI Windows."""
+    from PyQt5.QtWidgets import QMessageBox as _B
+
+    boite = _B(_B.Question, titre, texte, _B.NoButton, parent)
+    oui = boite.addButton("Oui", _B.YesRole)
+    non = boite.addButton("Non", _B.NoRole)
+    boite.setDefaultButton(non)
+    return boite, oui
+
+
+def confirmer(parent, texte, titre="Confirmation"):
+    """Confirmation destructive avec boutons francaise « Oui / Non ».
+
+    Les QMessageBox par defaut affichent des boutons anglais (Yes/No) :
+    cette fenetre propose la meme question en francais et le bouton
+    par defaut est « Non » (pivot le plus sur des actions destructrices).
+    """
+    boite, oui = _boite_confirmer(parent, texte, titre)
+    boite.exec_()
+    return boite.clickedButton() is oui
 
 
 def refuser_si_hors_annee(parent, date_iso, label="La date"):

@@ -1,6 +1,5 @@
 
 import json
-import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -27,6 +26,11 @@ class SyncWorker(QThread):
 
 
     def run(self):
+        """Boucle de synchro : le sommeil est decoupe en pas de 0,5 s pour
+        que requestInterruption() soit pris en compte rapidement (sinon un
+        sleep de 15 s retarderait l'arret bien au-dela du wait(3 s))."""
+        pas = 0.5
+        restant = self._interval
         while not self.isInterruptionRequested():
             if api_disponible(force=True):
                 network.set_online()
@@ -36,7 +40,11 @@ class SyncWorker(QThread):
             else:
                 network.set_offline()
                 self.status_changed.emit("offline")
-            time.sleep(self._interval)
+                restant = self._interval
+            while restant > 0 and not self.isInterruptionRequested():
+                self.msleep(int(pas * 1000))
+                restant -= pas
+            restant = self._interval
 
 
     def _pull_structure(self):
@@ -45,23 +53,42 @@ class SyncWorker(QThread):
         if now - self._last_pull < self.PULL_INTERVAL:
             return
         try:
-            from services.sync_service import pull_structure
+            from services.sync_service import pull_structure, pull_donnees, pull_comptes
             self._last_pull = now
             pull_structure()
-        except Exception:
-            pass  # jamais bloquant : le poste reste utilisable hors-ligne
+            pull_donnees()
+            pull_comptes()
+        except Exception as exc:
+            self.sync_error.emit(f"Erreur de synchro : {exc}")
 
 
     def _drain_queue(self):
-        rows = db.dequeue_pending()
+        try:
+            rows = db.dequeue_pending()
+        except Exception:
+            # Base temporairement verrouillee (pull en cours) : on passera
+            # au prochain cycle au lieu de tuer le thread de synchro.
+            return
         sent = 0
         for row in rows:
             try:
                 payload = json.loads(row["payload"])
+                method, endpoint = row["method"], row["endpoint"]
+                from api import mapping
+                action = mapping.remap(method, endpoint, payload)
+                if action[0] in ("skip", "enqueue"):
+                    # « skip » : la reference n'existe pas sur le serveur
+                    # (l'ecriture locale est legitime, rien a y envoyer).
+                    # « enqueue » : resolution toujours impossible (reseaux
+                    # coupe) — inutile de rejouer a l'infini, on archive.
+                    db.mark_queue_done(row["id"])
+                    continue
+                if action[0] == "send":
+                    endpoint, payload = action[1], action[2]
                 uuid_client = row["uuid_client"] if row["uuid_client"] else payload.get("uuid_client")
-                if uuid_client and "/eleve" in row["endpoint"]:
+                if uuid_client and method == "POST" and endpoint == "/eleve":
                     payload = {"uuid_client": uuid_client, "eleve": payload}
-                _, err = _request(row["method"], row["endpoint"], json=payload)
+                _, err = _request(method, endpoint, json=payload)
             except Exception:
                 err = "echec envoi"
             if err:

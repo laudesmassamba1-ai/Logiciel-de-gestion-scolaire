@@ -6,19 +6,24 @@
 
 ## Etat actuel du projet
 
-- **Version** : v1.5.0 (branche `installers`)
+- **Version** : **v1.8.0** (session XV — comptes partages, hotspot WiFi de
+  l'ecole hors Internet, discovery UDP, audit 74 bugs ; branche `exe` HEAD
+  `adc91e9` avec les binaires ; tag `v1.6.0` pousse -> Release GitHub
+  publique avec les 4 installateurs)
 - **Architecture** :
   - App bureau PyQt5 + SQLite locale (offline-first) dans `core/`, `ui/`,
     `services/`, `repositories/`, `database/`
   - Sync multi-postes optionnelle via API FastAPI + MySQL dans `server/`
     (compatibilite client/serveur dans `server/compat.py`)
-- **Tests** : **301 tests verts** (`tests/` bureau + `server/`, dont
-  `server/test_routes_exercice.py` et 19 tests d'apprentissage autonome IA) +
-  exercices fonctionnels couvrant toutes les routes serveur et les
-  repositories/services : **SQLite 122/122, MySQL réel 122/122,
-  desktop 80/80, services 28/28** (session 2026-09-09)
-- **Derniers commits** : securisation P0 serveur (JWT, rate-limit, audit),
-  integration du serveur, session persistante verrouillee par tests
+- **Tests** : **320 tests verts** (`tests/` bureau + `server/`) + exercices
+  fonctionnels : **SQLite 122/122, MySQL réel 122/122, desktop 80/80,
+  services 28/28** (session 2026-09-09)
+- **Derniers commits** : release v1.6.0 (CI « monstre », cf. suite III),
+  branche `exe` « voici les executables » (cf. suite III), et en cours :
+  passe « améliorations minutieuses » (warnings QSS corriges cf. suite V,
+  UX Apple-like cf. suite VI) puis refonte visuelle « suite du rapport »
+  (cercles supprimés, règles .ui scopées, KPI/états vides compactés,
+  icônes sidebar + boutons d'ajout — suite VIII, app relancée OK)
 
 ## Decisions d'architecture importantes
 
@@ -954,8 +959,10 @@ champs clairs (fond `C_BG_SOFT`) avec focus or, bouton dégradé or avec
 - Suite complète : **tests/ 212 passed** + **server/ 89 passed** = **301
   passed** (compte identique au précédent — aucune régression).
 - Exercice services : **28/28 OK**.
-- Warnings Qt « Could not parse stylesheet of object QLineEdit » : cosmétiques
-  (déclarations ignorées), le rendu reste correct — non traités.
+- Warnings Qt « Could not parse stylesheet of object QLineEdit » : **cause
+  trouvee et corrigee en session suite V** (accolade supplementaire `}}`
+  dans un string non-f -> QSS invalide sur chaque champ). Plus aucune
+  emission au boot ni sur les dialogues de connexion.
 - L'application doit être relancée pour voir le nouveau rendu.
 
 ## Session 2026-09-09 (suite III) — Crash assistantie corrigé + CI de build monstre
@@ -1076,3 +1083,755 @@ Système de design mathématique central. Tout découle de :
 - Suite complète : **304 passed** (`tests/` 212 + `server/` 89 + nouveaux
   autres) ; `tests/test_assistant_ia_ui.py` 3 pass.
 - App relancée : PID 196380 (`.venv/bin/python main.py`), saine.
+
+## Session 2026-09-09 (suite V) — Passe « améliorations minutieuses » : warning QSS QLineEdit corrigé
+
+**Demande :** continuer les améliorations méticuleuses après la livraison des
+exécutables ; poser le choix d'architecture (Flutter vs PyQt5) — l'utilisateur
+a choisi **affiner l'app PyQt5 actuelle** (une réécriture Flutter ferait
+perdre 304 tests + l'app entière ; une option client web FastAPI reste
+ouverte mais pas retenue).
+
+### Bug P0 cosmétique résolu : « Could not parse stylesheet of object QLineEdit »
+
+Symptôme : 2 warnings Qt à chaque ouverture des écrans de connexion (un par
+QLineEdit, émis deux fois : polish + repolish). Le rendu était correct mais
+le warning polluait la console ET le QSS invalide pouvait dégrader le focus.
+
+**Cause racine (trouvée par bisection à l'écran réel, reproduite via
+`qInstallMessageHandler`) :** dans `ui/login_view.py`, le QSS des champs
+est assemblé sur plusieurs lignes dont **une n'est pas un f-string** :
+
+```python
+field.setStyleSheet(
+    f"QLineEdit {{ background-color: {C_BG_SOFT};"
+    " border: 1px solid #E3DFD6; border-radius: 10px;"
+    " padding: 9px 12px; font-size: 13px; color: #2A2F3C; }}"   # <- NON-f-string
+    f"QLineEdit:focus {{ border: 1px solid {C_GOLD}; }}")
+```
+
+Dans une **f-string**, `}}` s'échappe en `}` ; dans une **chaîne normale**,
+`}}` produit littéralement DEUX accolades. Résultat : un `}` orphelin après
+la règle → stylesheet invalide → message Qt par champ. Les 25 autres
+occurrences `; }}` du projet sont dans des f-strings (`f"..." }}`) donc
+correctes : seules **les lignes 99 et 217** de `login_view.py` étaient
+fautives (LoginDialog ET FirstSetupDialog, blocs identiques).
+
+**Fix :** `"; }}"` → `"; }"` aux deux endroits (grep `; }}"` pour vérifier
+qu'une occurrence n'a pas le préfixe `f`, c'est le piège).
+
+**Validation :** repro offscreen avec le vrai `LoginDialog`/`FirstSetupDialog`
++ `APP_STYLESHEET` : **0 capture** (avant : 4 / 6). Suite complète :
+**304 passed**. App relancée (PID 244090), log de boot réel : **0 warning
+QSS**. `tests/test_assistant_ia_ui.py` + `tests/test_auth.py` : 21 pass.
+
+### Note méthode (anti-oubli)
+
+Pour reproduire ce genre de warning de façon fiable : il n'apparaît qu'au
+**rendu réel** du dialogue (pas en posant simplement le stylesheet sur un
+QLineEdit isolé). Utiliser `qInstallMessageHandler` + les vrais constructeurs
+(`LoginDialog(parent=None)`, `FirstSetupDialog(parent=None)`) + `show()` +
+`processEvents()` ×2, avec `app.setStyleSheet(APP_STYLESHEET)` actif.
+
+## Session 2026-09-09 (suite VI) — UX Apple-like : toasts, palette Ctrl+K, confirmations françaises
+
+**Demande :** « améliore la logique, l'expérience utilisateur ultime comme
+avec Apple, etc. » → passe UX : retours non bloquants, commande Spotlight,
+confirmation destructrice sûre en français, dialogues qui valident AVANT de
+fermer, états vides.
+
+### Nouveau `ui/toast.py` — notifications « Apple »
+
+- Pilules arrondies glissant depuis le coin **haut droit** de la fenêtre
+  (fond = parent.window()), fondu 260 ms OutCubic, empilées, **max 4
+  visibles**, clic pour fermer, disparition auto (succès 2,6 s / info 3,2 s /
+  erreur 4,6 s).
+- API : `toast.succes/info/erreur/afficher(parent, texte, ...)`. Widgets
+  `Qt.Tool | FramelessWindowHint | WindowStaysOnTopHint`, ombre douce.
+- **Bug d'implémentation attrapé par les tests** : la troncature à 4 tournait
+  AVANT l'ajout → 5 visibles possibles. Fix : `_tronquer()` se déclenche à
+  `>= _MAX_VISIBLES`.
+
+### Nouveau `ui/palette.py` — palette Ctrl+K « Spotlight »
+
+- Champ de recherche en haut centre, filtrage **sans accent + insensible à la
+  casse** (`_normaliser`) sur titre ET conseil, flèches haut/bas, Entrée
+  valide, Échap annule. Signaux : `Palette.choisi(cle)` / `Palette.annule()`.
+- `ui/main_view.py` : raccourci `QShortcut("Ctrl+K")`, `_entrees_palette()`
+  filtrées par `RoleAuthorizer.allowed`, `_conseil_page()` (aide contextuelle),
+  pastille « Ctrl+K · Recherche » dans l'en-tête. Actions dédiées :
+  `action:assistant` et `action:logout`.
+
+### `ui/pages/helpers.py` — `confirmer()` (confirmations françaises)
+
+- `QMessageBox` par défaut affiche Yes/No anglais → `confirmer(parent, texte,
+  titre)` avec boutons **« Oui / Non »** et **bouton par défaut « Non »**
+  (pivot sûr pour les actions destructrices).
+- **19 sites `QMessageBox.question` convertis** : logout (main_view),
+  suppressions caisse/personnel/classes/paiements/tarifs/cycles/années/
+  matières/élèves/comptes, sur-paiement, restauration sauvegarde, suppression
+  config/sauvegarde, désactivation mode serveur, impression reçu.
+- **Bouton par défaut corrigé en cours de route** : la docstring annonçait
+  « Non » mais le code faisait `setDefaultButton(oui)`.
+
+### Succès modaux → toasts (non bloquant)
+
+Convertis en `toast.succes` : caisse (export, transaction), certificat,
+présences, paiement encaissé, configuration enregistrée, sauvegarde créée,
+comptes (mis à jour, mot de passe), planning, programme, inscriptions
+élèves (créé/reinscrit/mis à jour), notes (saisies ×2, export moyennes).
+**Restés modaux volontairement** (déplacements d'attention ou credentials) :
+recap synchronisation, création de compte (identifiant + mot de passe
+temporaire), restauration avec redémarrage, gardes « sélectionnez d'abord… ».
+
+### Feedback ajouté aux 4 pages muettes (classes / cycles / personnel / tarifs)
+
+Toasts après chaque enregistrement ET après chaque suppression ; l'activation
+de l'année scolaire annonce le passage en actif. (`_set_active` cycles).
+
+### Logique des dialogues « pattern C » corrigée (fermer=valider sans contrôle)
+
+Le danger : `buttons.accepted.connect(dlg.accept)` fermait le dialogue AU
+premier Entrée, la validation n'ayant lieu qu'APRÈS `exec_()` (un envoi
+invalide fermait en silence). Corrigé en `valider()` connecté à `accepted`
+(validation puis `accept()` uniquement si OK) dans :
+- cycles (nouveau/modifier cycle, nouvelle/modifier année + anti-chevauchement)
+- personnel (salaire > 0, nom obligatoire)
+- matières (programmes, et mini-dialog notes : nom obligatoire)
+- comptes (changer mon mot de passe : confirmation des deux champs AVANT
+  l'appel `change_password` ; réinitialiser : mot de passe vide refusé avant
+  fermeture)
+
+### États vides — onglets « Suivi Eleve » / « Bilans » de paiements
+
+- Suivi : « Sélectionnez un élève… » quand aucune sélection ; « Aucun paiement
+  enregistré pour cet élève sur l'année active » (table masquée).
+- Bilans : « Aucun paiement ne correspond à ces critères » (table masquée,
+  même si le total reste affiché à 0).
+
+### Validation
+
+- Nouveaux tests : `tests/test_toast.py` (3), `tests/test_palette.py` (5),
+  `tests/test_confirmer.py` (3 : boutons français + défaut « Non » + résultat
+  par clic réel via `QTimer` + `activeModalWidget`). **11 tests nouveaux.**
+- Suite complète : **`pytest tests server -q` → 315 passed**, 0 échec.
+- Tout ce qui restait `QMessageBox.question` a été éliminé (grep 0).
+- **Tri des tableaux délibérément NON implémenté** : les colonnes Actions
+  avec cellules widgets + le tri lexicographique des montants rendraient le
+  résultat pire que pas de tri (à faire proprement, par clic de colonne
+  numérique, dans une passe dédiée).
+
+### Suite VII — Refonte visuelle « moderne clair épuré »
+
+Direction validée : fond gris très clair, un seul accent or, cartes plates,
+structure conservée. Cible : taille fluide (1920 et portable).
+
+- `core/config.py` : palette claire (`C_BG #F4F4F6`, cartes `#FFFFFF`,
+  bordures `#E5E5EB`, textes `#1D1D1F/#3A3A40/#6E6E73`), `STYLE_CARD` plat,
+  `STYLE_TABLE` header + liseré or, scrollbar/statusbar/disables harmonisés.
+- Sidebar claire (main.ui) + libellés raccourcis (fini les textes coupés) ;
+  barre du haut claire avec titre = section (`_section_label`).
+- `helpers.py` : `_fill_table_space` (tableaux pleine largeur sans troncature),
+  `_actions_cell` (actions alignées à droite), `_kpi_card`/`_styler_carte` plats.
+- Tables migrées (classes, eleves, comptes, caisse, personnel, paiements,
+  tarifs, cycles, programmes, presences, notes) ; dashboards restylés.
+- `.ui` hérités (classes, eleves, comptes, planning, parametres + dialogues
+  classe/compte/inscription) : couleurs beige/noir/bleu migrées vers le thème
+  (transform idempotente appliquée aux fichiers, XML validé), styles de page
+  et de table réappliqués depuis le thème.
+
+Vérification : app relancée sur la vraie base `data/ecole.db` (aucune base
+factice, aucun compte « temporaire » injecté), log sans erreur, `pytest tests
+server -q` → 315 passed.
+
+### Vérification propre (aucun mock, aucune injection)
+
+- Suite de tests réelle : `pytest tests server -q` (315 tests, base SQLite
+  temporaire dédiée aux tests serveur via environnement, jamais la base de
+  l'utilisateur).
+- Lancement manuel : `.venv/bin/python main.py` sur la vraie base publique
+  `data/ecole.db` ; le compte administrateur se crée par l'assistant de
+  première configuration (jamais codé en dur, hash PBKDF2 salé).
+- Aucune modification de la base réelle, aucun compte jetable. Si un dialogue
+  GUI doit être vérifié, se connecter au vrai compte et l'ouvrir en interface.
+### Session 2026-09-09 (suite VIII) — Refonte visuelle « suite du rapport » (cercles, cohérence .ui, KPI, états vides, icônes)
+
+Demande : appliquer les priorités du rapport de refonte visuelle (supprimer
+les cercles décoratifs cassés, harmoniser les styles, cartes KPI compactes,
+états vides compacts, marges réduites, icônes) sans toucher au fond ni à la
+navigation.
+
+- **Cercles supprimés** : `ui/decor.py` réduit à `creer_avatar` (plus de
+  `FondBulle`/`poser_fond_bulles`/blobs/anneaux/points) ; constantes `BULLE_*`
+  et commentaire pastel retirés de `core/config.py`.
+- **Cohérence `.ui` (cause des champs « sans bordure »)** : les règles de
+  style nues sur les QFrame/QWidget cascadeaient sur leurs enfants et
+  écrasaient les QLineEdit globaux. Toutes les règles nues des .ui sont
+  scopées `QFrame#... { ... }` (54 règles au total) et 25 styles inline de
+  champs (bordure/radius) supprimés pour laisser le thème global gouverner :
+  caisse, classes, comptes, dashboards (admin/directeur/gestionnaire), eleves,
+  inscription, notes, parametres, planning + `main.ui` (stackedWidget scopé).
+- **Cartes KPI bornées (P3)** : `_kpi_card` → max 92 px ; `_borner_carte_kpi`
+  (94 px + `QSizePolicy.Fixed`) appliqué sur eleves, classes, comptes et
+  dashboards (ensemble `_CARTES_KPI`).
+- **États vides compacts (P4)** : `_empty_state(texte, sous_titre, bouton,
+  hauteur=180)` ; remplacé le grand label centré sur tarifs + personnel
+  (bouton « + Nouveau » intégré).
+- **Icônes (P6)** : `qtawesome==1.4.2` ajouté à requirements.txt ; icônes FA5
+  or sur les 15 boutons de sidebar (`_poser_icones_nav`), icône « + » sur les
+  boutons d'ajout via `_poser_icone_plus` (helpers `_btn`, caisse, eleves,
+  classes, comptes, notes).
+- **Marges (P5, partiel)** : espacements réduits sur tarifs et personnel ;
+  recherche bornée (360 px).
+
+Vérification : `py_compile` OK sur tous les fichiers modifiés, XML des 14 .ui
+valide (parser ElementTree), app lancée hors-écran sur la vraie base
+`data/ecole.db` → 15/15 pages chargées sans erreur, cartes KPI mesurées à
+94 px, icônes présentes sur la sidebar.
+
+## Session 2026-09-09 (suite IX) — Arrondis + contours uniformes, puis inventaire des bugs et corrections
+
+### Uniformisation des arrondis (tokens `Resources.Radius`)
+- `resources/design_tokens.py` : `Radius` = **SM 9 / MD 12 / LG 16** (XL supprimé).
+- `core/config.py` : import `Radius as _R`, tout le QSS global bascule sur les
+  tokens (QToolTip, QPushButton, QMenu, QLineEdit/QComboBox/QDateEdit/
+  QSpinBox/QTextEdit, QCheckBox, QGroupBox, QSS_SIDEBAR).
+- Widgets : `KPICard` → `setBorderRadius(16)` ; `DataTable` → 14 px ; `EmptyState`
+  → 16 px ; `FormPageTemplate` → 12 px.
+- Rayons éparpillés (6/8/9/10/11/13/17) uniformisés à 12 px sur les pages
+  historiques (dashboards, parametres, assistant, login, helpers, palette).
+
+### Contours uniformes « tout autour » (retour utilisateur itéré)
+- Règle retenue : **2 px tout autour** sur les contrôles interactifs (boutons,
+  champs), **1 px** sur les conteneurs simples.
+- Suppression des effets « border-bottom uniquement » qui donnaient un aspect
+  3D : `STYLE_BTN_*`, QSS global, `ui/decor.py` (avatar → anneau or),
+  `ui/login_view.py`, `ui/palette.py`, `ui/pages/helpers.py` (_kpi_card,
+  _styler_carte → contour 3 px couleur), `ui/widgets/kpi_card.py`,
+  `ui/main_view.py` (champ de recherche, chips, bouton assistant).
+- Sont laissés volontairement en « soulignement » (traits structurels, pas des
+  contours d'objet) : ligne sous en-têtes de page, soulignement d'onglets
+  (QTabBar), soulignement des en-têtes de tableau. Idem pour les séparateurs de
+  documents créés par `services/pdf_export.py` / `reports.py`.
+
+### Inventaire des bugs (audits croisés) → corrections appliquées
+1. **`requirements.txt` ne listait pas `PyQt-Fluent-Widgets`** → `ImportError:
+   No module named 'qfluentwidgets'` sur toute installation neuve dès
+   `pip install -r requirements.txt` (imports : ui/widgets/data_table.py:12,
+   ui/widgets/kpi_card.py:10, ui/pages/dashboards.py:101).
+   → Ajout `PyQt-Fluent-Widgets==1.11.3`.
+2. **`open_change_password_dialog` (comptes_page.py:186) : code mort** — exporté
+   mais jamais appelé ; « Changer mon mot de passe » était inatteignable depuis
+   l'UI. → Bouton « Changer mon mot de passe » câblé dans l'en-tête de la page
+   Comptes (visible pour tous, pas seulement ceux qui gèrent les comptes), style
+   `STYLE_BTN_SECONDARY`.
+3. **`helpers._styler_carte` : règle `QFrame { … }` non scopée** → cascade sur
+   les QFrame/QWidget descendants des cartes .ui (ils prenaient eux aussi bordure
+   + fond). → Sélecteur scopé `QFrame#objectName`.
+4. **`ui/widgets/kpi_card.py` : règle `QFrame { … }` non scopée** (idem) +
+   **largeur fixe 220 px** → grille KPI à 4 cartes sur `DashboardPageTemplate`
+   laissait un grand vide à droite (stretch uniquement sur la colonne 4).
+   → Sélecteur scopé `QFrame#kpiCard`, largeur flexible (minimum 170 px, sans
+   `setFixedWidth`) et **`QGridLayout` : stretch égal sur les colonnes 0-3**
+   (page_templates.py) → cartes réparties sur toute la largeur.
+5. **`helpers._replace_layout` : fuite des sous-layouts** (les `takeAt` retournant
+   un layout n'étaient pas nettoyés). → Nettoyage récursif (widgets `deleteLater`,
+   sous-layouts vidés récursivement).
+6. **`ui/pages/presences_page.py:114` : `motif = pres["motif"] or "" if pres else ""`**
+   — priorité d'opérateur fragile (correct mais incompréhensible). →
+   `motif = (pres.get("motif") or "") if pres else ""`.
+7. **`resources/` sans `__init__.py`** (namespace package — risque d'empaquetage
+   PyInstaller). → `resources/__init__.py` créé.
+8. **2 tests non déterministes** (TestMultipostes mode autonome) : plantaient
+   quand `data/sync.json` contient `"sync_active": true` (état réel de
+   l'utilisateur, pas un bug applicatif). → Fixture `mode_autonome`
+   (monkeypatch `core.network._sync_active = False`) ajoutée dans
+   `tests/test_assistant_ia.py`.
+
+### Résultats
+- Suite complète : **315 passed** (130 s). `py_compile` OK sur les fichiers
+  modifiés.
+- Smoke offscreen sur la vraie base (compte directeur) : navigation Comptes → le
+  bouton « Changer mon mot de passe » est présent (= `headerLayout` de
+  comptes.ui rechargé) ; capture du tableau de bord régénérée
+  (`docs/captures/dashboard_pilote_apres.png`).
+- Note opérationnelle : pour un smoke offscreen, utiliser le nom de page réel
+  (`dashboard`, `comptes`…) — `navigate("accueil")` lève un `QMessageBox`
+  « Accès refusé » modal qui bloque le script hors-écran.
+
+### Lancement applicatif (relance après corrections)
+Le lancement par arrière-plan simple est tué par le shell tool ; il faut un
+processus détaché de l'unité utilisateur systemd :
+`timeout 15 systemd-run --user --collect --unit=gs_v3 --setenv=DISPLAY=:0
+--setenv=QT_QPA_PLATFORM=xcb --setenv=WAYLAND_DISPLAY=wayland-0
+--working-directory="$(pwd)" .venv/bin/python main.py`
+(avant une relance : `pkill -f main.py` ; noms d'unité toujours frais car les
+anciennes restent enregistrées jusqu'au ramassage).
+
+## Session 2026-09-09 (suite X) — Refonte « un composant = un seul endroit » : migration des pages liste
+
+Conformément au mandat de refonte complète (les correctifs ponctuels ne tiennent
+pas ; chaque page avait son propre code de mise en page), les pages sont migrées
+une à une sur les fondations (tokens + composants `ui/widgets/` + gabarits
+`page_templates.py`). Les dialogues conservent leur .ui.
+
+### Gabarits enrichis (petits ajouts de composants, sans change du contrat)
+- `page_templates.py` — `ListPageTemplate.ajouter_kpi(carte, colonne)` : rangée
+  de KPICard optionnelle entre l'en-tête et les filtres (QGridLayout, stretch
+  égal sur les colonnes 0-3), pour les pages de liste à KPI (Eleves, Classes,
+  Comptes).
+- `page_header.py` — `PageHeader.set_sous_titre(texte)` : le sous-titre piloté
+  par le code (ex. « classe X ») sans récréer l'en-tête.
+
+### Pages migrées (5) — l'ancien code de mise en page a été SUPPRIMÉ (pas
+laissé à côté)
+1. **Eleves** (`ui/pages/eleves.py`) : plus de `eleves/eleves.ui`, plus de
+   `_styler_carte`/`_borner_carte_kpi`/`STYLE_TABLE`/`_fill_table_space`.
+   → `ListPageTemplate` + 4 `KPICard` + `DataTable` (8 colonnes) + `EmptyState`
+   interne ; filtres en direct (recherche, classe, statut) ; boutons header
+   « + Nouvel Eleve » et « Exporter CSV » ; état vide piloté par le gabarit.
+2. **Classes** (`ui/pages/classes_page.py`) : idem → `ListPageTemplate`,
+   4 KPICard (Total, Effectif, Complètes, Sans titulaire), tableau 8 colonnes,
+   rouge sur les classes complètes, double-clic pour modifier.
+3. **Personnel** (`ui/pages/personnel_page.py`) : plus de `_page_header` ni de
+   `QTableWidget` brut → `ListPageTemplate` + `DataTable` (essai : pas de KPI),
+   « + Nouvel Employe » dans le header.
+4. **Matieres & Programmes** (`ui/pages/programmes_page.py`) : page double
+   onglet, ne rentre pas dans un gabarit simple ; `PageHeader` composant +
+   onglets ; les 2 onglets remplacent `_make_table`+label vide par
+   `DataTable` + `EmptyState` (pile), hauteur recalculée par le composant.
+5. **Comptes** (`ui/pages/comptes_page.py`) : plus de `comptes/comptes.ui` →
+   `ListPageTemplate` + 4 KPICard + `DataTable` 6 colonnes ; boutons header
+   « + Nouveau Compte », « Changer mon mot de passe ».
+
+### Résultats et vérification
+- `py_compile` OK sur les fichiers modifiés ; suite de tests : **315 passed**
+  (~150 s).
+- Smoke offscreen (compte directeur) : navigation sur les 5 pages sans erreur.
+- Captures avant/après générées : `docs/captures/{eleves,classes,comptes,
+  personnel,programmes}_{avant,apres}.png`. Attention : `programmes` a un
+  « avant » mais cette page n'était pas dans la liste de la capture initiale —
+  consulter les PNG.
+- Grep des `setStyleSheet` hors tokens et composants : les 5 pages migrées
+  sont tombées à **1 occurrence chacune** (le style unique du dialogue
+  conservé, ex. matricule or / label cycle).
+
+### Statut de la migration (à poursuivre — ordre initial du mandat)
+Migrées : **Eleves, Classes, Personnel, Matieres, Comptes** (+ le tableau de
+bord directeur, pilote validé). Taille des `setStyleSheet` restants par page :
+notes 25, assistant_serveur 21, parametres 20, assistant_page 18, login_view 16,
+main_view 15, main.py 3, paiements 7, palette 6, presences 6, planning 5,
+statistiques 3, dashboards 3, cycles 3, caisse 3, tarifs 1, toast 3, decor 1.
+Ces pages (dont certaines plus complexes : notes tabbées, parametres à onglets,
+assistant IA, login, sidebar) feront l'objet des prochaines sessions de
+migration ; les fondations restent la source unique à réutiliser.
+
+## Session 2026-09-10 (suite XI) — Création de compte simplifiée + migration des 6 pages simples restantes
+
+Statut : bout de la session précédente — l'utilisateur a confirmé la poursuite
+de la migration ET demandé de simplifier la création de compte.
+
+### Création de compte : fini le mot de passe temporaire
+- `ui/ui_files/comptes/compte_dialog.ui` : le sous-titre « Un mot de passe
+  temporaire sera envoyé à la personne » est remplacé par « Définissez le mot
+  de passe du nouveau compte » ; deux champs ajoutés (Mot de passe / Confirmer,
+  echoMode Password).
+- `ui/pages/comptes_page.py` `open_compte_dialog` :
+  - création → validation (≥ 6 caractères + correspondance) puis
+    `repos.add_compte(..., hash_password(password), ...)` ;
+  - édition → les champs mot de passe sont masqués (le compte affiche
+    « Changer mon mot de passe » / « Réinitialiser » par ailleurs) ;
+  - suppression du `QMessageBox.information` qui exposait le mot de passe
+    temporaire (`auth.random_password()` n'est plus utilisé ici).
+- Fenêtre agrandie 440x560 ; aucun test ne dépendait de l'ancien flux.
+
+### Migration des pages simples restantes → fondations
+Six pages portées (DataTable + EmptyState + KPICard/ListPageTemplate, palette
+or, styles de page supprimés) :
+- **Caisse** → `ListPageTemplate` : filtres (recherche, type, dates Du/Au,
+  année), 3 KPICard (Recettes / Dépenses / Solde), boutons header
+  (+ Recette, + Depense, Exporter CSV), colonnes Recettes/Dépenses.
+- **Tarifs & Scolarité** → `ListPageTemplate` : filtre classe, 4 KPICard
+  (Nombre, Moyen, Minimum, Maximum), DataTable.
+- **Présences** → `ListPageTemplate` : classe + date + Charger, boutons tout
+  présent / tout absent, KPICard Présents/Absents/Retards, état vide dynamique
+  (« Choisissez une classe… » / « Aucun élève… »).
+- **Planning** → `ListPageTemplate` : grille 8x6 (créneaux/jours), édition
+  double-clic, imprimer, pile vide « Choisissez une classe ».
+- **Cycles & Années** → pattern tabbé de programmes : un onglet par sous-page
+  avec DataTable + EmptyState + QStackedWidget.
+- **Paiements / Suivi / Bilans** → pattern tabbé : onglet Paiements (filtres +
+  2 KPICard + actions), onglet Suivi (attendu/payé/solde + table mensuelle,
+  état vide à deux messages), onglet Bilans (filtres + total + table).
+
+Hors migration : les dialogues restent en code pur (QDialog + QFormLayout) —
+aucun `.ui` ajouté.
+
+### Vérifications
+- `py_compile` OK sur les 7 fichiers modifiés.
+- Suite complète `pytest tests server` : **315 passed**.
+- Smoke offscreen (compte directeur) : caisse, tarifs, presences, planning,
+  cycles_annees, paiements — tous OK, SANS exception. (Piège évité : ne pas
+  passer un callback `None` à `_btn()` — `clicked.connect(None)` lève une
+  TypeError ; on utilise un QPushButton manuel pour « Charger » / « Imprimer ».)
+
+### Statut de la migration (à poursuivre)
+Migrées : Eleves, Classes, Personnel, Matieres, Comptes, Caisse, Tarifs,
+Présences, Planning, Cycles, Paiements (+ tableau de bord directeur).
+`setStyleSheet` restants hors composants-fondations : notes 25,
+assistant_serveur 21, parametres 20, assistant_page 18, login_view 16,
+main_view 15, main.py 3, statistiques 3, dashboards 3, toast 3, palette 6.
+Prochaines sessions : notes tabbées, parametres à onglets, assistant IA,
+login, sidebar, statistiques, palette/toast.
+
+---
+
+## Session XII — Notes, Parametres et coquille : logique + fondations
+
+### Audit « blocages/logique » (demande utilisateur)
+Tour des pages migrees et des helpers : signatures de `can_edit`, `_reload_combo`,
+`_classe_items`, `_actions_cell`, `EmptyState.set_message` et des fonctions repos
+toutes conformes ; aucun blocage nouveau releve. Rappel des pieges evites :
+`_btn(text, None, ...)` lève TypeError (callback `None`) ; DataTable impose
+`NoEditTriggers` -> re-activer pour les tableaux editables.
+
+### Notes & bulletins — page entierement refondue
+- `notes_page.py` reecrit sur les fondations : 3 onglets (Bulletins / Notes des
+  eleves / Moyennes par classe), `PageHeader` par onglet, DataTable + EmptyState
+  + QStackedWidget, edition reactivee via `ctx.can_edit("notes")`
+  (`setEditTriggers(DoubleClicked | EditKeyPressed)`), statut en bas de page.
+- Logique preservee : recalcule des moyennes, garde-fous « Selection modifiee »,
+  generation des bulletins, classement, export CSV. Constante parasite
+  `PERIODES_LABEL` supprimee.
+
+### Parametres — styles centralises dans core/config
+Choix : conserver la structure `.ui` (cartes en scroll) mais supprimer les
+styles disperses au profit de constantes uniques ajoutees dans `core/config.py` :
+`STYLE_GROUP_BOX`, `STYLE_HELP_MUTED`, `STYLE_LABEL_BOLD_MUTED`,
+`STYLE_IMAGE_PLACEHOLDER`, `STYLE_LIST_CARD`, `STYLE_BTN_MINI_DANGER`,
+`STYLE_BTN_ADD_SMALL`. `parametres_page.py` ne référence plus que ces constantes
+(toutes donnees, 0 style brut).
+
+### Statistiques, dashboards, auth et coquille
+- `statistiques_page.py` : `STYLE_SCROLL` + `STYLE_CHART_CARD` (cartes
+  graphiques) ; aucune couleur figee restante.
+- dashboards : tableau de bord directeur deja sur `DashboardPageTemplate`
+  (verifie) ; gestionnaire conserve `.ui` + constantes partagees.
+- Assistant IA : design « nombre d'or » (`ui/math_design.py`) volontairement
+  autonome et coherent -> laisse tel quel (source unique interne).
+- `login_view.py` : bouton principal, embleme et libelles centralises en
+  `STYLE_AUTH_BTN`, `STYLE_AUTH_EMBLEME`, `STYLE_AUTH_FIELD_LABEL` (supprime la
+  duplication des 3 libelles + couleurs dorees figees).
+- `main_view.py` (coquille) : entete, titre, date, champ de recherche, chip APP,
+  bouton Assistant et badge API centralises en `STYLE_ENTETE`, `STYLE_RECHERCHE`,
+  `STYLE_CHIP_APP`, `STYLE_NAV_ASSISTANT` + `STYLE_BADGE_API`.
+
+### Vérifications
+- `py_compile` OK sur core/config.py, parametres_page, statistiques_page,
+  login_view, main_view, notes_page.
+- Smoke offscreen etendu (directeur + gestionnaire) : caisse, tarifs, presences,
+  planning, cycles, paiements, statistiques, parametres, notes, dashboards
+  directeur & gestionnaire, LoginDialog, FirstSetupDialog, MainWindow — tous OK.
+- Suite complete `pytest tests server` : **315 passed**.
+
+### Statut
+Migrees : Eleves, Classes, Personnel, Matieres, Comptes, Caisse, Tarifs,
+Presences, Planning, Cycles, Paiements, Notes, Statistiques, Parametres +
+tableaux de bord + coquille (styles centralises).
+Restants de la liste demandee : assistant_serveur (assistant multi-postes) —
+fonctionnel et ancre dans core/network, styles deja coherents ; dashboard
+gestionnaire (`.ui` a bascule vers DashboardPageTemplate si besoin).
+Declarés hors perimetre (design local coherent) : assistant IA, palette, toast.
+
+---
+
+## Session XIII — Correction de la synchronisation multi-postes (ids locaux)
+
+### Contexte / constats
+Le diagnostic E2E (serveurs jetables sqlite) a mis en evidence deux defauts de
+l'architecture « local-first » lors de l'envoi poste → serveur :
+1. Une classe **sans cycle** pousse `POST /classe` avec `cycle_id=None` →
+   serveur repondait `400 cycle_id obligatoire` → l'operation restait **bloquee
+   silencieusement** dans `file_attente_synchro` (status FAILED, jamais rejouee).
+2. Les **ids locaux sont pousses bruts** : un cycle local `id=5` devenait
+   `cycle_id=5` cote serveur alors que le serveur n'avait qu'un cycle `id=1`
+   (etc. pour classe, matiere, eleve sur notes/presences/paiements/planning/
+   programmes) → references incorrectes en base serveur.
+
+### Corrections apportees
+- **`api/mapping.py` (nouveau)** : remapper applique juste avant chaque envoi
+  (donc aussi au vidage de la file) qui reattribute les references locales par
+  cles naturelles : `cycle_nom`, `classe_nom`, `matiere_nom`, `enseignant_nom`,
+  `eleve_uuid`, `annee_libelle`, `classe_ancien_nom`, `reference` de caisse.
+  Triple protocole : `send` (ids serveur reattribues), `skip` (cible pas encore
+  sur le serveur : on garde l'ecriture locale sans pousser), `enqueue`
+  (reseau coupe pendant la resolution : on met en file, drain reessaiera).
+  Idempotence cote serveur creee quand utile : cycle absent → cycle « Sans
+  cycle » ; matiere/cycle/annee deja presentes → pas de doublon.
+- **`repositories/base.py`** : `_route_write` applique le remapper dans la
+  branche en ligne ; en cas de « skip » la poussee est simplement omise (le
+  local reste valide), en cas de « enqueue » l'operation ORIGINALE (avec cles
+  naturelles) est mise en file.
+- **`api/sync_worker.py`** : `_drain_queue` repositionne lui-meme les
+  references avant envoi ; une ligne « skip » est archivee (pas de boucle
+  infinie), le wrapping `/eleve` ne concerne plus que `POST /eleve`.
+- **`database/db.py`** : `dequeue_pending` retient desormais **PENDING et
+  FAILED** → les operations deja bloquees (vieux modele, sans cles naturelles)
+  sont AUTO-REJOUES au cycle suivant et reattribuees correctement.
+- **`server/compat.py`** :
+  - `GET /eleve-syndication` (id + uuid_client) pour la resolution eleve.
+  - `DELETE /supprimerPaiement/{ref}` : accepte id numerique (legacy), une
+    reference de caisse (REC-…/DEP-…) ou une reference composee eleve
+    (uuid|montant|trimestre|type_frais|annee).
+  - `DELETE /supprimerPresence/{ref}` : id numerique (legacy) ou reference
+    composee (uuid|date|statut|classe_nom).
+- **Repos** (payloads enrichis en cles naturelles) : classe (ajout/modif classe,
+  cycle, annee), pedagogie (matiere, programme), personnel (enseignant), eleve
+  (uuid_client), finance (paiements, tarifs, caisse), note, presence, planning.
+  Suppressions poussees « par nom » quand le serveur le permet (`/supprimerClasse`).
+
+### Verifications
+- Suite complete `pytest tests server` : **315 passed** (avant et apres la
+  session).
+- Smoke offscreen etendu : 11 pages + dashboards directeur & gestionnaire +
+  LoginDialog + FirstSetupDialog + MainWindow — `SMOKE_OK`.
+- Verification E2E reelle (serveur uvicorn jetable sqlite, port 8903,
+  `syncfix_verif.py`) : **20/20 PASS** — classe sans cycle poussee 200 (plus de
+  400), cycles/classes/matieres/enseignants/eleves reattributes aux ids serveur,
+  notes/presences/paiements/tarifs/programmes pousses correctement, references
+  absentes → skip, vieille ligne en file sans cles naturelles rejouee puis
+  envoyee (drain sans 400), suppressions paiement/presence par reference OK.
+
+### Remarques
+- Les comptes directeur/gestionnaire n'ont PAS ete modifies (hors perimetre).
+- App relancee sur **gs_v8** avec le code corrige.
+- Design de la correction aligne sur l'existant : le serveur reste la source de
+  verite structurelle, l'ecriture reste local-first, aucune suppression
+  destructive ajoutee.
+
+---
+
+## Session XIV — Pull des donnees d'action + mode client assistant
+
+### Contexte
+Le poste hote et les postes clients n'avaient aucun moyen de saisir l'adresse
+du PC serveur. La synchro multi-poste ne rapatriait que la structure (cycles,
+classes, matieres, annees, tarifs) : les eleves, personnel, programmes,
+presences, notes et paiements crees sur un poste n'apparaissaient pas sur les
+autres. Trois routes de syndication manquaient.
+
+### Corrections apportees
+
+#### 1. Mode client dans l'assistant (`ui/assistant_serveur.py`)
+- Ajout `QLineEdit`, champ `input_adresse_serveur` (placeholder
+  `http://192.168.x.x:8000`).
+- Boutons **Connecter** (test HTTP `GET /annee_scolaire_active` avec timeout 3s,
+  status < 500) et **Deconnecter** (rouge, desactive la synchro).
+- `rafraichir()` : carte adresse visible uniquement en mode hote, carte client
+  visible uniquement en mode non-hote ; `btn_activer`/`btn_arreter` seuls
+  actifs pour le serveur hote.
+- `_connecter_client()` : valide l'adresse, écrit `api_url` dans
+  `sync.json`, met a jour `config.API_BASE_URL` et active `network`.
+- `_deconnecter_client()` : desactive `sync_active`, met a jour l'UI.
+- Risque gere : double import `config` (module) dans `_connecter_client` corrige
+  (import `from core import config` + `from core.config import ecrire_config_sync`
+  sans shadowing).
+
+#### 2. Routes serveur de syndication (`server/main.py`)
+- `GET /lister_toutes_les_inscriptions` : inscription avec eleve_uuid,
+  classe_nom, annee_scolaire.
+- `GET /toutes_presence` : presences avec eleve_uuid, classe_nom.
+- `GET /tous_les_programme` : programmes avec classe_nom, matiere_nom,
+  enseignant_nom.
+- `GET /paiement-syndication` : paiements avec eleve_uuid, classe_nom,
+  annee_scolaire.
+- `GET /note-syndication` : notes avec eleve_uuid, matiere_nom.
+- Toutes portables MySQL + SQLite (backend `sqlite_backend` remplace
+  `%s` → `?` automatiquement).
+- Ajoutees a la liste de test GET dans `server/test_routes_exercice.py`.
+
+#### 3. Pull des donnees d'action (`services/sync_service.py`)
+- `_champ()`, `_upsert()`, `_supprimer_absents()` : inchanges (Session XII/XIII).
+- Nouveaux helpers : `_classe_id_par_nom()`, `_matiere_id_par_nom()`,
+  `_eleve_id_local()` (uuid_client puis fallback nom/prenom),
+  `_gen_matricule()` (prefixe `ELEV2026XXXX`, non destructif).
+- **`pull_donnees()`** : fonctionne en 6 sections independantes, jamais
+  destructive (upsert par cles naturelles, aucune suppression) :
+  1. **Eleves** : GET `/eleve`, upsert par `uuid_client` ; fallback rattache
+     une ligne locale sans uuid par (nom, prenom) ; creer les eleves absents
+     localement avec matricule genere et `statut='Inscrit'`.
+  2. **Personnel** : GET `/enseignant` → table `personnel` par `nom_complet`.
+  3. **Programmes** : GET `/tous_les_programme` → upsert par
+     (classe_id, matiere_id) resolus par nom.
+  4. **Presences** : GET `/toutes_presence` → upsert par (eleve_id, date) ;
+     eleve resolu par uuid_client.
+  5. **Notes** : GET `/note-syndication` → agregees en devoir1/devoir2/
+     composition par (eleve, matiere, trimestre) ; ne modifie pas une valeur
+     deja saisie.
+  6. **Paiements** : GET `/paiement-syndication` → upsert par
+     (eleve, montant, type_frais, trimestre) ou (eleve, montant, date).
+- `pull_donnees()` appelee par `sync_worker._pull_structure()` au meme
+  cadence que `pull_structure()` (toutes les 60 secondes).
+
+#### 4. Integration client (`api/client.py`)
+- Methodes ajoutees : `toutes_presence()`, `tous_les_programme()`,
+  `lister_toutes_les_inscriptions()`, `paiement_syndication()`,
+  `note_syndication()`.
+
+### Corrections mineures
+- `services/sync_service.py` : import `uuid` en haut du module (requis pour
+  `uuid.uuid4()` lors de la creation d'eleves serveur).
+- `ui/assistant_serveur.py` : correction du double import `config` (ombrage)
+  dans `_connecter_client`.
+
+### Verifications
+- Compilation : `py_compile` sur `ui/assistant_serveur.py` et
+  `services/sync_service.py` — OK.
+- Routes syndication : TestClient FastAPI sur SQLite — 3 routes /toutes_presence
+  /tous_les_programme /lister_toutes_les_inscriptions → 200 OK.
+- Routes reelles sur MySQL 8.0 (serveur uvicorn port 8000, conteneur Docker
+  geston_mysql 3307) : les 5 routes repondent 200 avec donnees vides ou
+  remplies.
+- **Test E2E complet** (MySQL 8.0) :
+  - `pull_structure()` : 1 cycle, 1 classe, 1 matiere, 1 annee, 0 tarifs.
+  - `pull_donnees()` : 2 eleves (TEST Synchro + KONE Awa) avec uuid et
+    classe resolue par nom, 1 personnel (TRAORE Ali), 1 programme, 1 presence,
+    3 notes (devoir1/devoir2/composition), 1 paiement.
+  - Mode client (`config.API_BASE_URL = http://192.168.0.167:8000`) :
+    `est_hote()` → False, pull complet → OK sans erreur.
+- **Suite complete** : **320 passed, 0 failed** (315 + 5 nouvelles routes GET)
+  en 161s.
+
+### Etat actuel
+- Poste hote : ecriture locale → remappage → serveur MySQL + pull structure/donnees.
+- Poste client : saisie de l'adresse IP du serveur dans l'assistant → ecriture
+  `sync.json` → `config.API_BASE_URL` mis a jour → pull automatique toutes
+  les 60s → les eleves/presences/notes/paiements/programmes des autres postes
+  apparaissent.
+- Les comptes directeur/gestionnaire n'ont PAS ete modifies.
+- Il reste a revisiter : les regles de suppression dans `pull_structure`
+  (comportement actuel : supprime les classes locales vides absentes du serveur)
+  qui pourraient parfois supprimer des donnees encore utiles hors-ligne.
+- `docs/RAPPORT_BUGS.md` et `RAPPORT_BUGS.md` (racine) : pas de nouveau bug
+  identifie dans cette session ; les items 1-10 restent dans leur etat
+  documente (tous traites).
+
+### Session XV — Comptes partages, reseau WiFi de l'ecole (hors Internet), 74 bugs audites
+
+**Demande : que l'interface, la logique, la synchro, les routes et la base
+fonctionnent pour les DEUX profils (directeur + gestionnaire), avec un ecran
+de creation de compte, une synchro activee sur toute la surface de
+l'etablissement (~600 m²), **sans Internet**, le PC hote creant lui-meme le
+reseau local, et « Internet en meme temps » si possible. Aussi : regler tous
+les bugs, majeurs comme mineurs.**
+
+#### 1. Comptes directeur/gestionnaire synchronises
+
+- **`GET /comptes-syndication`** (serveur) : renvoie id, nom, prenom,
+  telephone, email, identifiant, mot_de_passe (hash PBKDF2), role, statut.
+- **`client.comptes_syndication()`** + **`client.ajouter_compte_serveur()`
+  (`POST /comptes`)** : le premiere compte cree via `FirstSetupDialog` est
+  maintenant pousse vers le serveur partage → utilisable sur TOUS les postes.
+  (Avant : le compte restait local, dead-code silencieux.)
+- **`pull_comptes()`** dans `services/sync_service.py` : upsert par username,
+  ne jure jamais le mot de passe local, cree les comptes nouveaux avec le hash
+  serveur (login multi-poste), role borne a directeur/gestionnaire, jamais
+  destructif. Integre a `sync_worker._pull_structure()`.
+- **Bug corrige** : le statut `"Actif"` (title-case) du serveur desactivait le
+  compte localement → detection insensible a la casse.
+- **Bug corrige (serveur)** : `POST /comptes` renvoyait 500 sur telephone deja
+  utilise (UNIQUE) → verification prealable + 409 propre ; telephone vide →
+  valeur unique `GS-<identifiant>` (colonne NOT NULL UNIQUE).
+
+#### 2. Reseau local cree par le PC hote, SANS Internet
+
+- **`services/discovery.py`** : protocole UDP port 42300
+  (`{"gestion_scolaire": 1, "port": <api>}`) diffuse toutes les 4 s par
+  `AnnonceurServeur`. `DecouvreurServeur` / `trouver_serveur()` ecoutent.
+  Bug corrige : l'attribut `self._stop` ecrasait `threading.Thread._stop()` →
+  renomme `_arret`. Verification E2E : envoi direct IP LAN → trouve ; broadcast
+  → ne reboucle pas localement (attendu).
+- **`services/hotspot.py` (nouveau)** : cree le point d'acces WiFi de l'ecole
+  via `nmcli connection add type wifi mode ap ipv4.method=shared`.
+  - SSID `Gestion-Ecole`, mot de passe `Gestion2026`.
+  - **Internet en meme temps** : le mode `shared` fait du NAT — si le PC hote
+    garde une connexion (Ethernet cable vers la box, telephone/modeme USB,
+    carte 4G), les postes connectes au hotspot recoivent l'Internet en plus de
+    la synchro. `source_internet_disponible()` detecte cette source ; sinon le
+    reseau reste un LAN pur (message clair).
+  - Portee ~30-50 m en interieur (600 m² couverts si poste centre) ; repeteur
+    WiFi ou câble Ethernet recommande au-dela. Tout est hors Internet.
+- **Assistant (hote)** : bouton « Creer le reseau WiFi de l'ecole (hotspot) »
+  lance la creation en arriere-plan (`ui/workers.run_async`) ; affiche SSID/mot
+  de passe/passage/partage et l'adresse correcte des postes (port pris de la
+  config, plus de `:8000` dure). Bug corrige : crash si `nmcli` absent
+  (Windows) ; `_nmcli` ne leve plus (FileNotFoundError/TimeoutExpired gees).
+- **Assistant (client)** : bouton « Scanner » → `trouver_serveur()` dans un
+  QThread, fermeture propre (`closeEvent` attend la fin du scan, plus de
+  « QThread destroyed while running »).
+- **Annonceur** integre au cycle de vie du serveur (`serveur_local`) : demarre
+  des que le serveur repond, s'arrete avec lui.
+
+#### 3. Robustesse de la synchro (aucun doublon, pas de perte)
+
+- **`sync.json`**: ecriture atomique (tmp + `os.replace`) sous verrou —
+  plus de fichier tronque ni d'update perdu entre le thread d'auto-demarrage
+  et l'interface.
+- **`sync_worker`** : `dequeue_pending()` protege (une base verrouillee ne tue
+  plus le thread) ; `"enqueue"` archive au lieu d'envoyer un payload renaud
+  (airait pu modifier/supprimer la mauvaise ligne serveur) ; `sleep` decoupe
+  en pas de 0,5 s → `requestInterruption()` respecte par `wait(3 s)` a la
+  fermeture ; erreurs du pull remontees via `sync_error` (plus de silence).
+- **`pull_donnees`** : correction du double-comptage des eleves ; `redoublant`
+  gere via `_bool_int` (une valeur 0 n'est plus ecrasee) ; coefficients
+  supportent `"1,5"` (`_coef_float`) ; paiements deduples par date precise
+  (2 paiements identiques a des dates differentes sont DISTINCTS) au lieu de
+  les ecraser ; plus de fake `1970-01-01` (date NULL → defaut local).
+- **`pull_structure`** : `cycle_id` non ecrase par NULL (garde le lien local
+  si le serveur ne l'a pas informe) ; tarifs miroirs ne suppriment plus un
+  tarif local hors-ligne en attente dans la file (garde PENDING).
+- **`__init__`** : le PID enregistre est maintenant le bon (le PID stocke
+  dans `sync.json` etait perime, pointant vers un ancien serveur).
+
+#### 4. Audit complet des bugs (2 agents explore : synchro, UI/reseau, routes)
+
+- ~74 problemes releves ; traites dans cette session : crash `nmcli` absent,
+  QThread de scan detruit, `ajouter_compte_serveur` inexistant, premiere
+  compte non pousse, `user=None` apres FirstSetup, username vide, `sync.json`
+  race, worker de synchro mort sur base verrouillee, `enqueue` renaud,
+  doublons de paiements, statut case-sensitive, ecrasement cycle_id, tarifs
+  supprimes hors-ligne, double-comptage eleves, valeurs `0` corrompues,
+  telephone duplique 500→409, hotspot UI fige / port dur, blocage 15 s du
+  serveur, scan restant actif a la fermeture.
+
+### Verifications session XV
+- Compilation : `py_compile` sur tous les fichiers modifies (ui/assistant,
+  ui/login_view, services/{hotspot,discovery,sync_service,serveur_local},
+  api/{client,sync_worker}, core/config, server/compat) — OK.
+- Hotspot reel (carte wlo1, mode AP supporte) : creation → passerelle
+  `10.42.0.1` → arret → la carte reprend son WiFi). Sans source
+  Internet alternative, `partage=False` correct.
+- `source_internet_disponible()` : Ethernet `eth0` → detecte ; seul WiFi →
+  None (pas de partage).
+- `POST /comptes` : duplique telephone → **409** (plus de 500) ; sans
+  telephone → 200 + identifiant unique.
+- `pull_comptes()` en mode LAN (`GS_API_URL=http://192.168.0.167:8000`) :
+  `{'ajoutes': 3, 'mis_a_jour': 1, 'erreurs': []}` ; login
+  `kone.gestionnaire/gestion!2026` → OK (role gestionnaire, actif 1).
+- `pull_donnees()` rejouer : personnel 1, programmes 1, presences 1, notes 3,
+  paiements 1, 0 erreurs (aucun doublon creer).
+- **Suite complete** : **320 passed, 0 failed** (~157 s).
+
+### Etat actuel
+- Poste hote : creation du reseau WiFi de l'ecole en 1 clic (hotspot shared)
+  → les postes scannent/trouvent le serveur → synchro sans Internet (UDP
+  LAN + pull/push locaux).
+- Comptes directeur + gestionnaire crees n'importe où → visibles et
+  utilisables sur tous les postes (push premiere compte + `pull_comptes`).
+- Internet en meme temps : automatique si le PC hote a une 2e source (Ethernet
+  vers la box, 4G USB) via le NAT du mode `shared`.
+- Reste a faire : derouler les 74 items restants non traites (erreurs serveur
+  500→4xx, dedup uuid_client sur POST /paiement/note/presence, jointures
+  syndication INNER vs LEFT, fermetures de curseurs, shadowing compat…) ;
+  test de campagne complet (routes SQLite+MySQL sur les executions
+  multi-postes).

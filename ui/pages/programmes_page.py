@@ -4,77 +4,85 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QComboBox, QFormLayout, QDoubleSpinBox, QCheckBox, QPushButton, QTabWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget, QStackedWidget,
 )
 
 from repositories import repos
+from ui import toast
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _reload_combo, _add_btn, _make_table,
-    _page_header,
+    _btn, _simple_btn_style, _reload_combo, _add_btn, _actions_cell,
 )
+from ui.widgets import DataTable, EmptyState
 from core.config import (
-    C_EMPTY_STATE, STYLE_BTN_PRIMARY, STYLE_TABLE,
-    C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER, C_TEXT_MUTED, C_BORDER,
-    C_BG_ALT,
+    STYLE_BTN_PRIMARY,
+    C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER,
+    C_TEXT_MUTED, C_BORDER, C_BG_ALT,
 )
 
 
 def programmes(page, ctx):
     if page.layout() is not None:
         return
-    page.setStyleSheet("")
+    from ui.widgets import PageHeader
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    _page_header(lay, "Matieres & Programmes",
-                 "Matieres enseignees et affectations par classe")
+    lay.addWidget(PageHeader(
+        "Matieres & Programmes",
+        "Matieres enseignees et affectations par classe"))
 
     tabs = QTabWidget()
-    lay.addWidget(tabs)
+    lay.addWidget(tabs, 1)
 
     onglet_matieres = QWidget()
     lay_m = QVBoxLayout(onglet_matieres)
-    top_m = QHBoxLayout()
-    btn_add_matiere = _add_btn("+ Nouvelle Matiere", lambda: open_matiere_dialog(page, ctx, fill_m))
-    top_m.addStretch(1)
-    if ctx.can_edit("programmes"):
-        top_m.addWidget(btn_add_matiere)
-    lay_m.addLayout(top_m)
-    table_m = _make_table(["Nom", "Coefficient", "Actions"])
-    lay_m.addWidget(table_m)
-    lbl_empty_m = QLabel("Aucune matiere enregistree")
-    lbl_empty_m.setStyleSheet(f"color: {C_EMPTY_STATE}; padding: 30px;")
-    lbl_empty_m.setAlignment(Qt.AlignCenter)
-    lay_m.addWidget(lbl_empty_m)
+    table_m = DataTable()
+    table_m.setColumnCount(3)
+    table_m.setHorizontalHeaderLabels(["Nom", "Coefficient", "Actions"])
+    vide_m = EmptyState(
+        "Aucune matiere enregistree",
+        "Ajoutez une matiere via le bouton ci-dessus.")
+    pile_m = QStackedWidget()
+    pile_m.addWidget(table_m)
+    pile_m.addWidget(vide_m)
+    lay_m.addWidget(pile_m, 1)
 
     def fill_m():
         rows = repos.matieres()
-        table_m.setRowCount(len(rows))
+        valeurs = [[mt["nom"], str(mt["coefficient"]), ""] for mt in rows]
+        table_m.remplir(valeurs)
         for i, mt in enumerate(rows):
-            table_m.setItem(i, 0, QTableWidgetItem(mt["nom"]))
-            table_m.setItem(i, 1, QTableWidgetItem(str(mt["coefficient"])))
-            cell = QWidget()
-            cl = QHBoxLayout(cell)
-            cl.setContentsMargins(2, 2, 2, 2)
-            if ctx.can_edit("programmes"):
-                cl.addWidget(_btn("Modifier", partial(open_matiere_dialog, page, ctx, fill_m, mt),
-                                   _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)))
-                cl.addWidget(_btn("Supprimer", partial(_delete_matiere, page, ctx, mt),
-                                   _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
-            table_m.setCellWidget(i, 2, cell)
-        table_m.resizeColumnsToContents()
-        lbl_empty_m.setVisible(not rows)
-        table_m.setVisible(bool(rows))
+            table_m.setCellWidget(i, 2, _actions_cell(*(
+                (
+                    _btn("Modifier",
+                         partial(open_matiere_dialog, page, ctx, fill_m, mt),
+                         _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)),
+                    _btn("Supprimer",
+                         partial(_delete_matiere, page, ctx, mt),
+                         _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)),
+                ) if ctx.can_edit("programmes") else ()
+            )))
+        pile_m.setCurrentWidget(vide_m if not rows else table_m)
 
     def _delete_matiere(parent, ctx, mt):
-        if QMessageBox.question(
-                parent, "Matiere",
+        from ui.pages.helpers import confirmer
+        if confirmer(
+                parent,
                 f"Supprimer la matiere {mt['nom']} ?\n\n"
                 "Attention : toutes les notes et affectations de programme "
-                "liees a cette matiere seront egalement supprimees.") \
-                == QMessageBox.Yes:
+                "liees a cette matiere seront egalement supprimees.",
+                "Matiere"):
             repos.delete_matiere(mt["id"])
             fill_m()
+
+    def _ouvrir_matiere():
+        open_matiere_dialog(page, ctx, fill_m)
+        fill_m()
+
+    btn_add_matiere = _add_btn("+ Nouvelle Matiere", _ouvrir_matiere)
+    lay_m.addWidget(btn_add_matiere, 0, Qt.AlignRight)
+    if not ctx.can_edit("programmes"):
+        btn_add_matiere.setVisible(False)
 
     tabs.addTab(onglet_matieres, "Matieres")
 
@@ -83,9 +91,6 @@ def programmes(page, ctx):
 
     top_a = QHBoxLayout()
     combo_cycle_a = QComboBox()
-    combo_cycle_a.addItem("Tous les cycles", None)
-    for cyc in repos.cycles():
-        combo_cycle_a.addItem(cyc["nom"], cyc["id"])
     combo_classe_a = QComboBox()
     top_a.addWidget(QLabel("Cycle :"))
     top_a.addWidget(combo_cycle_a)
@@ -96,9 +101,9 @@ def programmes(page, ctx):
 
     row_btn = QHBoxLayout()
     btn_tout_cocher = _btn("Tout cocher", lambda: _set_checks(True),
-                            _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER))
+                           _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER))
     btn_tout_decocher = _btn("Tout decocher", lambda: _set_checks(False),
-                              _simple_btn_style(bg=C_BG_ALT, fg=C_TEXT_MUTED, border=C_BORDER))
+                             _simple_btn_style(bg=C_BG_ALT, fg=C_TEXT_MUTED, border=C_BORDER))
     row_btn.addWidget(btn_tout_cocher)
     row_btn.addWidget(btn_tout_decocher)
     row_btn.addStretch(1)
@@ -109,13 +114,17 @@ def programmes(page, ctx):
         row_btn.addWidget(btn_save_prog)
     lay_a.addLayout(row_btn)
 
-    table_a = _make_table(["", "Matiere", "Coefficient", "Enseignant"])
+    table_a = DataTable()
+    table_a.setColumnCount(4)
+    table_a.setHorizontalHeaderLabels(["", "Matiere", "Coefficient", "Enseignant"])
     table_a.setColumnWidth(0, 40)
-    lay_a.addWidget(table_a)
-    lbl_empty_a = QLabel("Aucune matiere enregistree. Ajoutez d'abord des matieres.")
-    lbl_empty_a.setStyleSheet(f"color: {C_EMPTY_STATE}; padding: 30px;")
-    lbl_empty_a.setAlignment(Qt.AlignCenter)
-    lay_a.addWidget(lbl_empty_a)
+    vide_a = EmptyState(
+        "Aucune matiere enregistree",
+        "Ajoutez d'abord des matieres.", icone="fa5s.book")
+    pile_a = QStackedWidget()
+    pile_a.addWidget(table_a)
+    pile_a.addWidget(vide_a)
+    lay_a.addWidget(pile_a, 1)
 
     lignes = []
 
@@ -138,7 +147,8 @@ def programmes(page, ctx):
         existants = {p["matiere_id"]: p for p in repos.programmes(classe_id)} if classe_id else {}
         # Seuls les enseignants peuvent etre affectes a une matiere.
         enseignants_list = repos.enseignants()
-        table_a.setRowCount(len(matieres))
+        valeurs = [[mt["nom"]] for mt in matieres]
+        table_a.remplir(valeurs, largeurs=[140])
         lignes.clear()
         for i, mt in enumerate(matieres):
             en_prog = mt["id"] in existants
@@ -165,9 +175,8 @@ def programmes(page, ctx):
             table_a.setCellWidget(i, 3, ens)
             check.toggled.connect(lambda on, c=coeff, e=ens: (c.setEnabled(on), e.setEnabled(on)))
             lignes.append({"id": mt["id"], "check": check, "coeff": coeff, "ens": ens})
-        table_a.resizeColumnsToContents()
-        lbl_empty_a.setVisible(not matieres)
-        table_a.setVisible(bool(matieres))
+        table_a.refresh_height()
+        pile_a.setCurrentWidget(vide_a if not matieres else table_a)
 
     def _set_checks(checked):
         for ligne in lignes:
@@ -185,7 +194,7 @@ def programmes(page, ctx):
                                      ligne["ens"].currentData(), ligne["coeff"].value())
             elif ligne["id"] in existants:
                 repos.delete_programme(existants[ligne["id"]]["id"])
-        QMessageBox.information(page, "Programme", "Programme de la classe enregistre.")
+        toast.succes(page, "Programme de la classe enregistre.")
         refresh_a()
 
     combo_cycle_a.currentIndexChanged.connect(_fill_classes)
@@ -217,10 +226,10 @@ def open_matiere_dialog(parent, ctx, on_created, matiere=None):
     form.addRow("Coefficient :", coeff)
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.accepted.connect(dlg.accept)
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
-    if dlg.exec_() == QDialog.Accepted:
+
+    def valider():
         if not nom.text().strip():
             QMessageBox.warning(dlg, "Matiere", "Le nom est obligatoire.")
             return
@@ -228,5 +237,10 @@ def open_matiere_dialog(parent, ctx, on_created, matiere=None):
             repos.update_matiere(matiere["id"], nom.text().strip(), coeff.value())
         else:
             repos.add_matiere(nom.text().strip(), coeff.value())
+        toast.succes(dlg, "Matiere enregistree.")
         if on_created:
             on_created()
+        dlg.accept()
+
+    buttons.accepted.connect(valider)
+    dlg.exec_()

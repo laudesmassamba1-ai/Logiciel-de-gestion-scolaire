@@ -25,8 +25,10 @@ class PersonnelRepository(RepositoryBase):
             (nom, fonction, telephone, email, salaire, statut))
 
     def update_personnel(self, pid, nom, fonction, telephone, email, salaire, statut):
+        ancien = db.query_one("SELECT nom_complet FROM personnel WHERE id = ?", (pid,))
         payload = {"nom_complet": nom, "fonction": fonction, "telephone": telephone,
-                   "email": email, "salaire": salaire, "statut": statut}
+                   "email": email, "salaire": salaire, "statut": statut,
+                   "enseignant_nom": ancien["nom_complet"] if ancien else None}
         self._route_write(
             "PUT", f"/modifierEnseignant/{pid}", payload,
             db.execute,
@@ -35,7 +37,9 @@ class PersonnelRepository(RepositoryBase):
             (nom, fonction, telephone, email, salaire, statut, pid))
 
     def delete_personnel(self, pid):
-        self._route_write("DELETE", f"/supprimerEnseignant/{pid}", {},
+        ancien = db.query_one("SELECT nom_complet FROM personnel WHERE id = ?", (pid,))
+        self._route_write("DELETE", f"/supprimerEnseignant/{pid}",
+                          {"enseignant_nom": ancien["nom_complet"] if ancien else None},
                           db.execute, "DELETE FROM personnel WHERE id = ?", (pid,))
 
     def masse_salariale(self):

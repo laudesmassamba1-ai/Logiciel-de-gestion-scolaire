@@ -54,6 +54,7 @@ def connexion():
         user=_parametre_bd("GS_DB_USER", "root"),
         password=_parametre_bd("GS_DB_PASSWORD", ""),
         database=_parametre_bd("GS_DB_NAME", "ecole"),
+        port=int(_parametre_bd("GS_DB_PORT", "3306")),
     )
 
 
@@ -1171,6 +1172,150 @@ def _ajouter_presence(payload: dict):
 
 
 # ============================================================
+# HELPERS : SUPPRESSION PAR REFERENCE NATURELLE
+# ============================================================
+
+def _eleve_id_par_uuid(curseur, uuid_client):
+    if not uuid_client:
+        return None
+    curseur.execute("SELECT id FROM eleve WHERE uuid_client = %s", (uuid_client,))
+    ligne = curseur.fetchone()
+    return ligne[0] if ligne else None
+
+
+def _supprimer_paiement_par_ref(ref: str):
+    """Accepte un id numerique (legacy), une reference de caisse
+    (REC-.../DEP-...) ou une reference composee eleve (uuid|montant|
+    trimestre|type_frais|annee) envoyee par les postes."""
+    identifiant = _id_entier(ref)
+    conn = connexion()
+    curseur = conn.cursor()
+    try:
+        if identifiant is not None and "|" not in ref:
+            curseur.execute("SELECT id FROM paiement WHERE id = %s", (identifiant,))
+            if curseur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="paiement non trouvé")
+            curseur.execute("DELETE FROM paiement WHERE id = %s", (identifiant,))
+            conn.commit()
+            return {"message": "paiement supprimé avec succès"}
+
+        if "|" in ref:
+            champs = ref.split("|")
+            uuid_client = champs[0]
+            montant = champs[1] if len(champs) > 1 else ""
+            trimestre = champs[2] if len(champs) > 2 else ""
+            type_frais = champs[3] if len(champs) > 3 else ""
+            annee = champs[4] if len(champs) > 4 else ""
+            eleve_id = _eleve_id_par_uuid(curseur, uuid_client)
+            if eleve_id is None:
+                raise HTTPException(status_code=404, detail="élève non trouvé")
+            sql = ("SELECT p.id FROM paiement p"
+                   " JOIN inscription i ON p.inscription_id = i.id"
+                   " JOIN annee_scolaire a ON i.annee_scolaire_id = a.id"
+                   " WHERE i.eleve_id = %s")
+            params = [eleve_id]
+            if type_frais:
+                sql += " AND p.type_frais = %s"
+                params.append(_type_frais(type_frais))
+            if montant:
+                try:
+                    sql += " AND ABS(p.montant - %s) < 0.01"
+                    params.append(float(montant))
+                except ValueError:
+                    pass
+            if trimestre:
+                sql += " AND p.trimestre = %s"
+                params.append(_trimestre(trimestre))
+            if annee:
+                sql += " AND a.libelle LIKE %s"
+                params.append(annee)
+            sql += " ORDER BY p.id DESC LIMIT 1"
+            curseur.execute(sql, params)
+            cible = curseur.fetchone()
+            if cible is None:
+                raise HTTPException(status_code=404, detail="paiement non trouvé")
+            curseur.execute("DELETE FROM paiement WHERE id = %s", (cible[0],))
+            conn.commit()
+            return {"message": "paiement supprimé avec succès"}
+
+        curseur.execute(
+            "SELECT id FROM caisse_transaction WHERE reference = %s", (ref,))
+        ligne = curseur.fetchone()
+        if ligne is None:
+            raise HTTPException(status_code=404, detail="transaction non trouvée")
+        curseur.execute("DELETE FROM caisse_transaction WHERE id = %s", (ligne[0],))
+        conn.commit()
+        return {"message": "transaction supprimée avec succès"}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur suppression paiement : {exc}")
+    finally:
+        curseur.close()
+        conn.close()
+
+
+def _supprimer_presence_par_ref(ref: str):
+    """Accepte un id numerique (legacy) ou une reference composee
+    (uuid_eleve|date|statut|classe_nom) envoyee par les postes."""
+    identifiant = _id_entier(ref)
+    conn = connexion()
+    curseur = conn.cursor()
+    try:
+        if identifiant is not None:
+            curseur.execute("SELECT id FROM presences WHERE id = %s", (identifiant,))
+            if curseur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="présence non trouvée")
+            curseur.execute("DELETE FROM presences WHERE id = %s", (identifiant,))
+            conn.commit()
+            return {"message": "présence supprimée avec succès"}
+
+        champs = ref.split("|")
+        uuid_client = champs[0]
+        jour = champs[1] if len(champs) > 1 else ""
+        statut = champs[2] if len(champs) > 2 else ""
+        classe_nom = "|".join(champs[3:]) if len(champs) > 3 else ""
+        eleve_id = _eleve_id_par_uuid(curseur, uuid_client)
+        if eleve_id is None:
+            raise HTTPException(status_code=404, detail="élève non trouvé")
+        classe_id = None
+        if classe_nom:
+            curseur.execute("SELECT id FROM classe WHERE classe = %s", (classe_nom,))
+            ligne = curseur.fetchone()
+            classe_id = ligne[0] if ligne else None
+        sql = "SELECT id FROM presences WHERE eleve_id = %s"
+        params = [eleve_id]
+        if classe_id is not None:
+            sql += " AND classe_id = %s"
+            params.append(classe_id)
+        if jour:
+            sql += " AND date_presence = %s"
+            params.append(jour)
+        if statut:
+            sql += " AND LOWER(statut) = LOWER(%s)"
+            params.append(_statut_presence(statut))
+        sql += " ORDER BY id DESC LIMIT 1"
+        curseur.execute(sql, params)
+        cible = curseur.fetchone()
+        if cible is None:
+            raise HTTPException(status_code=404, detail="présence non trouvée")
+        curseur.execute("DELETE FROM presences WHERE id = %s", (cible[0],))
+        conn.commit()
+        return {"message": "présence supprimée avec succès"}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur suppression présence : {exc}")
+    finally:
+        curseur.close()
+        conn.close()
+
+
+# ============================================================
 # HELPERS : ANNEES SCOLAIRES / COMPTES / PARAMETRES / PLANNING
 # ============================================================
 
@@ -1258,6 +1403,7 @@ def _creer_compte(payload: dict):
     le verifier) ; sinon un jeton aleatoire inutilisable est stocke."""
     nom = _chaine(payload.get("nom"), "-")
     email = _chaine(payload.get("email"))
+    telephone = _chaine(payload.get("telephone"))
     identifiant = (email.split("@")[0] if "@" in email
                    else nom.lower().replace(" ", "."))
     role = _chaine(payload.get("role"), "gestionnaire").lower()
@@ -1266,6 +1412,15 @@ def _creer_compte(payload: dict):
     conn = connexion()
     curseur = conn.cursor()
     try:
+        # Le telephone est UNIQUE dans le schema : un doublon (compte deja
+        # envoye, ou deja present) ne doit pas faire tomber la route en 500.
+        if telephone:
+            curseur.execute("SELECT id FROM utilisateur WHERE telephone = %s",
+                            (telephone,))
+            if curseur.fetchone() is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Ce numero de telephone est deja utilise.")
         base = identifiant
         compteur = 1
         while True:
@@ -1279,7 +1434,7 @@ def _creer_compte(payload: dict):
         curseur.execute(
             """INSERT INTO utilisateur (nom, prenom, telephone, email, identifiant,
                mot_de_passe, role, statut) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-            (nom, "-", _chaine(payload.get("telephone"), "00000000"),
+            (nom, "-", telephone or f"GS-{identifiant}",
              email, identifiant, hash_stocke, role,
              "actif" if payload.get("actif", 1) else "inactif"))
         nouvel_id = curseur.lastrowid
@@ -1288,6 +1443,9 @@ def _creer_compte(payload: dict):
         conn.commit()
         return {"message": "Utilisateur créé avec succès", "id": nouvel_id,
                 "identifiant": identifiant}
+    except HTTPException:
+        conn.rollback()
+        raise
     except Exception as exc:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur création compte : {exc}")
@@ -1394,6 +1552,19 @@ def enregistrer_routes_compat(app):
     les routes ci-dessous sont donc examinees AVANT les routes historiques."""
 
     # ---------- Eleves ----------
+    @app.get("/eleve-syndication")
+    def _compat_eleves_syndication():
+        """Liste minimale id + uuid_client pour la synchronisation (le GET
+        /eleve historique ne renvoie ni l'uuid ni les eleves sans inscription)."""
+        conn = connexion()
+        curseur = conn.cursor(dictionary=True)
+        try:
+            curseur.execute("SELECT id, uuid_client FROM eleve")
+            return {"eleves": curseur.fetchall()}
+        finally:
+            curseur.close()
+            conn.close()
+
     @app.post("/eleve")
     def _compat_post_eleve(payload: dict = Body(...)):
         return _creer_eleve_complet(payload)
@@ -1577,6 +1748,17 @@ def enregistrer_routes_compat(app):
     @app.post("/presence")
     def _compat_post_presence(payload: dict = Body(...)):
         return _ajouter_presence(payload)
+
+    # Suppression par reference naturelle (enregistre AVANT la route
+    # historiue a id numerique : elle couvre id, reference de caisse
+    # et reference composee des postes).
+    @app.delete("/supprimerPaiement/{ref}")
+    def _compat_del_paiement(ref: str):
+        return _supprimer_paiement_par_ref(ref)
+
+    @app.delete("/supprimerPresence/{ref}")
+    def _compat_del_presence(ref: str):
+        return _supprimer_presence_par_ref(ref)
 
     # ---------- Annees scolaires ----------
     @app.put("/annee_scolaire/{annee_id}")

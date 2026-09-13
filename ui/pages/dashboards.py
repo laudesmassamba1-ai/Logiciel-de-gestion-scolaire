@@ -1,34 +1,71 @@
 import datetime
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QHBoxLayout, QLabel, QTableWidgetItem, QVBoxLayout,
+    QGridLayout, QHBoxLayout, QLabel, QTableWidgetItem, QVBoxLayout,
+    QSizePolicy,
 )
 
 from api import client
-from core.config import C_GOLD, C_BLUE, C_RED, C_WARNING
+from core.config import (
+    C_BG, C_GOLD, C_BLUE, C_RED, C_WARNING, ROLE_LABELS, STYLE_TABLE,
+    STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, STYLE_BTN_DANGER,
+)
 from repositories import repos
 from services import auth_service as auth, reports
 from ui import motion
 from ui.loader import apply_ui
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _today_fr, _replace_layout, _classe_items,
-    _styler_carte,
+    _styler_carte, _fit_rows, _fill_table_space,
 )
 from ui.widgets import SimpleBarChart, SimplePieChart, fmt_money
 from ui.workers import run_async
 
 
+_STYLE_ENCRE = (
+    f"background-color: #272E42; color: #FFFFFF; border: none;"
+    f" border-radius: 12px; padding: 10px 18px; font-weight: 700; font-size: 13px;"
+)
+
+
+# Cartes KPI « chiffre + libelle » : hauteur bornee pour ne jamais
+# s'etirer verticalement. (Les cartes de contenu - activite, graphiques,
+# actions rapides - ne sont pas concernees.)
+_CARTES_KPI = {
+    "card_total_comptes", "card_directeurs", "card_gestionnaires",
+    "card_comptes_inactifs", "card_effectifs", "card_inscriptions_jour",
+    "card_caisse_jour", "card_taches",
+}
+
+
 def _styler_dashboard(page, cartes):
     """Style moderne des cartes (bande d'accent) puis apparitions
     echelonnees a l'ouverture du tableau de bord."""
-    cibles = []
     for nom, accent in cartes:
         w = getattr(page, nom, None)
         if w is None:
             continue
         _styler_carte(w, accent)
-        cibles.append(w)
-    motion.stagger(cibles, au_total=440, duree=320)
+        if nom in _CARTES_KPI:
+            w.setMaximumHeight(94)
+            w.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+    page.setStyleSheet(f"background-color: {C_BG};")
+    for nom, style in (
+        ("btn_quick_nouveau_compte", STYLE_BTN_PRIMARY),
+        ("btn_goto_comptes", STYLE_BTN_SECONDARY),
+        ("btn_reset_password", STYLE_BTN_DANGER),
+        ("btn_goto_personnel", STYLE_BTN_SECONDARY),
+        ("btn_quick_inscrire", STYLE_BTN_PRIMARY),
+        ("btn_quick_recette", _STYLE_ENCRE),
+        ("btn_quick_depense", STYLE_BTN_DANGER),
+        ("btn_quick_certificat", STYLE_BTN_SECONDARY),
+    ):
+        btn = getattr(page, nom, None)
+        if btn is not None:
+            btn.setStyleSheet(style)
+    motion.stagger([getattr(page, nom, None) for nom, _accent in cartes],
+                   au_total=440, duree=320)
 
 
 KRPI_ADMIN = [
@@ -37,7 +74,6 @@ KRPI_ADMIN = [
     ("card_gestionnaires", C_RED),
     ("card_comptes_inactifs", C_WARNING),
     ("card_activite", C_BLUE),
-    ("card_raccourcis", C_GOLD),
 ]
 
 KRPI_GESTIONNAIRE = [
@@ -53,30 +89,102 @@ KRPI_GESTIONNAIRE = [
 
 
 def dashboard_directeur(page, ctx):
+    """Tableau de bord directeur — gabarit DashboardPageTemplate.
+
+    POINT DE CONTROLE de la refonte : construit ENTIEREMENT depuis les
+    composants reutilisables (KPICard, DataTable, EmptyState, PageHeader),
+    aucun .ui, aucun stylesheet eparpille.
+    """
     if page.layout() is not None:
         return
-    apply_ui("dashboards/dashboard_admin.ui", page)
 
-    _styler_dashboard(page, KRPI_ADMIN)
+    from qfluentwidgets import CardWidget
+    from resources.design_tokens import Colors, Spacing
+    from ui.widgets import (
+        DataTable, EmptyState, KPICard, fmt_money,
+    )
+    from ui.widgets.page_templates import DashboardPageTemplate
 
-    def _charts():
+    tpl = DashboardPageTemplate(
+        page, "Tableau de bord",
+        "Vue d'ensemble de l'etablissement (comptes, activite, connexions)")
+
+    kpi = [
+        tpl.ajouter_kpi(KPICard("Comptes actifs", "0", Colors.PRIMARY), 0),
+        tpl.ajouter_kpi(KPICard("Directeurs", "0", Colors.INFO), 1),
+        tpl.ajouter_kpi(KPICard("Gestionnaires", "0", Colors.DANGER), 2),
+        tpl.ajouter_kpi(KPICard("Comptes inactifs", "0", Colors.WARNING), 3),
+    ]
+
+    def _carte(titre):
+        carte = CardWidget()
+        carte.setBorderRadius(16)
+        carte.setContentsMargins(12, 8, 12, 8)
+        lbl = QLabel(titre)
+        lbl.setStyleSheet(
+            f"color: {Colors.TEXT_PRIMARY}; font-size: 14px; font-weight: 700;"
+            " border: none; background: transparent;")
+        v = QVBoxLayout(carte)
+        v.setContentsMargins(16, 10, 16, 12)
+        v.setSpacing(8)
+        v.addWidget(lbl)
+        return carte, v
+
+    # --- Actions rapides + dernieres connexions (rangee haute) ------
+    rang1 = QHBoxLayout()
+    rang1.setSpacing(Spacing.MD)
+
+    carte_actions, v_actions = _carte("Actions rapides")
+    btns = [
+        _btn("+ Nouveau Compte", lambda: _ouvrir_compte(), STYLE_BTN_PRIMARY),
+        _btn("Gerer les Comptes", lambda: ctx.navigate("comptes"), STYLE_BTN_SECONDARY),
+        _btn("Reinitialiser Mot de Passe", lambda: _ouvrir_reset(), STYLE_BTN_DANGER),
+    ]
+    grille_actions = QGridLayout()
+    grille_actions.setSpacing(Spacing.SM)
+    for i, b in enumerate(btns):
+        grille_actions.addWidget(b, i // 2, i % 2)
+    v_actions.addLayout(grille_actions)
+    v_actions.addStretch(1)
+    rang1.addWidget(carte_actions, 1)
+
+    carte_connex, v_connex = _carte("Dernieres connexions")
+    table = DataTable()
+    table.setColumnCount(3)
+    table.setHorizontalHeaderLabels(["Nom", "Role", "Date de connexion"])
+    vide = EmptyState("Aucune connexion enregistree",
+                      icone="fa5s.history", hauteur=140)
+    v_connex.addWidget(table)
+    v_connex.addWidget(vide)
+    rang1.addWidget(carte_connex, 2)
+    tpl.contenu.addLayout(rang1, 1)
+
+    # --- Graphiques (rangee basse) ---------------------------------
+    rang2 = QHBoxLayout()
+    rang2.setSpacing(Spacing.MD)
+    charts = []
+    for titre_chart, cle in (
+        ("Flux financier par mois", "fin"),
+        ("Effectifs par classe", "scol"),
+        ("Personnel par statut", "pers"),
+    ):
+        carte_chart, v_chart = _carte(titre_chart)
+        c = SimpleBarChart()
+        c.set_data([], [])
+        v_chart.addWidget(c)
+        charts.append((cle, c))
+        rang2.addWidget(carte_chart, 1)
+    tpl.contenu.addLayout(rang2, 1)
+
+    def _charters():
         data = _directeur_charts()
-        if hasattr(page, "layout_chart_finances"):
-            fin = SimpleBarChart(titre="Flux financier par mois")
-            fin.set_data(data["fin_labels"], data["fin_values"])
-            _replace_layout(page.layout_chart_finances, fin)
-        if hasattr(page, "layout_chart_scolarite"):
-            scol = SimpleBarChart(titre="Effectifs par classe")
-            scol.set_data(data["scol_labels"], data["scol_values"])
-            _replace_layout(page.layout_chart_scolarite, scol)
-        if hasattr(page, "layout_chart_personnel"):
-            statuts = {}
-            for p in repos.personnel():
-                s = p["statut"] or "Autre"
-                statuts[s] = statuts.get(s, 0) + 1
-            per = SimpleBarChart(titre="Personnel par statut")
-            per.set_data(list(statuts.keys()), list(statuts.values()))
-            _replace_layout(page.layout_chart_personnel, per)
+        charts[0][1].set_data(data["fin_labels"], data["fin_values"])
+        charts[1][1].set_data(data["scol_labels"], data["scol_values"])
+        statuts = {}
+        for p in repos.personnel():
+            s = p["statut"] or "Autre"
+            statuts[s] = statuts.get(s, 0) + 1
+        charts[2][1].set_data(list(statuts.keys()), list(statuts.values()))
 
     def refresh():
         comptes = repos.utilisateurs()
@@ -84,17 +192,24 @@ def dashboard_directeur(page, ctx):
         inactifs = [c for c in comptes if not c["actif"]]
         directeurs = [c for c in actifs if c["role"] == "directeur"]
         gestionnaires = [c for c in actifs if c["role"] == "gestionnaire"]
-        page.lbl_kpi1_valeur.setText(str(len(actifs)))
-        page.lbl_kpi2_valeur.setText(str(len(directeurs)))
-        page.lbl_kpi3_valeur.setText(str(len(gestionnaires)))
-        page.lbl_kpi4_valeur.setText(str(len(inactifs)))
+        kpi[0].set_value(len(actifs))
+        kpi[1].set_value(len(directeurs))
+        kpi[2].set_value(len(gestionnaires))
+        kpi[3].set_value(len(inactifs))
+
         logs = auth.derniere_connexions()
-        page.list_dernieres_connexions.clear()
-        for log in logs:
-            page.list_dernieres_connexions.addItem(
-                f"{log['date_connexion']}  -  {log['nom_complet']} ({log['role']})")
-        page.lbl_activite_empty.setVisible(not logs)
-        _charts()
+        if logs:
+            table.remplir([
+                [l["nom_complet"], ROLE_LABELS.get(l["role"], l["role"]),
+                 l["date_connexion"]]
+                for l in logs[:12]
+            ], largeurs=[220, 150, 180])
+            table.setVisible(True)
+            vide.setVisible(False)
+        else:
+            table.setVisible(False)
+            vide.setVisible(True)
+        _charters()
 
     from ui.pages.comptes_page import open_compte_dialog, open_reset_password_dialog
 
@@ -105,10 +220,6 @@ def dashboard_directeur(page, ctx):
     def _ouvrir_reset():
         open_reset_password_dialog(page, ctx)
         refresh()
-
-    page.btn_quick_nouveau_compte.clicked.connect(_ouvrir_compte)
-    page.btn_goto_comptes.clicked.connect(lambda: ctx.navigate("comptes"))
-    page.btn_reset_password.clicked.connect(_ouvrir_reset)
 
     refresh()
     page.refresh = refresh
@@ -153,6 +264,20 @@ def dashboard_gestionnaire(page, ctx):
     apply_ui("dashboards/dashboard_gestionnaire.ui", page)
 
     _styler_dashboard(page, KRPI_GESTIONNAIRE)
+
+    lay_bas = getattr(page, "bottomLayout", None)
+    if lay_bas is not None:
+        from PyQt5.QtWidgets import QSplitter
+        split = QSplitter(Qt.Horizontal)
+        split.setObjectName("gestionnaireSplit")
+        split.setHandleWidth(6)
+        split.setChildrenCollapsible(False)
+        split.addWidget(page.card_activite)
+        split.addWidget(page.card_dossiers_incomplets)
+        split.setStretchFactor(0, 1)
+        split.setStretchFactor(1, 0)
+        split.setSizes([620, 320])
+        lay_bas.addWidget(split, 1)
 
     tokens = {"n": 0}
 

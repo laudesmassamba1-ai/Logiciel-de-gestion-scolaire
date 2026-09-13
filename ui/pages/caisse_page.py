@@ -2,21 +2,22 @@ from functools import partial
 
 import datetime
 
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import QDate
 from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QComboBox, QFormLayout, QTableWidgetItem, QVBoxLayout,
-    QWidget,
+    QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox,
+    QComboBox, QFormLayout, QDateEdit, QVBoxLayout,
 )
 
 from repositories import repos
-from ui.loader import apply_ui
+from ui import toast
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _money_edit, _fit_rows, refuser_si_hors_annee,
+    _btn, _simple_btn_style, _money_edit, refuser_si_hors_annee, _actions_cell,
 )
-from ui.widgets import fmt_money
+from ui.widgets import fmt_money, KPICard
+from ui.widgets.page_templates import ListPageTemplate
+from resources.design_tokens import Colors
 from core.config import (
-    STYLE_TABLE, STYLE_EMPTY_STATE,
+    STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, STYLE_BTN_DANGER,
     C_RED_BG, C_RED, C_RED_BORDER,
 )
 
@@ -24,41 +25,65 @@ from core.config import (
 def caisse(page, ctx):
     if page.layout() is not None:
         return
-    apply_ui("caisse/caisse.ui", page)
-    page.setStyleSheet("")
-    _fit_rows(page.table_transactions)
-    page.table_transactions.setStyleSheet(STYLE_TABLE)
+    tpl = ListPageTemplate(page, "Caisse", "Recettes, depenses et solde")
+    peut_editer = ctx.can_edit("caisse")
 
-    if not ctx.can_edit("caisse"):
-        page.btn_add_income.setVisible(False)
-        page.btn_add_expense.setVisible(False)
-
+    search = QLineEdit()
+    search.setPlaceholderText("Rechercher (motif, beneficiaire, reference)...")
+    search.setMaximumWidth(280)
+    combo_type = QComboBox()
+    combo_type.addItems(["Toutes les operations", "Recettes uniquement",
+                         "Depenses uniquement"])
     now = QDate.currentDate()
-    page.date_start.setDate(now.addDays(-(now.day() - 1)))
-    page.date_end.setDate(now)
-
-    # Filtre par annee scolaire : par defaut l'annee active, pour que la
-    # caisse affiche les ecritures de l'annee en cours (pas l'historique).
+    date_start = QDateEdit(now.addDays(-(now.day() - 1)))
+    date_end = QDateEdit(now)
+    for d in (date_start, date_end):
+        d.setFixedWidth(130)
     combo_annee = QComboBox()
     combo_annee.addItem("Annee active", "active")
     combo_annee.addItem("Toutes les annees", None)
     for a in repos.annees_scolaires():
         combo_annee.addItem(a["libelle"], a["libelle"])
     combo_annee.setMaximumWidth(220)
-    page.filterLayout.addWidget(QLabel("Annee :"))
-    page.filterLayout.addWidget(combo_annee)
+    tpl.ajouter_filtre(search)
+    tpl.ajouter_filtre(combo_type)
+    tpl.ajouter_filtre(QLabel("Du :"))
+    tpl.ajouter_filtre(date_start)
+    tpl.ajouter_filtre(QLabel("Au :"))
+    tpl.ajouter_filtre(date_end)
+    tpl.ajouter_filtre(combo_annee)
+    tpl.ajouter_space_filtre()
 
-    lbl_empty = QLabel("Aucune transaction sur la periode selectionnee")
-    lbl_empty.setStyleSheet(STYLE_EMPTY_STATE)
-    lbl_empty.setAlignment(Qt.AlignCenter)
-    page.mainLayout.addWidget(lbl_empty)
+    kpi = [
+        tpl.ajouter_kpi(KPICard("Recettes", "0", Colors.SUCCESS), 0),
+        tpl.ajouter_kpi(KPICard("Depenses", "0", Colors.DANGER), 1),
+        tpl.ajouter_kpi(KPICard("Solde", "0", Colors.INFO), 2),
+    ]
+    tpl.table.setColumnCount(8)
+    tpl.table.setHorizontalHeaderLabels(
+        ["Date", "Reference", "Beneficiaire", "Motif", "Categorie",
+         "Recettes", "Depenses", "Actions"])
+
+    btn_recette = _btn("+ Recette",
+                       lambda: open_transaction_dialog(page, ctx, "entree",
+                                                       on_created=refresh),
+                       STYLE_BTN_PRIMARY)
+    btn_depense = _btn("+ Depense",
+                       lambda: open_transaction_dialog(page, ctx, "sortie",
+                                                       on_created=refresh),
+                       STYLE_BTN_DANGER)
+    btn_export = _btn("Exporter CSV", lambda: export_csv(), STYLE_BTN_SECONDARY)
+    if peut_editer:
+        tpl.header.ajouter_action(btn_recette)
+        tpl.header.ajouter_action(btn_depense)
+    tpl.header.ajouter_action(btn_export)
 
     filtre_courant = {"t": None, "recherche": "", "debut": None, "fin": None,
                       "annee": "active"}
 
     def refresh():
-        type_filtre = page.combo_type.currentText()
-        recherche = page.search_input.text().strip()
+        type_filtre = combo_type.currentText()
+        recherche = search.text().strip()
         if type_filtre == "Recettes uniquement":
             t = "entree"
         elif type_filtre == "Depenses uniquement":
@@ -69,67 +94,48 @@ def caisse(page, ctx):
         if annee_filtre == "active":
             active = repos.annee_scolaire_active()
             annee_filtre = active["libelle"] if active else None
-        debut = page.date_start.date().toString("yyyy-MM-dd")
-        fin = page.date_end.date().toString("yyyy-MM-dd")
+        debut = date_start.date().toString("yyyy-MM-dd")
+        fin = date_end.date().toString("yyyy-MM-dd")
         filtre_courant.update(t=t, recherche=recherche, debut=debut, fin=fin,
                               annee=annee_filtre)
         rows = repos.transactions(
             type_filtre=t, recherche=recherche,
             date_start=debut, date_end=fin,
             annee=annee_filtre)
-        page.table_transactions.setRowCount(len(rows))
+        valeurs = []
         total_entrees = 0.0
         total_sorties = 0.0
-        for i, r in enumerate(rows):
-            values = [r["date"], r["reference"], r["beneficiaire"] or "-",
-                      r["motif"] or "-", r["categorie"] or "-"]
-            for j, val in enumerate(values):
-                page.table_transactions.setItem(i, j, QTableWidgetItem(str(val)))
+        for r in rows:
             montant = float(r["montant"] or 0)
             if r["type"] == "entree":
                 total_entrees += montant
-                page.table_transactions.setItem(i, 5, QTableWidgetItem(fmt_money(montant)))
-                page.table_transactions.setItem(i, 6, QTableWidgetItem(""))
+                rec, dep = fmt_money(montant), ""
             else:
                 total_sorties += montant
-                page.table_transactions.setItem(i, 5, QTableWidgetItem(""))
-                page.table_transactions.setItem(i, 6, QTableWidgetItem(fmt_money(montant)))
-            cell = QWidget()
-            lay = QHBoxLayout(cell)
-            lay.setContentsMargins(2, 2, 2, 2)
-            if ctx.can_edit("caisse"):
-                lay.addWidget(_btn("Supprimer", partial(_delete_transaction, page, ctx, r),
-                                    _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
-            page.table_transactions.setCellWidget(i, 7, cell)
-        page.table_transactions.resizeColumnsToContents()
-        page.table_transactions.horizontalHeader().setStretchLastSection(True)
-        page.table_transactions.horizontalHeader().setMinimumSectionSize(80)
+                rec, dep = "", fmt_money(montant)
+            valeurs.append([r["date"], r["reference"], r["beneficiaire"] or "-",
+                            r["motif"] or "-", r["categorie"] or "-",
+                            rec, dep, ""])
+        tpl.remplir(
+            valeurs,
+            message_vide="Aucune transaction sur la periode selectionnee",
+            sous_titre_vide="Elargissez les dates ou changez de filtre.")
+        for i, r in enumerate(rows):
+            tpl.table.setCellWidget(i, 7, _actions_cell(*(
+                (_btn("Supprimer", partial(_delete_transaction, page, ctx, r),
+                      _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)),)
+                if peut_editer else ()
+            )))
 
-        # Totaux coherent avec le filtre affiche.
-        page.val_total_incomes.setText(fmt_money(total_entrees))
-        page.val_total_expenses.setText(fmt_money(total_sorties))
-        page.val_current_balance.setText(fmt_money(total_entrees - total_sorties))
-
-        lbl_empty.setVisible(not rows)
-        page.table_transactions.setVisible(bool(rows))
+        kpi[0].set_value(fmt_money(total_entrees))
+        kpi[1].set_value(fmt_money(total_sorties))
+        kpi[2].set_value(fmt_money(total_entrees - total_sorties))
 
     def _delete_transaction(parent, ctx, t):
-        if QMessageBox.question(parent, "Supprimer",
-                                "Supprimer cette transaction ?") == QMessageBox.Yes:
+        from ui.pages.helpers import confirmer
+        if confirmer(parent, "Supprimer cette transaction ?", "Supprimer"):
             repos.delete_transaction(t["id"])
             refresh()
-
-    page.btn_add_income.clicked.connect(
-        lambda: open_transaction_dialog(page, ctx, "entree", on_created=refresh))
-    page.btn_add_expense.clicked.connect(
-        lambda: open_transaction_dialog(page, ctx, "sortie", on_created=refresh))
-    page.btn_apply_filter.clicked.connect(refresh)
-    page.search_input.textChanged.connect(refresh)
-    page.combo_type.currentIndexChanged.connect(refresh)
-    combo_annee.currentIndexChanged.connect(refresh)
-    # Les dates doivent rafraichir comme les autres filtres.
-    page.date_start.dateChanged.connect(refresh)
-    page.date_end.dateChanged.connect(refresh)
 
     def export_csv():
         from PyQt5.QtWidgets import QFileDialog
@@ -141,9 +147,13 @@ def caisse(page, ctx):
         repos.export_transactions_csv(
             path, type_filtre=f["t"], recherche=f["recherche"],
             date_start=f["debut"], date_end=f["fin"], annee=f["annee"])
-        QMessageBox.information(page, "Export", f"Exporte vers {path}")
+        toast.succes(page, f"Exporte vers {path}")
 
-    page.btn_export.clicked.connect(export_csv)
+    search.textChanged.connect(refresh)
+    combo_type.currentIndexChanged.connect(refresh)
+    combo_annee.currentIndexChanged.connect(refresh)
+    date_start.dateChanged.connect(refresh)
+    date_end.dateChanged.connect(refresh)
 
     refresh()
     page.refresh = refresh
@@ -196,7 +206,7 @@ def open_transaction_dialog(parent, ctx, type_trans, on_created=None):
             type_trans, montant.value(), motif.text().strip() or "Sans motif",
             categorie.currentText(), beneficiaire.text().strip() or "-",
             mode.currentText())
-        QMessageBox.information(dlg, "Caisse", "Transaction enregistree.")
+        toast.succes(dlg, "Transaction enregistree.")
         dlg.accept()
 
     btn_ok.clicked.connect(valider)

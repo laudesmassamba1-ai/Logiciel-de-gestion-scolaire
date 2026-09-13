@@ -103,6 +103,106 @@
   `check_bulletin` avant construction de l'UPDATE.
 - **Statut** : CORRIGÉ — 80/80 opérations desktop OK.
 
+## Bugs corrigés (session 2026-09-13)
+
+### BUG-11 — Premier compte (FirstSetup) jamais synchronisé
+- **Symptôme** : le compte créé à la première ouverture restait local ; les
+  autres postes ne pouvaient pas s'en servir. Dead-code silencieux.
+- **Cause profonde** : `_pousser_premier_compte` appelait
+  `client.ajouter_compte_serveur` qui n'existait pas dans `api/client.py`
+  (AttributeError avalée par `except Exception: pass`).
+- **Correctif** : méthode `ajouter_compte_serveur()` ajoutée dans `ApiClient`
+  (POST `/comptes`) ; `_pousser_premier_compte` appelle
+  `ApiClient().ajouter_compte_serveur(...)`.
+- **Statut** : CORRIGÉ.
+
+### BUG-12 — Statut de compte serveur « Actif » désactivait le compte local
+- **Symptôme** : un utilisateur actif côté serveur ne pouvait plus se connecter.
+- **Cause profonde** : comparaison case-sensitive `statut in ("actif", ...)`
+  ; `"Actif"` (title-case MySQL) → `actif=0`.
+- **Correctif** : `_bool_int()` + réduction en minuscules pour le statut.
+- **Statut** : CORRIGÉ.
+
+### BUG-13 — POST /comptes 500 sur téléphone dupliqué
+- **Symptôme** : re-pousser un compte (même téléphone, colonne UNIQUE) → 500.
+- **Cause profonde** : contrainte UNIQUE non vérifiée ; exception avalée en 500.
+- **Correctif** : vérification préalable → 409 ; `except HTTPException: raise` ;
+  téléphone vide → valeur unique `GS-<identifiant>` (colonne NOT NULL UNIQUE).
+- **Statut** : CORRIGÉ (testé : 409 réel).
+
+### BUG-14 — Crash de l'assistant si `nmcli` absent (Windows)
+- **Symptôme** : ouverture de l'assistant multi-postes → exception
+  (FileNotFoundError non gérée).
+- **Cause profonde** : `hotspot_actif()` appelé sans vérifier `nmcli_disponible()`
+  ; `_nmcli()` ne gérait pas les exceptions subprocess.
+- **Correctif** : garde `nmcli_disponible()` avant l'appel ; `_nmcli()` renvoie
+  un objet simulé (returncode/stderr) au lieu de lever.
+- **Statut** : CORRIGÉ.
+
+### BUG-15 — Doublons de paiements créés par le pull
+- **Symptôme** : deux versements identiques (même montant/type/trimestre) à des
+  dates différentes étaient fusionnés ; le second était perdu.
+- **Cause profonde** : clé de dédup `(eleve_id, montant, type_frais, trimestre)`
+  sans date.
+- **Correctif** : dédup par date précise quand elle est disponible ; fallback
+  (èle, montant, type, trimestre) seulement sans date. Date NULL → défaut local
+  (plus de fake `1970-01-01`).
+- **Statut** : CORRIGÉ.
+
+### BUG-16 — Le thread de synchro mourait silencieusement
+- **Symptôme** : la synchro s'arrêtait sans message après un `database is locked`.
+- **Cause profonde** : `db.dequeue_pending()` hors try/except dans
+  `SyncWorker.run()`.
+- **Correctif** : dequeue protégé (retour au prochain cycle) ; sleep découpé en
+  pas de 0,5 s pour que `requestInterruption()` soit respecté ; `"enqueue"`
+  archivé au lieu d'envoyer un payload non remappé ; erreurs du pull émises via
+  `sync_error`.
+- **Statut** : CORRIGÉ.
+
+### BUG-17 — `sync.json` corrompu / PID perdu lors d'écritures concurrentes
+- **Symptôme** : après redémarrage, PID inexact, fichier parfois tronqué.
+- **Cause profonde** : read-modify-write non atomique sans verrou (thread
+  d'auto-démarrage + interface).
+- **Correctif** : werrou `threading.Lock()` + écriture via tmp + `os.replace`.
+- **Statut** : CORRIGÉ.
+
+### BUG-18 — `cycle_id` écrasé par NULL et valeurs 0 corrompues
+- **Symptôme** : un pull partiel perdait le lien cycle d'une classe ; un
+  `redoublant=0` / coefficient `1,5` était déformé.
+- **Cause profonde** : `float(or 1)`, `int(or 50)`, et colonne `cycle_id`
+  toujours écrite (y compris None).
+- **Correctif** : `cycle_id` écrit seulement s'il est connu ; helpers
+  `_bool_int()`, `_coef_float()` (support des virgules françaises).
+- **Statut** : CORRIGÉ.
+
+### BUG-19 — Le miroir des tarifs supprimait des tarifs hors-ligne en attente
+- **Symptôme** : un tarif créé hors-ligne disparaissait avant son envoi.
+- **Cause profonde** : suppression des tarifs locaux absents du serveur sans
+  tenir compte de la file PENDING.
+- **Correctif** : garde sur les opérations PENDING de `file_attente_synchro`.
+- **Statut** : CORRIGÉ.
+
+### BUG-20 — QThread de scan réseau détruit pendant l'exécution
+- **Symptôme** : fermeture du dialogue pendant un scan → hard abort Qt.
+- **Correctif** : thread parenté au dialogue + `closeEvent` qui attend/termine
+  proprement le scan avant destruction.
+- **Statut** : CORRIGÉ.
+
+### BUG-21 — `user` None après FirstSetup et username vide
+- **Symptôme** : nom sans lettre → username `""` ; échec d'insertion → `user
+  None` → crash `main.py:58` (`NoneType not subscriptable`).
+- **Correctif** : contrôle sur base_username, contrôle `user is None` dans
+  `_do_create` et dans `_demande_connexion`.
+- **Statut** : CORRIGÉ.
+
+### BUG-22 — UI figée (démarrage serveur 15 s, hotspot nmcli, scan)
+- **Symptôme** : « Not Responding » pendant l'activation du serveur ; hotspot
+  bloquant.
+- **Cause profonde** : opérations réseau/longues sur le thread GUI.
+- **Correctif** : `aptiv / démarrage` et `creer_hotspot` déplacées hors du thread
+  via `ui.workers.run_async`.
+- **Statut** : CORRIGÉ.
+
 ## Faux positifs / comportements attendus (pas des bugs)
 
 - **Erreurs FK 1452 dans le harness** : les DELETE métier (`/supprimerClasse`,

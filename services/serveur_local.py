@@ -24,6 +24,33 @@ from core.config import PROJECT_ROOT, data_dir, lire_config_sync, ecrire_config_
 
 _DELAI_ATTENTE_S = 15
 
+_annonceur = None
+
+
+def _debuter_annonce(port: int):
+    """Annonce la presence du serveur sur le reseau local (broadcast UDP)
+    pour que les autres postes le trouvent automatiquement."""
+    global _annonceur
+    if _annonceur is not None:
+        return
+    try:
+        from services.discovery import AnnonceurServeur
+        _annonceur = AnnonceurServeur(port_api=port)
+        _annonceur.start()
+    except Exception:
+        _annonceur = None
+
+
+def _stopper_annonce():
+    global _annonceur
+    if _annonceur is not None:
+        try:
+            _annonceur.stop()
+            _annonceur.join(1.0)
+        except Exception:
+            pass
+        _annonceur = None
+
 
 def port_configure() -> int:
     try:
@@ -79,6 +106,32 @@ def serveur_disponible() -> bool:
     return True
 
 
+def _charger_env_serveur():
+    """Lit server/.env s'il existe (config MySQL definie par l'hote)."""
+    import collections
+    chemin = os.path.join(PROJECT_ROOT, "server", ".env")
+    valeurs = collections.OrderedDict()
+    try:
+        with open(chemin, encoding="utf-8") as fichier:
+            for ligne in fichier:
+                ligne = ligne.strip()
+                if not ligne or ligne.startswith("#") or "=" not in ligne:
+                    continue
+                cle, _, valeur = ligne.partition("=")
+                valeurs[cle.strip()] = valeur.strip()
+    except OSError:
+        pass
+    return valeurs
+
+
+def _config_mysql_presente(environ_fichier) -> bool:
+    """MySQL reel quand un mot de passe est defini (server/.env).
+
+    Sinon on retombe en SQLite (« sans installation ») pour un poste seul.
+    """
+    return bool(environ_fichier.get("GS_DB_PASSWORD"))
+
+
 def demarrer_serveur(port: int = None, serveur_auto: bool = True):
     """Demarre uvicorn en tache de fond. Retourne (ok, message).
 
@@ -100,15 +153,25 @@ def demarrer_serveur(port: int = None, serveur_auto: bool = True):
             ecrire_config_sync(sync_active=True, port=port,
                                api_url=f"http://127.0.0.1:{port}",
                                serveur_auto=serveur_auto)
+            _debuter_annonce(port)
             return True, ("Le serveur repond deja sur le port "
                           f"{port} — synchronisation activee.")
         return False, (f"Le port {port} est occupe par une autre "
                        "application. Choisissez un autre port.")
 
     env = os.environ.copy()
-    env["GS_DB_MODE"] = "sqlite"
-    env["GS_SQLITE_DIR"] = str(data_dir() / "serveur")
-    env.pop("GS_DB_HOST", None)
+    env_serveur = _charger_env_serveur()
+    if _config_mysql_presente(env_serveur):
+        # Mode MySQL reel : on injecte la configuration server/.env dans
+        # l'environnement du processus uvicorn (chargee aussi par securite.py).
+        for cle, valeur in env_serveur.items():
+            if cle not in env or valeur:
+                env[cle] = valeur
+    else:
+        # Mode « sans installation » : SQLite, aucun MySQL requis.
+        env["GS_DB_MODE"] = "sqlite"
+        env["GS_SQLITE_DIR"] = str(data_dir() / "serveur")
+        env.pop("GS_DB_HOST", None)
 
     options = {}
     if os.name == "nt":
@@ -134,6 +197,7 @@ def demarrer_serveur(port: int = None, serveur_auto: bool = True):
                        serveur_auto=serveur_auto)
 
     if api_joignable(port):
+        _debuter_annonce(port)
         return True, ("Serveur demarre ! Sur les AUTRES postes, saisissez "
                       f"cette adresse : {adresse_locale(port)}")
     return False, ("Le serveur met du temps a demarrer. Consultez le "
@@ -148,6 +212,7 @@ def arreter_serveur():
     pid = pid_enregistre()
     if not pid:
         ecrire_config_sync(pid=None, serveur_auto=False)
+        _stopper_annonce()
         return True, "Aucun serveur n'a ete lance depuis cet ordinateur."
     try:
         os.kill(pid, signal.SIGTERM)
@@ -161,6 +226,7 @@ def arreter_serveur():
     except OSError as exc:
         message = f"Arret impossible : {exc}"
     ecrire_config_sync(pid=None, serveur_auto=False)
+    _stopper_annonce()
     return True, message
 
 

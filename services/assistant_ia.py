@@ -521,6 +521,10 @@ class AssistantIA:
         # Backend LLM optionnel (enhancement, not required)
         self._llm = get_backend()
         self._contexte_conversation = []
+        self._historique = []            # (role, texte) pour le LLM, dans l'ordre reel
+        # Faits de l'ecole (cache 30 s) injectes dans les prompts LLM.
+        self._faits_cache = ""
+        self._faits_date = 0.0
         # Apprentissage autonome : journal, feedback, auto-amelioration.
         self._apprentissage = MoteurApprentissage()
         self._derniere_question_brute = None
@@ -546,6 +550,9 @@ class AssistantIA:
         if not t:
             return self._aide()
         self._derniere_question_brute = brut
+        self._historique.append(("user", brut))
+        if len(self._historique) > 10:
+            self._historique.pop(0)
         self._compteur_tours += 1
         try:
             if self._compteur_tours % 50 == 0:
@@ -675,9 +682,10 @@ class AssistantIA:
 
         # Questions metier (ordre de priorite fixe)
         for essai in (
-                self._q_graphe, self._q_absences, self._q_moyennes,
-                self._q_paiements_eleve, self._q_tarifs_classe,
-                self._q_caisse, self._q_personnel,
+                self._q_graphe, self._q_absences,
+                self._q_moyenne_generale, self._q_classement,
+                self._q_moyennes, self._q_paiements_eleve,
+                self._q_tarifs_classe, self._q_caisse, self._q_personnel,
                 self._q_annee_active, self._q_fiche_eleve, self._q_effectifs):
             try:
                 rep = essai(t)
@@ -711,14 +719,76 @@ class AssistantIA:
             return rep
         return self._proposer_apprentissage(brut)
 
+    def _faits_ecole(self):
+        """Bilan compact et chiffre de l'ecole (cache 30 s) pour le LLM.
+
+        Le LLM ne doit JAMAIS inventer un chiffre : ce texte lui donne les
+        donnees reelles de la base pour construire ses reponses."""
+        if self._faits_date and time.monotonic() - self._faits_date < 30.0:
+            return self._faits_cache
+        parties = []
+        try:
+            eleves = repos.eleve.eleves()
+            filles = sum(1 for e in eleves if e.get("sexe") == "F")
+            inscrits = sum(1 for e in eleves
+                           if (e.get("statut") or "") == "Inscrit")
+            parties.append(f"Ecole : {len(eleves)} eleve(s) enregistre(s) "
+                           f"({filles} fille(s), {len(eleves) - filles} "
+                           f"garcon(s)), {inscrits} inscrit(s).")
+            by_classe = {}
+            for e in eleves:
+                cl = e.get("classe_nom") or "sans classe"
+                by_classe[cl] = by_classe.get(cl, 0) + 1
+            if by_classe:
+                parties.append("Effectifs par classe : " + ", ".join(
+                    f"{k} ({v})" for k, v in sorted(by_classe.items())))
+            try:
+                entree, sortie, solde = repos.finance.caisse_totals()
+                parties.append(f"Caisse : entrees {entree:.0f} FCFA, sorties "
+                               f"{sortie:.0f} FCFA, solde {solde:.0f} FCFA.")
+            except Exception:
+                pass
+            try:
+                pers = repos.personnel_repo.personnel()
+                masse = repos.personnel_repo.masse_salariale()
+                parties.append(f"Personnel : {len(pers)} membre(s), masse "
+                               f"salariale mensuelle {masse:.0f} FCFA.")
+            except Exception:
+                pass
+            try:
+                active = repos.classe.annee_scolaire_active()
+                if active:
+                    parties.append(f"Annee scolaire active : "
+                                   f"{active['libelle']}.")
+            except Exception:
+                pass
+            try:
+                mois = datetime.date.today().strftime("%m")
+                annee = datetime.date.today().year
+                ligne = db.query_one(
+                    "SELECT COUNT(*) AS c, COALESCE(SUM(montant), 0) AS s "
+                    "FROM paiements WHERE substr(date_paiement, 1, 7) = ?",
+                    (f"{annee}-{mois}",))
+                if ligne and ligne["c"]:
+                    parties.append(f"Paiements du mois en cours : "
+                                   f"{ligne['c']} versement(s) pour "
+                                   f"{ligne['s']:.0f} FCFA.")
+            except Exception:
+                pass
+        except Exception:
+            pass
+        self._faits_cache = "\n".join(parties)
+        self._faits_date = time.monotonic()
+        return self._faits_cache
+
     def _essayer_llm_brut(self, brut):
         """Fallback LLM : quand le système rule-based ne sait pas répondre,
         essayer de répondre avec le LLM local (si disponible).
 
-        C'est ici que l'IA se rapproche des modèles comme ChatGPT :
-        au lieu de seulement demander à apprendre, elle exploite ses
-        connaissances générales pour répondre, tout en étant transparente
-        sur la source de la réponse."""
+        Le LLM est l'ultime recours, jamais le premier : appel court
+        (duree_max), reponse bâtie uniquement sur les donnees de l'ecole
+        fournies en contexte. Aucune hallucination possible sur les chiffres,
+        aucun blocage de l'application."""
         if not self._llm.disponible():
             return None
         if not brut or len(brut) < 6:
@@ -728,24 +798,30 @@ class AssistantIA:
 
         prompt_systeme = (
             "Tu es Charo, une assistante administrative scolaire très "
-            "utile. Tu réponds aux questions sur la gestion d'une école "
-            "(élèves, classes, notes, caisse, paiements, etc.) ET aux "
-            "questions générales ou conversationnelles. Réponds toujours en "
-            "français, de manière concise et claire. Sois polie et utile."
+            "utile. Tu réponds strictement à partir des DONNEES DE L'ECOLE "
+            "fournies ci-dessous. Si l'information demandée n'est pas dans "
+            "ces données, dis-le poliment et propose une question proche "
+            "gérable. Ne JAMAIS inventer de chiffre, de classe, d'élève ou "
+            "de tarif. Réponds en français, concis, avec les montants en "
+            "FCFA."
         )
         messages = [
-            {"role": "system", "content": prompt_systeme},
+            {"role": "system", "content": prompt_systeme
+             + "\n\nDONNEES ACTUELLES :\n" +
+             (self._faits_ecole() or "(aucune donnee dans la base)")},
         ]
-        # Injecter le contexte de conversation récent
-        for msg in self._contexte_conversation[-4:]:
-            messages.append({"role": "assistant", "content": msg})
+        for role, contenu in self._historique[-6:]:
+            messages.append({"role": role, "content": contenu})
         messages.append({"role": "user", "content": brut})
-        reponse = self._llm._generer(messages)
+        try:
+            reponse = self._llm._generer(messages)
+        except Exception:
+            return None
         if reponse:
             self._last_llm_reponse = reponse
             self._llm_question_originale = self._derniere_question_brute or brut
             return self._rep(
-                f"[Via assistance etendue]\n{reponse}",
+                f"[Assistance etendue]\n{reponse}",
                 choix=["Apprendre cette reponse", "Posez-moi autre chose"],
                 source="llm")
         return None
@@ -809,10 +885,12 @@ class AssistantIA:
         leur chaîne de pensée."""
         if _contient_un(t, "pourquoi") and self._derniere_explication:
             if self._llm.disponible() and self._derniere_reponse:
-                raisonnement = self._llm.raisonner(
-                    self._contexte_conversation[-1] if self._contexte_conversation else "",
-                    self._derniere_reponse.get("texte", "")
-                )
+                question = self._contexte_conversation[-1] \
+                    if self._contexte_conversation else ""
+                faits = f"{self._derniere_reponse.get('texte', '')}\n\n" \
+                        f"{self._faits_ecole()}"
+                raisonnement = self._llm.raisonner(question, faits,
+                                                   duree_max=6.0)
                 if raisonnement:
                     texte = f"{self._derniere_explication}\n\n{raisonnement}"
                     self._derniere_explication = None
@@ -967,6 +1045,9 @@ class AssistantIA:
         self._contexte_conversation.append(texte.strip())
         if len(self._contexte_conversation) > 10:
             self._contexte_conversation.pop(0)
+        self._historique.append(("assistant", texte.strip()))
+        if len(self._historique) > 10:
+            self._historique.pop(0)
         try:
             self._apprentissage.consigner(self._derniere_question_brute,
                                           texte_final, source)
@@ -1628,6 +1709,98 @@ class AssistantIA:
             return resultats.get(periode)
         return resultats
 
+    def _collecter_moyennes_globales(self):
+        """Moyenne generale de chaque eleve note : renvoie une liste ORDONNEE
+        [{prenom, nom, classe, classe_id, moyenne}] (la plus faible en 1er
+        dans la liste, la meilleure en derniere position)."""
+        lignes = []
+        for e in repos.eleve.eleves():
+            res = self._generale_eleve(e["id"])
+            if not res:
+                continue
+            valeurs = list(res.values())
+            if not valeurs:
+                continue
+            lignes.append({"prenom": e["prenom"], "nom": e["nom"],
+                           "classe": e.get("classe_nom") or "?",
+                           "classe_id": e.get("classe_id"),
+                           "moyenne": round(sum(valeurs) / len(valeurs), 2)})
+        lignes.sort(key=lambda x: x["moyenne"])
+        return lignes
+
+    def _moyenne_generale_texte(self):
+        lignes = self._collecter_moyennes_globales()
+        if not lignes:
+            return None
+        moy = round(sum(l["moyenne"] for l in lignes) / len(lignes), 2)
+        meilleur = lignes[-1]
+        en_queue = lignes[0]
+        return (f"Moyenne generale de l'ecole : {moy:.2f}/20 "
+                f"({appreciation(moy)}), sur {len(lignes)} eleve(s) note(s).\n"
+                f"Meilleure moyenne : {meilleur['prenom']} {meilleur['nom']} "
+                f"({meilleur['classe']}) avec {meilleur['moyenne']:.2f}."
+                if len(lignes) >= 1 else f"Moyenne generale : {moy:.2f}/20")
+
+    def _q_moyenne_generale(self, t):
+        if not _contient_un(t, "moyenne generale", "moyenne de l ecole",
+                            "moyenne des eleves", "moyenne de toutes les "
+                            "classes", "moyenne de toute l ecole"):
+            return None
+        refus = self._verifier_acces("notes")
+        if refus:
+            return refus
+        texte = self._moyenne_generale_texte()
+        if texte is None:
+            return self._rep("Aucune note enregistree : impossible de "
+                             "calculer une moyenne generale.")
+        moy = self._collecter_moyennes_globales()
+        return self._rep(
+            texte,
+            explication=(f"J'ai calcule la moyenne generale ponderee de "
+                         f"chaque eleve (formule (D1 + D2 + 2 x Composition) "
+                         f"/ 4 par matiere, puis moyenne ponderee par les "
+                         f"coefficients), puis la moyenne simple des "
+                         f"{len(moy)} eleves notes."),
+            suggestions=["Classement des eleves", "Moyenne de la classe 6eme",
+                         "Solde de la caisse"])
+
+    def _q_classement(self, t):
+        if not _contient_un(t, "classement", "classer", "rang", "rangement",
+                            "top", "meill", "pire"):
+            return None
+        refus = self._verifier_acces("notes")
+        if refus:
+            return refus
+        classe = self._trouver_classe(t)
+        if classe is not None:
+            self._derniere_classe_id = classe["id"]
+            lignes = [l for l in self._collecter_moyennes_globales()
+                      if l["classe_id"] == classe["id"]]
+            titre = f"Classement de la classe {classe['nom']} :"
+            if not lignes:
+                return self._rep(f"Aucune note enregistree pour classer la "
+                                 f"classe {classe['nom']}.")
+        else:
+            lignes = self._collecter_moyennes_globales()
+            titre = "Classement des eleves (toutes classes) :"
+            if not lignes:
+                return self._rep("Aucune note enregistree : je ne peux pas "
+                                 "classer les eleves.")
+        lignes_aff = list(reversed(lignes))
+        parties = [titre]
+        for i, l in enumerate(lignes_aff[:10], start=1):
+            parties.append(f"{i}. {l['prenom']} {l['nom']} ({l['classe']}) : "
+                           f"{l['moyenne']:.2f} ({appreciation(l['moyenne'])})")
+        if len(lignes_aff) > 10:
+            parties.append("(Top 10 affiche)")
+        return self._rep(
+            "\n".join(parties),
+            explication=(f"J'ai trie les {len(lignes)} eleves selon leur "
+                         f"moyenne generale ponderee (coefficients des "
+                         f"matieres)."),
+            suggestions=["Moyenne generale", "Moyenne de la classe 6eme",
+                         "Qui est absent aujourd'hui ?"])
+
     def _q_moyennes(self, t):
         if not _contient_un(t, "moyenne", "moyennes", "resultat", "resultats",
                             "classement", "premier de la"):
@@ -1748,6 +1921,64 @@ class AssistantIA:
     # Questions : paiements d'un eleve
     # ------------------------------------------------------------------
 
+    def _q_paiements_globale(self, t):
+        """Vue globale des paiements (mois courant, meilleurs/moins bons
+        payeurs) quand aucune eleve n'est vise."""
+        mois_courant = "mois" in t or "ce mois" in t
+        classement = _contient_un(t, "le moins", "le plus",
+                                  "mieux paye", "mieux payer",
+                                  "classement des paiements",
+                                  "qui paie le moins", "qui a le plus paye",
+                                  "qui a le mieux paye")
+        if not mois_courant and not classement:
+            return None
+        if mois_courant:
+            annee, mois = datetime.date.today().strftime("%Y-%m").split("-")
+            paiements = db.query(
+                """SELECT p.montant, e.prenom, e.nom
+                   FROM paiements p JOIN eleves e ON e.id = p.eleve_id
+                   WHERE substr(p.date_paiement, 1, 7) = ?""",
+                (f"{annee}-{mois}",))
+            total = sum((p["montant"] or 0) for p in paiements)
+            texte = (f"Paiements du mois en cours : {len(paiements)} "
+                     f"versement(s) pour {formater_fcfa(total)}.")
+            if paiements:
+                par = {}
+                for p in paiements:
+                    nom = f"{p['prenom']} {p['nom']}".strip()
+                    par[nom] = par.get(nom, 0) + (p["montant"] or 0)
+                top = sorted(par.items(), key=lambda kv: kv[1], reverse=True)[:5]
+                texte += "\nTop payeurs du mois : " + "; ".join(
+                    f"{n} ({formater_fcfa(m)})" for n, m in top)
+            return self._rep(
+                texte,
+                suggestions=["Qui a le plus paye ?", "Solde de la caisse",
+                             "Combien d'eleves ?"])
+        if classement:
+            par = {}
+            for p in db.query(
+                    """SELECT p.montant, e.prenom, e.nom
+                       FROM paiements p JOIN eleves e ON e.id = p.eleve_id"""):
+                nom = f"{p['prenom']} {p['nom']}".strip()
+                par[nom] = par.get(nom, 0) + (p["montant"] or 0)
+            if not par:
+                return self._rep("Aucun paiement enregistre jusqu'ici.")
+            rangs = sorted(par.items(), key=lambda kv: kv[1])
+            plus = rangs[-1]
+            moins = rangs[0]
+            texte = (f"Qui a le plus paye : {plus[0]} "
+                     f"({formater_fcfa(plus[1])}) sur {len(par)} payeur(s).\n")
+            if len(rangs) > 1 or plus[0] != moins[0]:
+                texte += (f"Versements les plus faibles : {moins[0]} "
+                          f"({formater_fcfa(moins[1])}).")
+            else:
+                texte += "Un seul eleve a paye jusqu'ici."
+            return self._rep(
+                texte,
+                suggestions=["Combien ont paye ce mois ?",
+                             "Paiements de " + self._nom_dernier_eleve(),
+                             "Solde de la caisse"])
+
     def _q_paiements_eleve(self, t):
         if not _contient_un(t, "paye", "payer", "paiement", "paiements",
                             "versement", "reste a payer"):
@@ -1760,7 +1991,7 @@ class AssistantIA:
         if eleve is None and self._dernier_eleve_id:
             eleve = repos.eleve.eleve_by_id(self._dernier_eleve_id)
         if eleve is None:
-            return None
+            return self._q_paiements_globale(t)
         self._dernier_eleve_id = eleve["id"]
         paiements = repos.finance.paiements(nom=eleve["nom"], prenom=eleve["prenom"])
         total_paye = sum(p["montant"] or 0 for p in paiements)

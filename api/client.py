@@ -217,6 +217,59 @@ class ApiClient:
             return None, err
         return data.get("tarifs", []), None
 
+    def toutes_presence(self):
+        data, err = _request("GET", "/toutes_presence")
+        if err:
+            return None, err
+        return data.get("presences", []), None
+
+    def tous_les_programme(self):
+        data, err = _request("GET", "/tous_les_programme")
+        if err:
+            return None, err
+        return data.get("programmes", []), None
+
+    def lister_toutes_les_inscriptions(self):
+        data, err = _request("GET", "/lister_toutes_les_inscriptions")
+        if err:
+            return None, err
+        return data.get("inscriptions", []), None
+
+    def paiement_syndication(self):
+        data, err = _request("GET", "/paiement-syndication")
+        if err:
+            return None, err
+        return data.get("paiements", []), None
+
+    def note_syndication(self):
+        data, err = _request("GET", "/note-syndication")
+        if err:
+            return None, err
+        return data.get("notes", []), None
+
+    def comptes_syndication(self):
+        data, err = _request("GET", "/comptes-syndication")
+        if err:
+            return None, err
+        return data.get("comptes", []), None
+
+    def ajouter_compte_serveur(self, nom, username, password, role,
+                               email=None, telephone=None):
+        """Pousse un compte utilisateur vers le serveur partage (POST /comptes).
+
+        Le mot de passe est le hash PBKDF2 local (« salt:hash ») que le
+        serveur sait aussi verifier : le compte est donc utilisable sur
+        tous les postes apres le pull_comptes.
+        """
+        email = email or (f"{username}@ecole.ci" if username
+                          and "@" not in username else username)
+        data, err = _request("POST", "/comptes", json={
+            "nom": nom, "email": email, "telephone": telephone or "",
+            "role": role, "actif": 1, "password": password})
+        if err:
+            return None, err
+        return data, None
+
     def total_paiement(self):
         data, err = _request("GET", "/total_paiement")
         if err:

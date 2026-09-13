@@ -4,124 +4,135 @@ import sqlite3
 
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QCheckBox, QFormLayout, QTabWidget, QTableWidgetItem, QVBoxLayout,
-    QComboBox, QDateEdit, QWidget,
+    QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox,
+    QCheckBox, QFormLayout, QTabWidget, QVBoxLayout,
+    QComboBox, QDateEdit, QWidget, QStackedWidget,
 )
 
 from repositories import repos
+from ui import toast
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _add_btn, _make_table, _page_header,
+    _btn, _simple_btn_style, _add_btn, _actions_cell,
 )
-from core.config import C_EMPTY_STATE, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_GOLD, C_GOLD_BG, C_GOLD_BORDER, C_RED, C_RED_BG, C_RED_BORDER
+from ui.widgets import DataTable, EmptyState
+from core.config import (
+    C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_GOLD, C_GOLD_BG, C_GOLD_BORDER,
+    C_RED, C_RED_BG, C_RED_BORDER,
+)
 
 
 def cycles_annees(page, ctx):
     if page.layout() is not None:
         return
-    page.setStyleSheet("")
+    from ui.widgets import PageHeader
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    _page_header(lay, "Cycles & Annees Scolaires",
-                 "Cycles pedagogiques et annees scolaires de l'établissement")
+    lay.addWidget(PageHeader(
+        "Cycles & Annees Scolaires",
+        "Cycles pedagogiques et annees scolaires de l'établissement"))
 
     tabs = QTabWidget()
-    lay.addWidget(tabs)
+    lay.addWidget(tabs, 1)
+    peut_editer = ctx.can_edit("cycles")
 
-    page_cycles = QWidget()
-    lay_cycles = QVBoxLayout(page_cycles)
-    top_c = QHBoxLayout()
-    btn_add_cycle = _add_btn("+ Nouveau Cycle", lambda: open_cycle_dialog(page, ctx, None, fill_cycles))
-    top_c.addStretch(1)
-    if ctx.can_edit("cycles"):
-        top_c.addWidget(btn_add_cycle)
-    lay_cycles.addLayout(top_c)
-    table_cycles = _make_table(["Nom", "Description", "Actions"])
-    lay_cycles.addWidget(table_cycles)
-    lbl_empty_cycles = QLabel("Aucun cycle enregistre")
-    lbl_empty_cycles.setStyleSheet(f"color: {C_EMPTY_STATE}; padding: 30px;")
-    lbl_empty_cycles.setAlignment(Qt.AlignCenter)
-    lay_cycles.addWidget(lbl_empty_cycles)
+    # ---- Onglet Cycles
+    onglet_cycles = QWidget()
+    lay_c = QVBoxLayout(onglet_cycles)
+    table_cycles = DataTable()
+    table_cycles.setColumnCount(3)
+    table_cycles.setHorizontalHeaderLabels(["Nom", "Description", "Actions"])
+    vide_cycles = EmptyState("Aucun cycle enregistre",
+                             "Ajoutez un cycle via le bouton ci-dessus.")
+    pile_c = QStackedWidget()
+    pile_c.addWidget(table_cycles)
+    pile_c.addWidget(vide_cycles)
+    lay_c.addWidget(pile_c, 1)
 
     def fill_cycles():
         rows = repos.cycles()
-        table_cycles.setRowCount(len(rows))
+        valeurs = [[c["nom"], c["description"] or "-", ""] for c in rows]
+        table_cycles.remplir(valeurs)
         for i, c in enumerate(rows):
-            table_cycles.setItem(i, 0, QTableWidgetItem(c["nom"]))
-            table_cycles.setItem(i, 1, QTableWidgetItem(c["description"] or "-"))
-            cell = QWidget()
-            cl = QHBoxLayout(cell)
-            cl.setContentsMargins(2, 2, 2, 2)
-            cl.addWidget(_btn("Modifier", partial(open_cycle_dialog, page, ctx, c, fill_cycles),
-                              _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)))
-            cl.addWidget(_btn("Supprimer", partial(_delete_cycle, page, ctx, c),
-                                  _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
-            table_cycles.setCellWidget(i, 2, cell)
-        table_cycles.resizeColumnsToContents()
-        lbl_empty_cycles.setVisible(not rows)
-        table_cycles.setVisible(bool(rows))
+            table_cycles.setCellWidget(i, 2, _actions_cell(
+                _btn("Modifier", partial(open_cycle_dialog, page, ctx, c, fill_cycles),
+                     _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER)),
+                _btn("Supprimer", partial(_delete_cycle, page, ctx, c),
+                     _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER))))
+        pile_c.setCurrentWidget(vide_cycles if not rows else table_cycles)
 
     def _delete_cycle(parent, ctx, c):
-        if QMessageBox.question(
-                parent, "Cycle",
+        from ui.pages.helpers import confirmer
+        if confirmer(
+                parent,
                 f"Supprimer le cycle {c['nom']} ?\n\n"
                 "Attention : les classes rattachees a ce cycle seront "
-                "egalement supprimees (avec leurs eleves).") \
-                == QMessageBox.Yes:
+                "egalement supprimees (avec leurs eleves).",
+                "Cycle"):
             repos.delete_cycle(c["id"])
+            toast.succes(parent, "Cycle supprime.")
             fill_cycles()
 
-    tabs.addTab(page_cycles, "Cycles")
+    btn_add_cycle = _add_btn(
+        "+ Nouveau Cycle", lambda: open_cycle_dialog(page, ctx, None, fill_cycles))
+    lay_c.addWidget(btn_add_cycle, 0, Qt.AlignRight)
+    if not peut_editer:
+        btn_add_cycle.setVisible(False)
 
-    page_annees = QWidget()
-    lay_annees = QVBoxLayout(page_annees)
-    top_a = QHBoxLayout()
-    btn_add_annee = _add_btn("+ Nouvelle Annee", lambda: open_annee_dialog(page, ctx, None, fill_annees))
-    top_a.addStretch(1)
-    if ctx.can_edit("cycles"):
-        top_a.addWidget(btn_add_annee)
-    lay_annees.addLayout(top_a)
-    table_annees = _make_table(["Libelle", "Debut", "Fin", "Active", "Actions"])
-    lay_annees.addWidget(table_annees)
-    lbl_empty_annees = QLabel("Aucune annee scolaire enregistree")
-    lbl_empty_annees.setStyleSheet(f"color: {C_EMPTY_STATE}; padding: 30px;")
-    lbl_empty_annees.setAlignment(Qt.AlignCenter)
-    lay_annees.addWidget(lbl_empty_annees)
+    tabs.addTab(onglet_cycles, "Cycles")
+
+    # ---- Onglet Annees Scolaires
+    onglet_annees = QWidget()
+    lay_a = QVBoxLayout(onglet_annees)
+    table_annees = DataTable()
+    table_annees.setColumnCount(5)
+    table_annees.setHorizontalHeaderLabels(
+        ["Libelle", "Debut", "Fin", "Active", "Actions"])
+    vide_annees = EmptyState(
+        "Aucune annee scolaire enregistree",
+        "Ajoutez une annee scolaire via le bouton ci-dessus.")
+    pile_a = QStackedWidget()
+    pile_a.addWidget(table_annees)
+    pile_a.addWidget(vide_annees)
+    lay_a.addWidget(pile_a, 1)
 
     def fill_annees():
         rows = repos.annees_scolaires()
-        table_annees.setRowCount(len(rows))
+        valeurs = [[a["libelle"], a["date_debut"] or "-", a["date_fin"] or "-",
+                    "Oui" if a["est_active"] else "Non", ""] for a in rows]
+        table_annees.remplir(valeurs)
         for i, a in enumerate(rows):
-            table_annees.setItem(i, 0, QTableWidgetItem(a["libelle"]))
-            table_annees.setItem(i, 1, QTableWidgetItem(a["date_debut"] or "-"))
-            table_annees.setItem(i, 2, QTableWidgetItem(a["date_fin"] or "-"))
-            table_annees.setItem(i, 3, QTableWidgetItem("Oui" if a["est_active"] else "Non"))
-            cell = QWidget()
-            cl = QHBoxLayout(cell)
-            cl.setContentsMargins(2, 2, 2, 2)
-            if not a["est_active"] and ctx.can_edit("cycles"):
-                cl.addWidget(_btn("Activer", partial(_set_active, page, ctx, a),
-                                  _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD, border=C_GOLD_BORDER)))
-            if not a["est_active"]:
-                cl.addWidget(_btn("Supprimer", partial(_delete_annee, page, ctx, a),
-                              _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)))
+            cell = _actions_cell(*(
+                (_btn("Activer", partial(_set_active, page, ctx, a),
+                      _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD, border=C_GOLD_BORDER)),)
+                if not a["est_active"] and peut_editer else ()
+            ) + (
+                (_btn("Supprimer", partial(_delete_annee, page, ctx, a),
+                      _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)),)
+                if not a["est_active"] else ()
+            ))
             table_annees.setCellWidget(i, 4, cell)
-        table_annees.resizeColumnsToContents()
-        lbl_empty_annees.setVisible(not rows)
-        table_annees.setVisible(bool(rows))
+        pile_a.setCurrentWidget(vide_annees if not rows else table_annees)
 
     def _set_active(parent, ctx, a):
         repos.set_annee_active(a["id"])
+        toast.succes(parent, f"{a['libelle']} est maintenant l'annee active.")
         fill_annees()
 
     def _delete_annee(parent, ctx, a):
-        if QMessageBox.question(parent, "Annee",
-                                f"Supprimer l'annee {a['libelle']} ?") == QMessageBox.Yes:
+        from ui.pages.helpers import confirmer
+        if confirmer(parent, f"Supprimer l'annee {a['libelle']} ?", "Annee"):
             repos.delete_annee_scolaire(a["id"])
+            toast.succes(parent, "Annee scolaire supprimee.")
             fill_annees()
 
-    tabs.addTab(page_annees, "Annees Scolaires")
+    btn_add_annee = _add_btn(
+        "+ Nouvelle Annee", lambda: open_annee_dialog(page, ctx, None, fill_annees))
+    lay_a.addWidget(btn_add_annee, 0, Qt.AlignRight)
+    if not peut_editer:
+        btn_add_annee.setVisible(False)
+
+    tabs.addTab(onglet_annees, "Annees Scolaires")
 
     fill_cycles()
     fill_annees()
@@ -144,10 +155,10 @@ def open_cycle_dialog(parent, ctx, cycle=None, on_created=None):
     form.addRow("Description :", description)
     lay.addLayout(form)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.accepted.connect(dlg.accept)
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
-    if dlg.exec_() == QDialog.Accepted:
+
+    def valider():
         if not nom.text().strip():
             QMessageBox.warning(dlg, "Cycle", "Le nom du cycle est obligatoire.")
             return
@@ -161,8 +172,13 @@ def open_cycle_dialog(parent, ctx, cycle=None, on_created=None):
                                 f"Un cycle nomme '{nom.text().strip()}' existe "
                                 "deja. Choisissez un autre nom.")
             return
+        toast.succes(dlg, "Cycle enregistre.")
         if on_created:
             on_created()
+        dlg.accept()
+
+    buttons.accepted.connect(valider)
+    dlg.exec_()
 
 
 def open_annee_dialog(parent, ctx, annee=None, on_created=None):
@@ -194,10 +210,10 @@ def open_annee_dialog(parent, ctx, annee=None, on_created=None):
     lay.addLayout(form)
     lay.addWidget(active)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    buttons.accepted.connect(dlg.accept)
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
-    if dlg.exec_() == QDialog.Accepted:
+
+    def valider():
         if not libelle.text().strip():
             QMessageBox.warning(dlg, "Annee", "Le libelle est obligatoire.")
             return
@@ -243,5 +259,10 @@ def open_annee_dialog(parent, ctx, annee=None, on_created=None):
                                 f"Une annee '{libelle.text().strip()}' existe "
                                 "deja. Choisissez un autre libelle.")
             return
+        toast.succes(dlg, "Annee scolaire enregistree.")
         if on_created:
             on_created()
+        dlg.accept()
+
+    buttons.accepted.connect(valider)
+    dlg.exec_()

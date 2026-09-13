@@ -12,8 +12,12 @@ class PlanningRepository(RepositoryBase):
         return {(r["jour"], r["creneau"]): r for r in rows}
 
     def save_planning(self, classe_id, entries):
-        self._route_write("DELETE", f"/planning/{classe_id}", {},
-                          db.execute, "DELETE FROM planning WHERE classe_id = ?", (classe_id,))
+        classe = db.query_one("SELECT nom FROM classes WHERE id = ?", (classe_id,))
+        classe_nom = classe["nom"] if classe else None
+        del_payload = {"classe_nom": classe_nom}
+        if classe_nom:
+            self._route_write("DELETE", f"/planning/{classe_id}", del_payload,
+                              db.execute, "DELETE FROM planning WHERE classe_id = ?", (classe_id,))
         # Transaction unique cote local : si un INSERT echoue, rien n'est
         # supprime -> jamais de planning vide en cas d'erreur.
         lignes = [(classe_id, jour, creneau, matiere, salle)
@@ -29,6 +33,6 @@ class PlanningRepository(RepositoryBase):
             self._route_write(
                 "POST", "/planning",
                 {"classe_id": classe_id, "jour": jour, "creneau": creneau,
-                 "matiere": matiere, "salle": salle},
+                 "matiere": matiere, "salle": salle, "classe_nom": classe_nom},
                 db.execute,
                 "SELECT 1")
