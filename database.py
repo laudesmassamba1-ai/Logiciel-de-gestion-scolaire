@@ -75,12 +75,16 @@ TABLES_REFERENCE_SQL = {
     "utilisateur": """
         CREATE TABLE IF NOT EXISTS utilisateur (
             id INTEGER PRIMARY KEY,
+            matricule TEXT,
             nom TEXT NOT NULL,
             prenom TEXT NOT NULL,
             telephone TEXT,
             email TEXT,
+            identifiant TEXT,
+            mot_de_passe TEXT DEFAULT '',
             role TEXT,
-            statut TEXT
+            statut TEXT,
+            updated_at TEXT
         )
     """,
 }
@@ -95,6 +99,7 @@ TABLES_ACTION_SQL = {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             id_serveur INTEGER,
             uuid_client TEXT UNIQUE NOT NULL,
+            matricule TEXT UNIQUE NOT NULL,
             nom TEXT NOT NULL,
             prenom TEXT NOT NULL,
             sexe TEXT NOT NULL,
@@ -235,12 +240,13 @@ def enregistrer_eleve_local(uuid_client, eleve_dict, classe_id, annee_scolaire_i
 
     cursor.execute("""
         INSERT INTO eleve (
-            uuid_client, nom, prenom, sexe, date_naissance,
+            uuid_client, matricule, nom, prenom, sexe, date_naissance,
             lieu_naissance, adresse, nom_parent, redoublant, statut,
             telephone_parent
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         uuid_client,
+        eleve_dict.get("matricule"),
         eleve_dict.get("nom"),
         eleve_dict.get("prenom"),
         eleve_dict.get("sexe"),

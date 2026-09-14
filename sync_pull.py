@@ -92,12 +92,21 @@ def pull_utilisateurs(base_url):
     # Cette route renvoie une liste directement, pas d'enveloppe
     liste = data if isinstance(data, list) else data.get("utilisateurs", [])
     lignes = [
-        (u["id"], u["nom"], u["prenom"], u.get("telephone"), u.get("email"), u.get("role"), u.get("statut"))
+        (
+            u.get("id"),
+            u.get("matricule"),
+            u.get("nom"),
+            u.get("prenom"),
+            u.get("telephone"),
+            u.get("email"),
+            u.get("role"),
+            u.get("statut"),
+        )
         for u in liste
     ]
     upsert_reference(
         "utilisateur",
-        ["id", "nom", "prenom", "telephone", "email", "role", "statut"],
+        ["id", "matricule", "nom", "prenom", "telephone", "email", "role", "statut"],
         lignes,
     )
     print(f"[PULL] {len(lignes)} utilisateur(s) synchronisé(s).")
@@ -154,6 +163,7 @@ def pull_eleve(base_url):
             id_serveur=e["id"],
             uuid_client=e.get("uuid_client"),
             colonnes_valeurs={
+                "matricule": e.get("matricule"),
                 "nom": e.get("nom"),
                 "prenom": e.get("prenom"),
                 "sexe": e.get("sexe"),

@@ -194,6 +194,7 @@ def supprimer_note_a_la_file(note_id_serveur):
 if __name__ == "__main__":
     ajouter_eleve_a_la_file(
         eleve_dict={
+            "matricule": "MAT-TEST-001",
             "nom": "TEST", "prenom": "Hors-ligne",
             "sexe": "M", "date_naissance": "2015-01-01", "lieu_naissance": "Brazzaville",
             "adresse": "Test", "nom_parent": "Parent Test", "redoublant": "0",
