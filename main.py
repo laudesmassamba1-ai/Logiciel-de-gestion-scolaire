@@ -234,8 +234,8 @@ def get_eleve_total_classe():
 
 # 1. Modèles Pydantic
 class Eleveajouter(BaseModel):
-    nom: str
     matricule: str
+    nom: str
     prenom: str
     sexe: str
     date_naissance: str
