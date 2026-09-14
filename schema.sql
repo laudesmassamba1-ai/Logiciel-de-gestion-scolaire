@@ -1,7 +1,5 @@
--- ============================================================
 -- SCHÉMA DE LA BASE DE DONNÉES "ecole"
 -- Ordre respecté pour les clés étrangères : tables sans dépendance d'abord
--- ============================================================
 
 -- 1. cycle
 CREATE TABLE cycle (
@@ -35,16 +33,17 @@ CREATE TABLE matiere (
 -- 5. eleve
 CREATE TABLE eleve (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    matricule VARCHAR(50) UNIQUE NOT NULL,
     nom VARCHAR(100) NOT NULL,
     prenom VARCHAR(100) NOT NULL,
-    sexe ENUM('M', 'F') NOT NULL,
+    sexe VARCHAR(10) NOT NULL,
     date_naissance DATE,
     lieu_naissance VARCHAR(100),
     adresse VARCHAR(255) NOT NULL,
     nom_parent VARCHAR(150) NOT NULL,
     numero_parent VARCHAR(30),
-    redoublant ENUM('0', '1') DEFAULT '0',
-    statut ENUM('actif', 'inactif', 'exclu') DEFAULT 'actif',
+    redoublant VARCHAR(10) DEFAULT 'non',
+    statut VARCHAR(20) DEFAULT 'actif',
     uuid_client VARCHAR(100),
     est_supprime TINYINT(1) DEFAULT 0
 );
@@ -54,7 +53,7 @@ CREATE TABLE enseignant (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nom VARCHAR(100) NOT NULL,
     prenom VARCHAR(100) NOT NULL,
-    sexe ENUM('M', 'F') NOT NULL,
+    sexe VARCHAR(10) NOT NULL,
     date_naissance DATE,
     lieu_naissance VARCHAR(100),
     adresse TEXT,
@@ -62,7 +61,7 @@ CREATE TABLE enseignant (
     email VARCHAR(150),
     diplome VARCHAR(150),
     date_embauche DATE,
-    statut ENUM('actif', 'inactif') DEFAULT 'actif'
+    statut VARCHAR(20) DEFAULT 'actif'
 );
 
 -- 7. inscription (dépend de eleve, classe, annee_scolaire)
@@ -72,7 +71,7 @@ CREATE TABLE inscription (
     classe_id INT NOT NULL,
     annee_scolaire_id INT NOT NULL,
     date_inscription TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    statut ENUM('actif', 'abandon', 'transfere') DEFAULT 'actif',
+    statut VARCHAR(20) DEFAULT 'actif',
     uuid_client VARCHAR(100),
     FOREIGN KEY (eleve_id) REFERENCES eleve(id),
     FOREIGN KEY (classe_id) REFERENCES classe(id),
@@ -97,26 +96,25 @@ CREATE TABLE note (
     id INT AUTO_INCREMENT PRIMARY KEY,
     inscription_id INT NOT NULL,
     matiere_id INT NOT NULL,
-    type_evaluation TEXT NOT NULL,
+    type_evaluation VARCHAR(100) NOT NULL,
     note DECIMAL(4,2) NOT NULL,
     note_sur INT DEFAULT 20,
     date_evaluation DATE NOT NULL,
-    trimestre ENUM('T1', 'T2', 'T3'),
+    trimestre VARCHAR(10),
     uuid_client VARCHAR(100),
     FOREIGN KEY (inscription_id) REFERENCES inscription(id),
     FOREIGN KEY (matiere_id) REFERENCES matiere(id)
 );
 
 -- 10. paiement (dépend de inscription)
--- ⚠️ Valeurs de l'ENUM type_frais à vérifier/ajuster selon la vraie base
 CREATE TABLE paiement (
     id INT AUTO_INCREMENT PRIMARY KEY,
     inscription_id INT NOT NULL,
-    type_frais ENUM('Inscription', 'Scolarite', 'Cantine', 'Transport') NOT NULL,
+    type_frais VARCHAR(100) NOT NULL,
     montant DECIMAL(10,2) NOT NULL,
     date_paiement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    mode_paiement ENUM('espece', 'virement', 'mobile_money', 'cheque') DEFAULT 'espece',
-    trimestre ENUM('T1', 'T2', 'T3'),
+    mode_paiement VARCHAR(50) DEFAULT 'espece',
+    trimestre VARCHAR(10) DEFAULT 'T1',
     mois VARCHAR(20),
     uuid_client VARCHAR(100),
     FOREIGN KEY (inscription_id) REFERENCES inscription(id)
@@ -139,8 +137,8 @@ CREATE TABLE presences (
     eleve_id INT NOT NULL,
     classe_id INT NOT NULL,
     date_presence TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    statut ENUM('Present', 'Absent', 'En retard') NOT NULL,
-    justifie ENUM('Oui', 'Non') DEFAULT 'Non',
+    statut VARCHAR(20) NOT NULL,
+    justifie VARCHAR(10) DEFAULT 'Non',
     uuid_client VARCHAR(100),
     FOREIGN KEY (eleve_id) REFERENCES eleve(id),
     FOREIGN KEY (classe_id) REFERENCES classe(id)
@@ -149,6 +147,7 @@ CREATE TABLE presences (
 -- 13. utilisateur (aucune dépendance)
 CREATE TABLE utilisateur (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    matricule VARCHAR(50) UNIQUE NOT NULL,
     nom VARCHAR(100) NOT NULL,
     prenom VARCHAR(100) NOT NULL,
     telephone VARCHAR(30) NOT NULL UNIQUE,
