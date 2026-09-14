@@ -183,7 +183,7 @@ def get_total_eleve_par_sexe_par_classe(classe: str) -> dict:
 def get_all_eleves_par_classe(classe: str)-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT eleve.id, nom, prenom, sexe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and  classe.classe = %s and est_supprime = 0",(classe, ))
+    cursor.execute("SELECT eleve.id, eleve.matricule, eleve.nom, eleve.prenom, eleve.sexe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and  classe.classe = %s and est_supprime = 0",(classe, ))
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -203,13 +203,13 @@ def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[st
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     if recherche:
-        sql="""select eleve.id, nom, prenom, sexe,  classe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, eleve.statut, numero_parent from eleve, classe, inscription where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and nom like  %s and prenom like %s"""
+        sql="""select eleve.id, eleve.matricule, eleve.nom, eleve.prenom, eleve.sexe,  eleve.classe, eleve.date_naissance, eleve.lieu_naissance, eleve.adresse, eleve.nom_parent, eleve.redoublant, eleve.statut, eleve.numero_parent from eleve, classe, inscription where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and nom like  %s and prenom like %s"""
         motif=f"%{recherche}%"
         motif1=f"%{recherche1}%"
         cursor.execute(sql, (motif, motif1))
 
     else:
-        sql="""select eleve.id, nom, prenom, sexe, date_naissance, lieu_naissance, adresse, nom_parent, redoublant, statut, numero_parent, classe from eleve, classe where eleve.classe_id=classe.id"""
+        sql="""select eleve.id, eleve.matricule, eleve.nom, eleve.prenom, eleve.sexe, eleve.date_naissance, eleve.lieu_naissance, eleve.adresse, eleve.nom_parent, eleve.redoublant, eleve.statut, eleve.numero_parent, eleve.classe from eleve, classe where eleve.classe_id=classe.id"""
         cursor.execute(sql)
 
     eleve = cursor.fetchall()
@@ -235,6 +235,7 @@ def get_eleve_total_classe():
 # 1. Modèles Pydantic
 class Eleveajouter(BaseModel):
     nom: str
+    matricule: str
     prenom: str
     sexe: str
     date_naissance: str
@@ -290,12 +291,13 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
         # B. Insertion de l'élève (SANS classe_id dans la table eleve)
         sql_eleve = """
             INSERT INTO eleve (
-                nom, prenom, sexe, date_naissance,
+                matricule, nom, prenom, sexe, date_naissance,
                 lieu_naissance, adresse, nom_parent,
                 redoublant, statut, numero_parent, uuid_client
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         valeurs_eleve = (
+            eleve.matricule,
             eleve.nom,
             eleve.prenom,
             eleve.sexe,
@@ -378,7 +380,7 @@ def get_lister_toutes_les_inscriptions():
     
     # Utilisation de JOIN et ORDER BY pour lister TOUTES les inscriptions triées par classe
     cursor.execute("""
-        SELECT eleve.nom, eleve.prenom, eleve.sexe, inscription.*, classe.classe AS nom_classe 
+        SELECT eleve.matricule, eleve.nom, eleve.prenom, eleve.sexe, inscription.*, classe.classe AS nom_classe 
         FROM inscription
         JOIN eleve ON inscription.eleve_id = eleve.id
         JOIN classe ON inscription.classe_id = classe.id
@@ -2281,6 +2283,7 @@ def creer_token_accès(data: dict) -> str:
 
 # MODÈLES PYDANTIC
 class UtilisateurCreate(BaseModel):
+    matricule: Optional[str] = None 
     nom: str
     prenom: str
     telephone: str
@@ -2305,10 +2308,11 @@ def creer_utilisateur(data: UtilisateurCreate):
 
     cursor.execute(
         """
-        INSERT INTO utilisateur (nom, prenom, telephone, email, mot_de_passe, role)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO utilisateur (matricule, nom, prenom, telephone, email, mot_de_passe, role)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
         (
+            data.matricule,
             data.nom,
             data.prenom,
             data.telephone,
@@ -2331,7 +2335,7 @@ def connexion(credentials: ConnexionDemande):
 
     try:
         sql = """
-            SELECT id, nom, prenom, telephone, email, mot_de_passe, role, statut 
+            SELECT id, matricule, nom, prenom, telephone, email, mot_de_passe, role, statut 
             FROM utilisateur 
             WHERE telephone = %s OR email = %s OR identifiant = %s
         """
@@ -2374,6 +2378,7 @@ def connexion(credentials: ConnexionDemande):
             "token_type": "bearer",
             "utilisateur": {
                 "id": user["id"],
+                "matricule": user["matricule"],
                 "nom": user["nom"],
                 "prenom": user["prenom"],
                 "telephone": user["telephone"],
@@ -2394,7 +2399,7 @@ def lister_utilisateurs():
 
     try:
         sql = """
-            SELECT id, nom, prenom, telephone, email, role, statut, updated_at 
+            SELECT id, matricule, nom, prenom, telephone, email, role, statut, updated_at 
             FROM utilisateur 
             ORDER BY nom ASC
         """
