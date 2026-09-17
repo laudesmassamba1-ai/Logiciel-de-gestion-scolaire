@@ -7,7 +7,13 @@ import mysql.connector
 import time
 from fastapi import FastAPI, HTTPException, Path
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, HTTPException, Path, status
 from pydantic import BaseModel
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 def get_connection():
@@ -76,6 +82,16 @@ def hacher_mot_de_passe(mot_de_passe: str) -> str:
   salt = bcrypt.gensalt()
   return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
 
+SECRET_KEY = "mets_ici_une_cle_secrete_longue_et_aleatoire"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 12  # Token valide 12 heures
+
+
+def creer_token_acces(data: dict) -> str:
+  to_encode = data.copy()
+  expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+  to_encode.update({"exp": expire})
+  return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def verifier_mot_de_passe(mot_de_passe_brut: str, hash_stocke: str) -> bool:
   pwd_bytes = mot_de_passe_brut.encode("utf-8")[:72]
@@ -2818,6 +2834,58 @@ def connexion(credentials: ConnexionDemande):
         cursor.close()
         conn.close()
 
+def get_current_user(token: str = Depends(oauth2_scheme)):
+  credentials_exception = HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Identifiants invalides ou token expiré",
+      headers={"WWW-Authenticate": "Bearer"},
+  )
+  try:
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    email: str = payload.get("sub")
+    if email is None:
+      raise credentials_exception
+  except JWTError:
+    raise credentials_exception
+
+  conn = get_connection()
+  cursor = conn.cursor(dictionary=True)
+  try:
+    cursor.execute("SELECT * FROM utilisateur WHERE email = %s", (email,))
+    user = cursor.fetchone()
+    if user is None:
+      raise credentials_exception
+    return user
+  finally:
+    cursor.close()
+    conn.close()
+
+
+@app.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+  conn = get_connection()
+  cursor = conn.cursor(dictionary=True)
+  try:
+    # form_data.username correspond à l'email entré dans Swagger
+    cursor.execute(
+        "SELECT * FROM utilisateur WHERE email = %s", (form_data.username,)
+    )
+    user = cursor.fetchone()
+
+    if not user or not verifier_mot_de_passe(
+        form_data.password, user["mot_de_passe"]
+    ):
+      raise HTTPException(
+          status_code=status.HTTP_401_UNAUTHORIZED,
+          detail="Email ou mot de passe incorrect",
+          headers={"WWW-Authenticate": "Bearer"},
+      )
+
+    access_token = creer_token_acces(data={"sub": user["email"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+  finally:
+    cursor.close()
+    conn.close()
 
 # 3. Lister les comptes utilisateurs (uniquement nom, prenom, role)
 @app.get("/utilisateurs")
@@ -2841,3 +2909,42 @@ def lister_utilisateurs():
 @app.get("/ping")
 def ping():
     return {"status": "online"}
+
+class UserRegister(BaseModel):
+  email: str
+  mot_de_passe: str
+  nom: Optional[str] = None
+
+
+@app.post("/register", status_code=status.HTTP_201_CREATED)
+def register(user: UserRegister):
+  conn = get_connection()
+  cursor = conn.cursor(dictionary=True)
+  try:
+    # 1. Vérifier si l'utilisateur existe déjà
+    cursor.execute("SELECT id FROM utilisateur WHERE email = %s", (user.email,))
+    if cursor.fetchone():
+      raise HTTPException(
+          status_code=status.HTTP_400_BAD_REQUEST,
+          detail="Cet email est déjà utilisé",
+      )
+
+    # 2. Hacher le mot de passe avec ta fonction existante
+    pwd_hash = hacher_mot_de_passe(user.mot_de_passe)
+
+    # 3. Insérer en base de données
+    cursor.execute(
+        "INSERT INTO utilisateur (email, mot_de_passe, nom) VALUES (%s, %s, %s)",
+        (user.email, pwd_hash, user.nom),
+    )
+    conn.commit()
+    return {"message": "Utilisateur créé avec succès"}
+
+  except HTTPException:
+    raise
+  except Exception as e:
+    conn.rollback()
+    raise HTTPException(status_code=500, detail=str(e))
+  finally:
+    cursor.close()
+    conn.close()
