@@ -161,7 +161,7 @@ def pull_eleve(base_url):
         upsert_action_row(
             "eleve",
             id_serveur=e["id"],
-            uuid_client=e.get("uuid_client"),
+            uuid_client=e.get("uuid_client"),  # Garantit l'association avec le poste client d'origine
             colonnes_valeurs={
                 "matricule": e.get("matricule"),
                 "nom": e.get("nom"),

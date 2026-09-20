@@ -3,7 +3,7 @@ import os
 import time
 import requests
 
-from database import get_connection, initialiser_base
+from database import get_connection, initialiser_base, remplacer_temp_par_serveur
 
 # CONFIGURATION SERVEUR (via config.json)
 
@@ -71,6 +71,26 @@ def traiter_file_synchro():
                 continue
 
             if res.status_code in (200, 201, 204):
+                # Si c'est un POST, le serveur renvoie souvent l'ID créé ou l'objet
+                if methode == "POST" and uuid_client:
+                    try:
+                        data_reponse = res.json() if res.content else {}
+                        # On cherche l'ID renvoyé par le serveur selon l'endpoint
+                        id_serveur = data_reponse.get("id") or data_reponse.get("eleve_id") or data_reponse.get("paiement_id")
+                        
+                        if id_serveur:
+                            # Déduction de la table cible en fonction de l'endpoint
+                            if "eleve" in endpoint:
+                                remplacer_temp_par_serveur("eleve", uuid_client, id_serveur)
+                            elif "paiement" in endpoint:
+                                remplacer_temp_par_serveur("paiement", uuid_client, id_serveur)
+                            elif "note" in endpoint:
+                                remplacer_temp_par_serveur("note", uuid_client, id_serveur)
+                            elif "presence" in endpoint:
+                                remplacer_temp_par_serveur("presences", uuid_client, id_serveur)
+                    except Exception as parse_err:
+                        print(f"[SYNC WARNING] Impossible d'extraire l'ID distant pour le remappage : {parse_err}")
+
                 cursor.execute("DELETE FROM file_attente_synchro WHERE id = ?", (action_id,))
                 connection.commit()
                 print(f"[SYNC OK] {methode} {endpoint} synchronisé avec succès.")
@@ -94,7 +114,6 @@ def traiter_file_synchro():
 
 def rafraichir_cache_local():
     try:
-        # Import différé pour éviter une boucle d'import avec sync_pull.py
         from sync_pull import synchroniser_tout_depuis_mysql
         synchroniser_tout_depuis_mysql(BASE_URL_SERVEUR)
     except Exception as e:

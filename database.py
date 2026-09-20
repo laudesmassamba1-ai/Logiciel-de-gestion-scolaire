@@ -295,20 +295,27 @@ def upsert_reference(nom_table, colonnes, lignes):
     connection.close()
 
 
-def remplacer_temp_par_serveur(nom_table, uuid_client, id_serveur, autres_colonnes=None):
+def remplacer_temp_par_serveur(nom_table, uuid_client, id_serveur):
     """
     Une fois qu'une ligne créée hors ligne (id local temporaire)
-    apparaît dans les données du serveur, on marque la ligne locale
-    avec son vrai id_serveur — elle n'est plus "en attente".
+    est confirmée par le serveur, on met à jour la ligne locale
+    avec son véritable id_serveur via son uuid_client.
     """
+    if not uuid_client or not id_serveur:
+        return
+    
     connection = get_connection()
     cursor = connection.cursor()
-    cursor.execute(
-        f"UPDATE {nom_table} SET id_serveur = ? WHERE uuid_client = ?",
-        (id_serveur, uuid_client),
-    )
-    connection.commit()
-    connection.close()
+    try:
+        cursor.execute(
+            f"UPDATE {nom_table} SET id_serveur = ? WHERE uuid_client = ? AND (id_serveur IS NULL OR id_serveur = '')",
+            (id_serveur, uuid_client),
+        )
+        connection.commit()
+    except Exception as e:
+        print(f"[DB ERROR] Échec du remappage pour {nom_table} (uuid: {uuid_client}) : {e}")
+    finally:
+        connection.close()
 
 
 def upsert_action_row(nom_table, id_serveur, uuid_client, colonnes_valeurs):
