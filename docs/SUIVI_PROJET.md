@@ -3273,3 +3273,10 @@ Remis à l'utilisateur dans la conversation OpenCode (session QA, branche `ci/re
   - Suite complète : **313 tests desktop verts** + **96 tests API verts**.
   - **Bundle Linux PyInstaller reconstruit** avec cette version finale : `/ping` → `{"status":"online"}`, poste annoncé dans `/postes` (version_app 1.6.0, est_hote 1, age < 120 s), `sync.json` avec `pid: 0` (mode embarqué) — serveur embarqué + synchro fonctionnels dans le binaire.
 - **État rebuild** : exécutables à reconstruire (workflow_dispatch Windows + Linux sur branche temporaire) avec tous les correctifs (serveur embarqué + fix C_VIOLET_LIGHT).
+- **Rebuild terminé** (branche temporaire `ci/build-fix-serveur`, commit `170f856`, supprimée après) : workflows `build_windows.yml` (run 35911867453, SUCCESS 11m58) + `build_linux.yml` (run 35911880871, SUCCESS 3m19), garde-fou pytest inclus.
+- **Nouveaux binaires vérifiés** dans `executables/` (gitignoré) — tailles supérieures aux anciens car serveur embarqué :
+  - `gestion-scolaire_1.6.0_amd64.deb` (85,5 Mo) — SHA-256 `48037eb3bd066a762e429b210a0c14276385c4d1bb68861954c561f9c4b4008f`
+  - `GestionScolaire.exe` (11,9 Mo) — SHA-256 `2b4e375a7759f5da885f82347cc241a4cf9dfeaba634574b2166eaa11033e6f0`
+  - `GestionScolaire-Setup-1.6.0.exe` (48,8 Mo) — SHA-256 `666b0567d0819269977f7966593bf1b0f6cd9e66c20a2a8027f63f8a5d27d6ad`
+- **Validation réelle du serveur embarqué dans le .deb extrait** : `/ping` → `{"status":"online"}`, poste annoncé `/postes` (uuid, version 1.6.0, est_hote 1), schémas `schema.sql`/`schema_sqlite.sql` présents dans `_internal/server/`.
+- **Nettoyage** : branche `ci/build-fix-serveur` supprimée local + remote ; remote inchangé sur les branches permanentes (`origin/ci/rebuild-v1` toujours `1ad9a50`).
