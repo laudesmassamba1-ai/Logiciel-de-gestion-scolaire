@@ -5,6 +5,19 @@ httpx==0.28.1
 qtawesome==1.4.2
 requests==2.34.2
 
+# Export PDF (WeasyPrint + dépendances : critiques dans les executables !
+# Le hook PyInstaller hook-weasyprint embarque aussi les libs natives
+# (Pango/Fontconfig) lorsqu'elles sont presentes sur la machine de build.)
+weasyprint==69.0
+pydyf==0.12.1
+cssselect2==0.9.0
+tinycss2==1.5.1
+Pyphen==0.18.1
+tinyhtml5==2.1.0
+fonttools[woff]==4.63.0
+Pillow==12.3.0
+zopfli==0.4.3
+
 # Serveur FastAPI embarqué (synchro multi-postes)
 fastapi==0.141.1
 uvicorn==0.52.1

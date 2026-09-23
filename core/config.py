@@ -14,6 +14,33 @@ os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def resource_path(relative: str) -> Path:
+    if hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / relative
+    return PROJECT_ROOT / relative
+
+
+def data_dir() -> Path:
+    override = os.environ.get("GS_DATA_DIR")
+    if override:
+        folder = Path(override) / "data"
+    elif hasattr(sys, "_MEIPASS"):
+        if sys.platform == "win32":
+            base = Path(os.environ.get("APPDATA", str(Path.home()))) / "GestionScolaire"
+        elif sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support" / "GestionScolaire"
+        else:
+            base = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))) / "gestion-scolaire"
+        folder = base / "data"
+    else:
+        folder = PROJECT_ROOT / "data"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
 APP_FONT_FAMILY = "Inter"
 APP_FONT_FALLBACK = ("Segoe UI", "Calibri", "Lato", "DejaVu Sans", "Noto Sans", "Arial", "sans-serif")
 APP_FONT_SIZE = 11
@@ -166,7 +193,7 @@ C_PRIMARY_BORDER = "#CDD9FD"
 # les f-strings s'evaluent avec les couleurs/tailles FINALES. Le module
 # `resources.design_tokens` (importe en tete) applique deja les memes valeurs
 # a ses propres classes (sources jumelles).
-_CHEMIN_THEME = Path(__file__).resolve().parent.parent / "data" / "theme_config.json"
+_CHEMIN_THEME = data_dir() / "theme_config.json"
 _theme_brut = {}
 if _CHEMIN_THEME.exists():
     try:
@@ -667,33 +694,6 @@ CRENEAUX = (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-
-def resource_path(relative: str) -> Path:
-    if hasattr(sys, "_MEIPASS"):
-        return Path(sys._MEIPASS) / relative
-    return PROJECT_ROOT / relative
-
-
-def data_dir() -> Path:
-    override = os.environ.get("GS_DATA_DIR")
-    if override:
-        folder = Path(override) / "data"
-    elif hasattr(sys, "_MEIPASS"):
-        if sys.platform == "win32":
-            base = Path(os.environ.get("APPDATA", str(Path.home()))) / "GestionScolaire"
-        elif sys.platform == "darwin":
-            base = Path.home() / "Library" / "Application Support" / "GestionScolaire"
-        else:
-            base = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))) / "gestion-scolaire"
-        folder = base / "data"
-    else:
-        folder = PROJECT_ROOT / "data"
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
-
-
 # ------------------------------------------------------------
 # Reglages de synchronisation persistes (assistant graphique).
 # Priorite : variable d'environnement GS_* > sync.json > defauts.
@@ -759,6 +759,33 @@ def code_ecole() -> str:
 UI_DIR = resource_path("ui/ui_files")
 DB_PATH = data_dir() / "ecole.db"
 DOCS_DIR = data_dir() / "documents"
+
+
+def assurer_ressource(nom: str, dossier_dest: str = "data") -> "Path":
+    """Garantit la presence d'un fichier de donnees utilise par l'app.
+
+    En execution depuis les sources, les fichiers vivent deja dans
+    `data_dir()` (PROJECT_ROOT/data). En exécutable PyInstaller, les
+    ressources « seed » (alarm.wav, etc.) sont embarquees dans le bundle
+    (sys._MEIPASS) : au premier lancement on les copie dans `data_dir()`
+    pour qu'elles survivent aux mises a jour et restent modifiables.
+
+    Retourne toujours un chemin valide : le fichier local s'il existe,
+    sinon le chemin embarqué (lecture), sinon le chemin local attendu.
+    """
+    local = data_dir() / nom
+    if local.exists():
+        return local
+    embarquee = resource_path(dossier_dest) / nom
+    try:
+        import shutil
+        if embarquee.exists():
+            local.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(embarquee), str(local))
+            return local
+    except OSError:
+        pass
+    return local if embarquee.exists() else local
 
 
 DEFAULT_MATIERES = (

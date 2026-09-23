@@ -150,9 +150,33 @@ class FontFamily:
 # ===========================================================================
 
 import json as _json
+import os as _os
+import sys as _sys
 from pathlib import Path as _Path
 
-_CHEMIN_THEME = _Path(__file__).resolve().parent.parent / "data" / "theme_config.json"
+
+def _dossier_donnees() -> "_Path":
+    """Emplacement des donnees utilisateur (meme regle que core.config.data_dir).
+
+    En exécutable PyInstaller, `__file__` pointe vers le bundle _MEIPASS en
+    lecture seule : le theme personnalise doit etre lu/ecrit dans le dossier
+    de donnees. Module jumeau de core.config (import croise impossible).
+    """
+    override = _os.environ.get("GS_DATA_DIR")
+    if override:
+        return _Path(override) / "data"
+    if hasattr(_sys, "_MEIPASS"):
+        if _sys.platform == "win32":
+            base = _Path(_os.environ.get("APPDATA", str(_Path.home()))) / "GestionScolaire"
+        elif _sys.platform == "darwin":
+            base = _Path.home() / "Library" / "Application Support" / "GestionScolaire"
+        else:
+            base = _Path(_os.environ.get("XDG_DATA_HOME", str(_Path.home() / ".local" / "share"))) / "gestion-scolaire"
+        return base / "data"
+    return _Path(__file__).resolve().parent.parent / "data"
+
+
+_CHEMIN_THEME = _dossier_donnees() / "theme_config.json"
 
 _THEME = {}
 try:

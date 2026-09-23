@@ -43,13 +43,14 @@ from core.config import (
     T_RAYON_CARTE, T_PAD_CARTE, T_RAYON_TABLE, T_TABLE_FONT, T_TABLE_PAD_Y,
     T_TABLE_PAD_X, T_TABLE_HEADER_FONT, T_TABLE_HEADER_PAD_Y,
     T_TABLE_HEADER_PAD_X, T_KPI_HAUTEUR, T_SIDEBAR_LARGEUR,
+    data_dir,
 )
 from resources import design_tokens
 
 
 _CHEMIN_THEME = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "theme_config.json",
+    str(data_dir()),
+    "theme_config.json",
 )
 
 _COULEURS_EDITABLES = [
@@ -1301,16 +1302,26 @@ class ConfigurateurTheme(QDialog):
 
     def _redemarrer(self):
         import subprocess
-        script = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "scripts", "lancer_synchronise.sh")
-        if os.path.exists(script):
+        if getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"):
+            # Exécutable : relancer le binaire courant (le serveur embarqué
+            # se relance avec lui). La fermeture précédente libère le port.
             try:
                 subprocess.Popen(
-                    ["bash", script],
+                    [sys.executable],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except OSError:
                 pass
+        else:
+            script = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                "scripts", "lancer_synchronise.sh")
+            if os.path.exists(script):
+                try:
+                    subprocess.Popen(
+                        ["bash", script],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except OSError:
+                    pass
         self.accept()
         app = self.window()
         app.close()

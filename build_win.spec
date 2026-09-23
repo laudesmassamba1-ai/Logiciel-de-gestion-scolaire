@@ -11,6 +11,9 @@ a = Analysis(
         (str(project_root / 'ui' / 'ui_files'), 'ui/ui_files'),
         (str(project_root / 'server' / 'schema.sql'), 'server'),
         (str(project_root / 'server' / 'schema_sqlite.sql'), 'server'),
+        # Ressources « seed » copiées dans data_dir() au premier lancement
+        # (assurer_ressource dans core/config.py). alarm.wav = sonnerie.
+        (str(project_root / 'data' / 'alarm.wav'), 'data'),
     ],
     hiddenimports=[
         'PyQt5.uic',
@@ -40,7 +43,23 @@ a = Analysis(
         'server.securite',
         'server.compat',
         'server.sqlite_backend',
+        # Formes top-level (server/main.py fait `import securite`,
+        # `import compat`, `from sqlite_backend import ...` via sys.path).
+        'securite',
+        'compat',
+        'sqlite_backend',
         'services.discovery',
+        # Export PDF : import dans services/pdf_export.py (try/except).
+        # Forcer l'analyse + le hook hook-weasyprint (DLL Pango natives).
+        'weasyprint',
+        'weasyprint.text.ffi',
+        'pydyf',
+        'cssselect2',
+        'tinycss2',
+        'tinyhtml5',
+        'pyphen',
+        'fontTools',
+        'cffi',
     ],
     hookspath=[],
     hooksconfig={},

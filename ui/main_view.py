@@ -546,7 +546,7 @@ class MainWindow(QMainWindow):
         from PyQt5.QtCore import Qt, QTimer
         from PyQt5.QtMultimedia import QSoundEffect
         from PyQt5.QtCore import QUrl
-        from core.config import (data_dir, C_RED, C_RED_HOVER, C_RED_PRESSED,
+        from core.config import (data_dir, assurer_ressource, C_RED, C_RED_HOVER, C_RED_PRESSED,
                                  C_GREEN, C_GREEN_BG, C_AURORA,
                                  C_TEXT, C_WARNING, C_WARN_BG,
                                  C_WARNING_HOVER, C_WARNING_PRESSED, C_CONTOUR)
@@ -615,7 +615,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(btn_layout)
         
         # Son en boucle
-        son_path = data_dir() / "alarm.wav"
+        son_path = assurer_ressource("alarm.wav")
         effect = None
         timer_loop = None
         
@@ -709,8 +709,8 @@ class MainWindow(QMainWindow):
         try:
             from PyQt5.QtMultimedia import QSoundEffect
             from PyQt5.QtCore import QUrl
-            from core.config import data_dir
-            son_path = data_dir() / "alarm.wav"
+            from core.config import assurer_ressource
+            son_path = assurer_ressource("alarm.wav")
             if son_path.exists():
                 effect = QSoundEffect(self)
                 effect.setSource(QUrl.fromLocalFile(str(son_path)))

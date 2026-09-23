@@ -158,16 +158,40 @@ def _config_mysql_presente(environ_fichier) -> bool:
     return bool(environ_fichier.get("GS_DB_PASSWORD"))
 
 
-def _lancer_uvicorn_thread(port: int, env: dict):
+def _lancer_uvicorn_thread(port: int, _env: dict = None):
     """Lance uvicorn dans un thread du processus courant (mode exe PyInstaller).
+
+    Les logs vont dans le journal serveur (data_dir()/serveur.log) comme en
+    mode sous-processus, sinon le message « consultez le journal » pointe
+    vers un fichier qui n'est jamais cree.
 
     Retourne l'objet uvicorn.Server en cas de succes, ou l'exception sinon.
     """
     global _serveur_embarque, _thread_embarque
     try:
+        import logging
+        from logging.handlers import RotatingFileHandler
         import uvicorn
+
+        # Creer le journal des maintenant (il doit exister si le serveur
+        # echoue : c'est le fichier indique dans le message d'erreur).
+        journal = journal_serveur()
+        try:
+            journal.parent.mkdir(parents=True, exist_ok=True)
+            handler = RotatingFileHandler(
+                str(journal), maxBytes=2 * 1024 * 1024, backupCount=2,
+                encoding="utf-8")
+            handler.setFormatter(logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+            root = logging.getLogger()
+            root.addHandler(handler)
+            root.setLevel(logging.INFO)
+        except OSError:
+            pass
+
         config = uvicorn.Config(
-            "server.main:app", host="0.0.0.0", port=port, log_level="warning")
+            "server.main:app", host="0.0.0.0", port=port,
+            log_level="info", log_config=None)
         _serveur_embarque = uvicorn.Server(config)
         _thread_embarque = threading.Thread(
             target=_serveur_embarque.run, name="serveur-gs-embarque", daemon=True)

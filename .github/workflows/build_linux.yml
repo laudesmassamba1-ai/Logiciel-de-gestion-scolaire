@@ -29,7 +29,9 @@ jobs:
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-xfixes0 libxcb-shape0 \
             libpulse0 libpulse-mainloop-glib0 libasound2 \
-            dpkg-dev fakeroot
+            dpkg-dev fakeroot \
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+            libfontconfig1 librsvg2-2
 
       - name: Install Python dependencies
         run: |
@@ -42,7 +44,9 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "app_version=$(python -c 'import sys; sys.path.insert(0, \".\"); import build_app; print(build_app._version())')" >> "$GITHUB_OUTPUT"
+        run: |
+          APP_VERSION=$(python -c "import sys; sys.path.insert(0, '.'); import build_app; print(build_app._version())")
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check icon files
         run: |

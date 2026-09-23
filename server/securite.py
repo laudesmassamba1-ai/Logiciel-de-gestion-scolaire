@@ -8,6 +8,7 @@ demarrage. Voir .env.example pour la liste des variables supportees.
 
 import os
 import secrets as _secrets
+import sys
 import threading
 import time
 
@@ -22,6 +23,30 @@ DOSSIER_SERVEUR = os.path.dirname(os.path.abspath(__file__))
 
 if load_dotenv is not None:
     load_dotenv(os.path.join(DOSSIER_SERVEUR, ".env"))
+
+
+def dossier_secret_jwt() -> str:
+    """Dossier ou le secret JWT est persiste.
+
+    En exécutable PyInstaller le dossier du module est en lecture seule
+    (installe dans /opt/gestion-scolaire/_internal en root) : on écrit dans
+    le dossier de donnees de l'utilisateur (data_dir()/serveur), persistant
+    et accessible en ecriture. En mode source, a cote du module comme avant.
+    """
+    if getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"):
+        try:
+            from core.config import data_dir
+            dossier = data_dir() / "serveur"
+            dossier.mkdir(parents=True, exist_ok=True)
+            return str(dossier)
+        except Exception:
+            # En dernier recours, on garde le comportement historique.
+            try:
+                os.makedirs(DOSSIER_SERVEUR, exist_ok=True)
+            except OSError:
+                pass
+            return DOSSIER_SERVEUR
+    return DOSSIER_SERVEUR
 
 
 # ============================================================
@@ -42,7 +67,7 @@ def charger_secret_jwt(dossier=None):
     Un secret genere puis conserve, les tokens restent valides apres un
     redemarrage du service sans jamais figer une valeur faible dans le code.
     """
-    dossier = dossier or DOSSIER_SERVEUR
+    dossier = dossier or dossier_secret_jwt()
     secret_env = os.environ.get("GS_JWT_SECRET", "").strip()
     if secret_env:
         if len(secret_env) < TAILLE_MINIMALE_SECRET:
