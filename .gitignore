@@ -7,7 +7,12 @@ __pycache__/
 build/
 dist/
 dist_win/
-data/
+# Data du POSTE (donnees utilisateur : ecole.db, sync.json, theme_config.json,
+# sauvegardes...) : jamais versionnees. SAUF alarm.wav, ressource « seed »
+# (sonnerie d'alarme) qui doit etre embarque dans les executables PyInstaller :
+# si elle manque, le build echoue (spec datas) et le runtime n'a pas de son.
+data/*
+!data/alarm.wav
 installers/
 mobile/build_src/
 mobile/bin/
