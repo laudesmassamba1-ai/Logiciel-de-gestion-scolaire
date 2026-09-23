@@ -28,6 +28,7 @@ jobs:
             libxcb-xinerama0 libxkbcommon-x11-0 libegl1 libxcb-cursor0 \
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-xfixes0 libxcb-shape0 \
+            libpulse0 libpulse-mainloop-glib0 libasound2 \
             dpkg-dev fakeroot
 
       - name: Install Python dependencies
