@@ -9,12 +9,13 @@ from PyQt5.QtWidgets import (
 
 from repositories import repos
 from ui import toast
+from services import rapports
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _reload_combo, _add_btn, _actions_cell,
 )
 from ui.widgets import DataTable, EmptyState
 from core.config import (
-    STYLE_BTN_PRIMARY,
+    STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY,
     C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER,
     C_TEXT_MUTED, C_BORDER, C_BG_ALT,
 )
@@ -27,9 +28,34 @@ def programmes(page, ctx):
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    lay.addWidget(PageHeader(
+    header = PageHeader(
         "Matieres & Programmes",
-        "Matieres enseignees et affectations par classe"))
+        "Matieres enseignees et affectations par classe")
+    lay.addWidget(header)
+
+    def _exporter_pdf():
+        lignes = [[mt["nom"], str(mt["coefficient"])] for mt in repos.matieres()]
+        rapports.export_table_pdf(
+            "Liste des matieres",
+            "Matieres enseignees et coefficients",
+            ["Matiere", "Coefficient"], lignes, "rapport_matieres.pdf")
+
+    def _exporter_programme():
+        lignes = []
+        for a in repos.programmes():
+            lignes.append([a.get("classe_nom") or "-",
+                           a.get("matiere_nom") or "-",
+                           a.get("enseignant_nom") or "-"])
+        rapports.export_table_pdf(
+            "Programmes par classe",
+            "Affectations des matieres par classe",
+            ["Classe", "Matiere", "Enseignant"], lignes,
+            "rapport_programmes.pdf")
+
+    header.ajouter_action(_btn("Matieres PDF", lambda: _exporter_pdf(),
+                               STYLE_BTN_SECONDARY))
+    header.ajouter_action(_btn("Programme PDF", lambda: _exporter_programme(),
+                               STYLE_BTN_SECONDARY))
 
     tabs = QTabWidget()
     lay.addWidget(tabs, 1)
@@ -147,8 +173,8 @@ def programmes(page, ctx):
         existants = {p["matiere_id"]: p for p in repos.programmes(classe_id)} if classe_id else {}
         # Seuls les enseignants peuvent etre affectes a une matiere.
         enseignants_list = repos.enseignants()
-        valeurs = [[mt["nom"]] for mt in matieres]
-        table_a.remplir(valeurs, largeurs=[140])
+        valeurs = [[None, mt["nom"], None, None] for mt in matieres]
+        table_a.remplir(valeurs, largeurs=[44, 180, 100, 170])
         lignes.clear()
         for i, mt in enumerate(matieres):
             en_prog = mt["id"] in existants

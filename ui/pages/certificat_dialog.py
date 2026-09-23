@@ -3,16 +3,18 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QMessageBox,
 )
 
+from core.config import C_AURORA, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY
 from repositories import repos
-from services import reports
+from services import pdf_export
 from ui import toast
 
 
 def open_certificat_dialog(parent):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Certificat de scolarite")
-    dlg.resize(420, 160)
-    dlg.setMinimumSize(360, 130)
+    dlg.resize(420, 190)
+    dlg.setMinimumSize(360, 160)
+    dlg.setStyleSheet(f"QDialog {{ {C_AURORA} }}")
     lay = QVBoxLayout(dlg)
     form = QFormLayout()
     combo_classe = QComboBox()
@@ -34,6 +36,8 @@ def open_certificat_dialog(parent):
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
     btn_ok = buttons.button(QDialogButtonBox.Ok)
     btn_ok.setText("Generer")
+    btn_ok.setStyleSheet(STYLE_BTN_PRIMARY)
+    buttons.button(QDialogButtonBox.Cancel).setStyleSheet(STYLE_BTN_SECONDARY)
     buttons.rejected.connect(dlg.reject)
     lay.addWidget(buttons)
 
@@ -55,7 +59,7 @@ def open_certificat_dialog(parent):
             if classe:
                 eleve["classe_nom"] = classe["nom"]
             try:
-                reports.certificat_scolarite(eleve, repos.parametres())
+                pdf_export.certificat_scolarite_pdf(eleve, repos.parametres())
                 toast.succes(parent, "Certificat genere avec succes.")
             except Exception as exc:
                 QMessageBox.warning(parent, "Certificat", f"Erreur : {exc}")

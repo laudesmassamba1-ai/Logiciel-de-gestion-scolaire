@@ -8,7 +8,9 @@ from PyQt5.QtWidgets import (
 
 from api import client
 from core.config import (
-    C_BG, C_GOLD, C_BLUE, C_RED, C_WARNING, ROLE_LABELS, STYLE_TABLE,
+    C_AURORA, C_BLUE, C_BLUE_HOVER, C_BLUE_PRESSED, C_RED, C_WARNING,
+    C_ACCENT_VIOLET,
+    C_CARD, ROLE_LABELS, STYLE_TABLE,
     STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, STYLE_BTN_DANGER,
 )
 from repositories import repos
@@ -16,16 +18,18 @@ from services import auth_service as auth, reports
 from ui import motion
 from ui.loader import apply_ui
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _today_fr, _replace_layout, _classe_items,
-    _styler_carte, _fit_rows, _fill_table_space,
+    _btn, _simple_btn_style, _today_fr, _replace_layout,
+    _styler_carte,
 )
 from ui.widgets import SimpleBarChart, SimplePieChart, fmt_money
 from ui.workers import run_async
 
 
-_STYLE_ENCRE = (
-    f"background-color: #272E42; color: #FFFFFF; border: none;"
-    f" border-radius: 12px; padding: 10px 18px; font-weight: 700; font-size: 13px;"
+_STYLE_RECETTE = (
+    f"QPushButton {{ background: {C_BLUE}; color: {C_CARD}; border: none;"
+    f" border-radius: 12px; padding: 10px 18px; font-weight: 700; font-size: 13px; }}"
+    f" QPushButton:hover {{ background: {C_BLUE_HOVER}; }}"
+    f" QPushButton:pressed {{ background: {C_BLUE_PRESSED}; }}"
 )
 
 
@@ -40,8 +44,9 @@ _CARTES_KPI = {
 
 
 def _styler_dashboard(page, cartes):
-    """Style moderne des cartes (bande d'accent) puis apparitions
-    echelonnees a l'ouverture du tableau de bord."""
+    """Style moderne des cartes (coeurs uniformes, hairline 1px, sans
+    bande d'accent) puis apparitions echelonnees a l'ouverture du tableau
+    de bord."""
     for nom, accent in cartes:
         w = getattr(page, nom, None)
         if w is None:
@@ -50,14 +55,14 @@ def _styler_dashboard(page, cartes):
         if nom in _CARTES_KPI:
             w.setMaximumHeight(94)
             w.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-    page.setStyleSheet(f"background-color: {C_BG};")
+    page.setStyleSheet(C_AURORA)
     for nom, style in (
         ("btn_quick_nouveau_compte", STYLE_BTN_PRIMARY),
         ("btn_goto_comptes", STYLE_BTN_SECONDARY),
         ("btn_reset_password", STYLE_BTN_DANGER),
         ("btn_goto_personnel", STYLE_BTN_SECONDARY),
         ("btn_quick_inscrire", STYLE_BTN_PRIMARY),
-        ("btn_quick_recette", _STYLE_ENCRE),
+        ("btn_quick_recette", _STYLE_RECETTE),
         ("btn_quick_depense", STYLE_BTN_DANGER),
         ("btn_quick_certificat", STYLE_BTN_SECONDARY),
     ):
@@ -69,7 +74,7 @@ def _styler_dashboard(page, cartes):
 
 
 KRPI_ADMIN = [
-    ("card_total_comptes", C_GOLD),
+    ("card_total_comptes", C_ACCENT_VIOLET),
     ("card_directeurs", C_BLUE),
     ("card_gestionnaires", C_RED),
     ("card_comptes_inactifs", C_WARNING),
@@ -77,13 +82,13 @@ KRPI_ADMIN = [
 ]
 
 KRPI_GESTIONNAIRE = [
-    ("card_effectifs", C_GOLD),
+    ("card_effectifs", C_BLUE),
     ("card_inscriptions_jour", C_BLUE),
     ("card_caisse_jour", C_RED),
     ("card_taches", C_WARNING),
     ("container_chart_statuts", C_BLUE),
-    ("card_actions_rapides", C_GOLD),
-    ("card_activite", C_GOLD),
+    ("card_actions_rapides", C_ACCENT_VIOLET),
+    ("card_activite", C_BLUE),
     ("card_dossiers_incomplets", C_RED),
 ]
 

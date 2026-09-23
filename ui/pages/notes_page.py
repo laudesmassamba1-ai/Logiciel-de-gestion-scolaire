@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import (
 )
 
 from repositories import repos
-from services import reports
+from services import pdf_export
+from services import rapports
 from ui import toast
 from ui.pages.helpers import (
     _btn, _classe_items, _reload_combo, _appreciation, _fill_combos,
@@ -258,7 +259,10 @@ def notes(page, ctx):
         if not classe_id:
             QMessageBox.warning(page, "Bulletins", "Choisissez une classe.")
             return
-        reports.bulletins(classe_id, combo_periode.currentText())
+        try:
+            pdf_export.bulletins_pdf(classe_id, combo_periode.currentText())
+        except RuntimeError as e:
+            QMessageBox.warning(page, "Bulletins", str(e))
 
     btn_charger.clicked.connect(load_classe)
     btn_save.clicked.connect(save_notes)
@@ -462,8 +466,12 @@ def notes(page, ctx):
     btn_export_csv = QPushButton("Exporter CSV")
     btn_export_csv.setCursor(Qt.PointingHandCursor)
     btn_export_csv.setStyleSheet(STYLE_BTN_SECONDARY)
+    btn_export_pdf = QPushButton("Exporter PDF")
+    btn_export_pdf.setCursor(Qt.PointingHandCursor)
+    btn_export_pdf.setStyleSheet(STYLE_BTN_SECONDARY)
     filtre3.addWidget(btn_calculer)
     filtre3.addWidget(btn_export_csv)
+    filtre3.addWidget(btn_export_pdf)
     lay3.addLayout(filtre3)
 
     table_moy = DataTable()
@@ -627,8 +635,30 @@ def notes(page, ctx):
                 f.write(";".join(row_data) + "\n")
         toast.succes(page, f"Moyennes exportees vers {path}")
 
+    def export_moyennes_pdf():
+        if table_moy.rowCount() == 0:
+            QMessageBox.warning(
+                page, "Export",
+                "Calculez d'abord les moyennes : il n'y a rien a exporter.")
+            return
+        entetes = [table_moy.horizontalHeaderItem(j).text()
+                   for j in range(table_moy.columnCount())]
+        lignes = []
+        for i in range(table_moy.rowCount()):
+            row_data = []
+            for j in range(table_moy.columnCount()):
+                item = table_moy.item(i, j)
+                row_data.append(item.text() if item else "")
+            lignes.append(row_data)
+        nom_classe = combo_moy_classe.currentText()
+        rapports.export_table_pdf(
+            f"Moyennes - {nom_classe} ({combo_moy_periode.currentText()})",
+            "Resultats calcules depuis les notes saisies",
+            entetes, lignes, "rapport_moyennes_detail.pdf")
+
     btn_calculer.clicked.connect(calculer_moyennes)
     btn_export_csv.clicked.connect(export_moyennes_csv)
+    btn_export_pdf.clicked.connect(export_moyennes_pdf)
     combo_classe.currentIndexChanged.connect(_sync_moy_classes)
 
     def _refresh_notes():

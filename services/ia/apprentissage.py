@@ -77,7 +77,8 @@ class MoteurApprentissage:
                                       (datetime('now','localtime')),
                           score       REAL NOT NULL DEFAULT 1.0,
                           source      TEXT NOT NULL DEFAULT 'manuel',
-                          dernier_usage TEXT)""")
+                          dernier_usage TEXT,
+                          utilisateur_id INTEGER)""")
         db.execute("""CREATE TABLE IF NOT EXISTS ia_feedback (
                           id       INTEGER PRIMARY KEY AUTOINCREMENT,
                           question TEXT NOT NULL,
@@ -108,6 +109,8 @@ class MoteurApprentissage:
             db.execute("ALTER TABLE ia_memoire ADD COLUMN source TEXT NOT NULL DEFAULT 'manuel'")
         if "dernier_usage" not in colonnes:
             db.execute("ALTER TABLE ia_memoire ADD COLUMN dernier_usage TEXT")
+        if "utilisateur_id" not in colonnes:
+            db.execute("ALTER TABLE ia_memoire ADD COLUMN utilisateur_id INTEGER")
 
     # ------------------------------------------------------------------
     # Metriques

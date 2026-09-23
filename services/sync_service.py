@@ -64,19 +64,61 @@ def _upsert(table, cle_where, params_where, colonnes, valeurs):
         f"INSERT INTO {table} ({cols}) VALUES ({marks})", valeurs)
 
 
-def _supprimer_absents(table, noms_srv, resultat):
+def _noms_creations_pending():
+    """Noms des cycles/matieres/classes crees hors-ligne (POST en file
+    PENDING, encore non pousses). Le mirroir du pull ne doit pas les
+    supprimer : le drain les poussera ensuite au serveur."""
+    noms = {"cycles": set(), "matieres": set(), "classes": set()}
+    try:
+        for r in db.query(
+                "SELECT endpoint, payload FROM file_attente_synchro"
+                " WHERE status = 'PENDING'"):
+            import json as _json
+            try:
+                p = _json.loads(r["payload"])
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(p, dict):
+                continue
+            ep = (r["endpoint"] or "")
+            nom = _champ(p, "nom", "name", "classe", "cycle") or ""
+            if not nom:
+                continue
+            if ep == "/cycle":
+                noms["cycles"].add(nom)
+            elif ep == "/matiere":
+                noms["matieres"].add(nom)
+            elif ep == "/classe":
+                noms["classes"].add(nom)
+    except Exception:
+        pass
+    return noms
+
+
+def _supprimer_absents(table, noms_srv, resultat, pends=None):
     """Propage les suppressions faites sur le serveur, SANS risque :
     une ligne locale absente du serveur n'est supprimee que si aucune
-    donnee locale ne en depend (sinon elle est conservee et signalee)."""
+    donnee locale ne en depend (sinon elle est conservee et signalee).
+    Les creations hors-ligne (POST PENDING) sont aussi protegees : le
+    drain les enverra, le mirroir ne doit pas les annuler."""
     gardes = []
+    pends = pends or {}
+    pend_table = pends.get(table, set())
     if table == "cycles":
         locaux = db.query("SELECT id, nom FROM cycles")
         for r in locaux:
-            if r["nom"] in noms_srv:
+            if r["nom"] in noms_srv or r["nom"] in pend_table:
                 continue
             if db.query_one(
                     "SELECT id FROM classes WHERE cycle_id = ? LIMIT 1",
                     (r["id"],)):
+                gardes.append(r["nom"])
+                continue
+            # Protection : cycle qui a des eleves via ses classes
+            if db.query_one(
+                    """SELECT 1 FROM eleves e
+                       JOIN classes c ON c.id = e.classe_id
+                       WHERE c.cycle_id = ? LIMIT 1""", (r["id"],)):
                 gardes.append(r["nom"])
                 continue
             db.execute("DELETE FROM cycles WHERE id = ?", (r["id"],))
@@ -84,11 +126,16 @@ def _supprimer_absents(table, noms_srv, resultat):
     elif table == "matieres":
         locaux = db.query("SELECT id, nom FROM matieres")
         for r in locaux:
-            if r["nom"] in noms_srv:
+            if r["nom"] in noms_srv or r["nom"] in pend_table:
                 continue
             if db.query_one(
                     "SELECT id FROM programmes WHERE matiere_id = ? LIMIT 1",
                     (r["id"],)):
+                gardes.append(r["nom"])
+                continue
+            # Protection : matiere qui a des notes locales
+            if db.query_one(
+                    "SELECT id FROM notes WHERE matiere_id = ? LIMIT 1", (r["id"],)):
                 gardes.append(r["nom"])
                 continue
             db.execute("DELETE FROM matieres WHERE id = ?", (r["id"],))
@@ -96,15 +143,21 @@ def _supprimer_absents(table, noms_srv, resultat):
     elif table == "classes":
         locaux = db.query("SELECT id, nom FROM classes")
         for r in locaux:
-            if r["nom"] in noms_srv:
+            if r["nom"] in noms_srv or r["nom"] in pend_table:
                 continue
             depend = db.query_one(
                 """SELECT e.id FROM eleves e WHERE e.classe_id = ?
                    UNION ALL SELECT t.id FROM tarifs t WHERE t.classe_id = ?
                    UNION ALL SELECT p.id FROM planning p WHERE p.classe_id = ?
                    UNION ALL SELECT pr.id FROM programmes pr WHERE pr.classe_id = ?
+                   UNION ALL SELECT n.id FROM notes n
+                     JOIN eleves e ON e.id = n.eleve_id WHERE e.classe_id = ?
+                   UNION ALL SELECT p.id FROM presences p
+                     JOIN eleves e ON e.id = p.eleve_id WHERE e.classe_id = ?
+                   UNION ALL SELECT pa.id FROM paiements pa
+                     JOIN eleves e ON e.id = pa.eleve_id WHERE e.classe_id = ?
                    LIMIT 1""",
-                (r["id"], r["id"], r["id"], r["id"]))
+                (r["id"], r["id"], r["id"], r["id"], r["id"], r["id"], r["id"]))
             if depend:
                 gardes.append(r["nom"])
                 continue
@@ -129,6 +182,7 @@ def pull_structure():
     resultat = {"cycles": 0, "classes": 0, "matieres": 0, "annees": 0,
                 "tarifs": 0, "suppressions": 0, "conserves": [],
                 "erreurs": []}
+    pends = _noms_creations_pending()
 
     # ---------- Cycles ----------
     cycles_srv = []
@@ -151,7 +205,7 @@ def pull_structure():
             resultat["cycles"] += 1
         if noms_cycles_srv:
             # Suppressions propagees : uniquement les lignes vides locales.
-            _supprimer_absents("cycles", noms_cycles_srv, resultat)
+            _supprimer_absents("cycles", noms_cycles_srv, resultat, pends)
     except Exception as exc:
         resultat["erreurs"].append(f"cycles: {exc}")
 
@@ -167,10 +221,10 @@ def pull_structure():
             if not nom:
                 continue
             coeff = _champ(m, "coefficient", "coef", default=1) or 1
-            _upsert("matieres", "nom = ?", (nom,), ["coefficient"], [float(coeff)])
+            _upsert("matieres", "nom = ?", (nom,), ["coefficient"], [float(str(coeff).replace(",", ".").strip() or 1)])
             resultat["matieres"] += 1
         if noms_srv:
-            _supprimer_absents("matieres", noms_srv, resultat)
+            _supprimer_absents("matieres", noms_srv, resultat, pends)
     except Exception as exc:
         resultat["erreurs"].append(f"matieres: {exc}")
 
@@ -197,8 +251,13 @@ def pull_structure():
                     ligne = db.query_one("SELECT id FROM cycles WHERE nom = ?", (nom_parent,))
                     cycle_local = ligne["id"] if ligne else None
             colonnes_classe = ["niveau", "capacite", "salle", "titulaire"]
+            capacite_val = _champ(cl, "capacite", default=50) or 50
+            try:
+                capacite_val = int(float(str(capacite_val).replace(",", ".").strip() or 50))
+            except (ValueError, TypeError):
+                capacite_val = 50
             valeurs_classe = [_champ(cl, "niveau"),
-                              int(_champ(cl, "capacite", default=50) or 50),
+                              capacite_val,
                               _champ(cl, "salle"),
                               _champ(cl, "titulaire")]
             if cycle_local is not None:
@@ -212,7 +271,7 @@ def pull_structure():
         if noms_srv and not resultat["erreurs"]:
             # On ne supprime une classe locale que si le pull des cycles a
             # deja reussi (le serveur a repondu completement).
-            _supprimer_absents("classes", noms_srv, resultat)
+            _supprimer_absents("classes", noms_srv, resultat, pends)
     except Exception as exc:
         resultat["erreurs"].append(f"classes: {exc}")
 
@@ -297,7 +356,7 @@ def pull_structure():
             # Mirroir : retirer les tarifs locaux absents du serveur — sauf
             # ceux qui ont une operation PENDING dans la file (crees
             # hors-ligne, encore non pousses) et sauf si le pull a echoue.
-            pends = set()
+            pends_pairs = set()
             try:
                 for r in db.query(
                         "SELECT payload FROM file_attente_synchro WHERE status = 'PENDING'"):
@@ -307,14 +366,16 @@ def pull_structure():
                     except (ValueError, TypeError):
                         continue
                     if isinstance(p, dict):
-                        pends.add((_champ(p, "classe_nom", "classe"),
-                                   _champ(p, "type_frais"),
-                                   _champ(p, "annee_scolaire") or ""))
+                        p_classe = (_champ(p, "classe_nom", "classe") or "")
+                        if p_classe == classe_nom:
+                            pends_pairs.add((
+                                _champ(p, "type_frais"),
+                                _champ(p, "annee_scolaire") or ""))
             except Exception:
-                pends = set()
+                pends_pairs = set()
             pour_supprimer = [
                 cle for cle, tid in existants.items()
-                if cle not in entrees and cle not in pends]
+                if cle not in entrees and cle not in pends_pairs]
             if not resultat["erreurs"]:
                 for cle in pour_supprimer:
                     db.execute("DELETE FROM tarifs WHERE id = ?",
@@ -380,6 +441,7 @@ def pull_donnees():
 
     resultat = {"eleves": 0, "personnel": 0, "programmes": 0,
                 "presences": 0, "notes": 0, "paiements": 0,
+                "suppressions": 0,
                 "erreurs": []}
 
     # ---------- Eleves (classe resolue par nom) ----------
@@ -449,6 +511,129 @@ def pull_donnees():
                     (uuid_client, existant["id"]))
     except Exception as exc:
         resultat["erreurs"].append(f"eleves: {exc}")
+
+    # ---------- Tombstones eleves (suppressions server -> client) ----------
+    try:
+        data, err = client.eleves_supprimes_syndication()
+        if not err and data:
+            # Protection : si un eleve a ete cree hors-ligne et figure encore
+            # dans la file PENDING (POST /eleve), on ne le supprime pas
+            # localement — le push va le creer sur le serveur.
+            uuids_pends = set()
+            import json as _json
+            try:
+                for r in db.query(
+                        "SELECT payload FROM file_attente_synchro WHERE status = 'PENDING'"
+                        " AND method = 'POST' AND endpoint = '/eleve'"):
+                    p = _json.loads(r["payload"])
+                    if isinstance(p, dict) and p.get("uuid_client"):
+                        uuids_pends.add(p["uuid_client"])
+            except Exception:
+                uuids_pends = set()
+            for t in data:
+                uuid_c = t.get("uuid_client")
+                if not uuid_c or uuid_c in uuids_pends:
+                    continue
+                ligne = db.query_one(
+                    "SELECT id FROM eleves WHERE uuid_client = ?", (uuid_c,))
+                if not ligne:
+                    continue
+                eid = ligne["id"]
+                with db.transaction() as txn:
+                    txn.execute("DELETE FROM notes WHERE eleve_id = ?", (eid,))
+                    txn.execute("DELETE FROM presences WHERE eleve_id = ?", (eid,))
+                    txn.execute("DELETE FROM paiements WHERE eleve_id = ?", (eid,))
+                    txn.execute("DELETE FROM eleves WHERE id = ?", (eid,))
+                resultat["suppressions"] = resultat.get("suppressions", 0) + 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"tombstones_eleves: {exc}")
+
+    # ---------- Tombstones notes (suppressions server -> client) ----------
+    try:
+        data, err = client.notes_supprimes_syndication()
+        if not err and data:
+            uuids_pends = set()
+            import json as _json
+            try:
+                for r in db.query(
+                        "SELECT payload FROM file_attente_synchro WHERE status = 'PENDING'"
+                        " AND method = 'POST' AND endpoint = '/note'"):
+                    p = _json.loads(r["payload"])
+                    if isinstance(p, dict) and p.get("uuid_client"):
+                        uuids_pends.add(p["uuid_client"])
+            except Exception:
+                uuids_pends = set()
+            for t in data:
+                uuid_c = t.get("uuid_client")
+                if not uuid_c or uuid_c in uuids_pends:
+                    continue
+                ligne = db.query_one(
+                    "SELECT id FROM notes WHERE uuid_client = ?", (uuid_c,))
+                if not ligne:
+                    continue
+                db.execute("DELETE FROM notes WHERE id = ?", (ligne["id"],))
+                resultat["suppressions"] = resultat.get("suppressions", 0) + 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"tombstones_notes: {exc}")
+
+    # ---------- Tombstones paiements (suppressions server -> client) ----------
+    try:
+        data, err = client.paiements_supprimes_syndication()
+        if not err and data:
+            uuids_pends = set()
+            import json as _json
+            try:
+                for r in db.query(
+                        "SELECT payload FROM file_attente_synchro WHERE status = 'PENDING'"
+                        " AND method = 'POST' AND endpoint = '/paiement'"):
+                    p = _json.loads(r["payload"])
+                    if isinstance(p, dict) and p.get("uuid_client"):
+                        uuids_pends.add(p["uuid_client"])
+            except Exception:
+                uuids_pends = set()
+            for t in data:
+                uuid_c = t.get("uuid_client")
+                if not uuid_c or uuid_c in uuids_pends:
+                    continue
+                ligne = db.query_one(
+                    "SELECT id FROM paiements WHERE uuid_client = ?", (uuid_c,))
+                if not ligne:
+                    continue
+                pid = ligne["id"]
+                with db.transaction() as txn:
+                    txn.execute("DELETE FROM paiements WHERE id = ?", (pid,))
+                    txn.execute("DELETE FROM transactions WHERE paiement_id = ?", (pid,))
+                resultat["suppressions"] = resultat.get("suppressions", 0) + 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"tombstones_paiements: {exc}")
+
+    # ---------- Tombstones presences (suppressions server -> client) ----------
+    try:
+        data, err = client.presences_supprimes_syndication()
+        if not err and data:
+            uuids_pends = set()
+            import json as _json
+            try:
+                for r in db.query(
+                        "SELECT payload FROM file_attente_synchro WHERE status = 'PENDING'"
+                        " AND method = 'POST' AND endpoint = '/presence'"):
+                    p = _json.loads(r["payload"])
+                    if isinstance(p, dict) and p.get("uuid_client"):
+                        uuids_pends.add(p["uuid_client"])
+            except Exception:
+                uuids_pends = set()
+            for t in data:
+                uuid_c = t.get("uuid_client")
+                if not uuid_c or uuid_c in uuids_pends:
+                    continue
+                ligne = db.query_one(
+                    "SELECT id FROM presences WHERE uuid_client = ?", (uuid_c,))
+                if not ligne:
+                    continue
+                db.execute("DELETE FROM presences WHERE id = ?", (ligne["id"],))
+                resultat["suppressions"] = resultat.get("suppressions", 0) + 1
+    except Exception as exc:
+        resultat["erreurs"].append(f"tombstones_presences: {exc}")
 
     # ---------- Personnel (enseignants, par nom_complet) ----------
     try:
@@ -631,6 +816,15 @@ def pull_donnees():
     except Exception as exc:
         resultat["erreurs"].append(f"paiements: {exc}")
 
+    # La Caisse ne lit que la table locale `transactions` : on cree les
+    # ecritures manquantes pour les paiements rapatries (idempotent), sinon
+    # des encaissements visibles dans Paiements seraient absents de la Caisse.
+    try:
+        from repositories.finance_repository import FinanceRepository
+        FinanceRepository().reconcilier_caisse()
+    except Exception as exc:
+        resultat["erreurs"].append(f"reconciliation_caisse: {exc}")
+
     return resultat
 
 
@@ -691,5 +885,42 @@ def pull_comptes():
                 resultat["ajoutes"] += 1
     except Exception as exc:
         resultat["erreurs"].append(f"comptes: {exc}")
+
+    return resultat
+
+
+def synchroniser_maintenant() -> dict:
+    """« Synchroniser maintenant » : pull complet PUIS vidage de la file.
+
+    Ordre volontaire : on recupere d'abord la structure et les donnees du
+    serveur, pour que les ecritures en file (dependantes des references
+    serveur) deviennent envoiables dans le meme passage. Chaque etape est
+    independante — un echec n'annule pas les autres.
+    """
+    from api import api_disponible
+    from api.sync_worker import vider_file_attente
+
+    resultat = {"structure": 0, "donnees": 0, "comptes": 0,
+                "envoyes": 0, "erreurs": []}
+    if not api_disponible(force=True):
+        resultat["erreurs"].append(
+            "Serveur injoignable : rien a synchroniser maintenant.")
+        return resultat
+
+    for nom, fonction in (("structure", pull_structure),
+                          ("donnees", pull_donnees),
+                          ("comptes", pull_comptes)):
+        try:
+            compte = fonction() or {}
+            resultat[nom] = sum(
+                v for k, v in compte.items()
+                if isinstance(v, int) and k not in ("erreurs",))
+        except Exception as exc:
+            resultat["erreurs"].append(f"{nom}: {exc}")
+
+    try:
+        resultat["envoyes"] = vider_file_attente()
+    except Exception as exc:
+        resultat["erreurs"].append(f"envoi: {exc}")
 
     return resultat

@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS annee_scolaire (
     libelle TEXT NOT NULL,
     date_debut TEXT NOT NULL,
     date_fin TEXT NOT NULL,
-    est_active INTEGER DEFAULT 0
+    est_active INTEGER DEFAULT 0,
+    archivee INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS matiere (
@@ -88,7 +89,10 @@ CREATE TABLE IF NOT EXISTS note (
     note_sur INTEGER DEFAULT 20,
     date_evaluation TEXT NOT NULL,
     trimestre TEXT,
-    uuid_client TEXT
+    uuid_client TEXT,
+    est_supprime INTEGER DEFAULT 0,
+    FOREIGN KEY (inscription_id) REFERENCES inscription(id),
+    FOREIGN KEY (matiere_id) REFERENCES matiere(id)
 );
 
 CREATE TABLE IF NOT EXISTS paiement (
@@ -100,7 +104,9 @@ CREATE TABLE IF NOT EXISTS paiement (
     mode_paiement TEXT DEFAULT 'espece',
     trimestre TEXT,
     mois TEXT,
-    uuid_client TEXT
+    uuid_client TEXT,
+    est_supprime INTEGER DEFAULT 0,
+    FOREIGN KEY (inscription_id) REFERENCES inscription(id)
 );
 
 CREATE TABLE IF NOT EXISTS tarif_scolarite (
@@ -118,7 +124,10 @@ CREATE TABLE IF NOT EXISTS presences (
     date_presence TEXT DEFAULT CURRENT_TIMESTAMP,
     statut TEXT NOT NULL,
     justifie TEXT DEFAULT 'Non',
-    uuid_client TEXT
+    uuid_client TEXT,
+    est_supprime INTEGER DEFAULT 0,
+    FOREIGN KEY (eleve_id) REFERENCES eleve(id),
+    FOREIGN KEY (classe_id) REFERENCES classe(id)
 );
 
 CREATE TABLE IF NOT EXISTS utilisateur (
@@ -145,7 +154,8 @@ CREATE TABLE IF NOT EXISTS planning (
     jour TEXT NOT NULL,
     creneau TEXT NOT NULL,
     matiere TEXT,
-    salle TEXT
+    salle TEXT,
+    uuid_client TEXT
 );
 
 CREATE TABLE IF NOT EXISTS caisse_transaction (
@@ -157,7 +167,8 @@ CREATE TABLE IF NOT EXISTS caisse_transaction (
     montant REAL NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('entree', 'sortie')),
     mode_reglement TEXT,
-    date TEXT DEFAULT CURRENT_TIMESTAMP
+    date TEXT DEFAULT CURRENT_TIMESTAMP,
+    uuid_client TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -167,6 +178,29 @@ CREATE TABLE IF NOT EXISTS audit_log (
     action TEXT NOT NULL,
     details TEXT,
     adresse_ip TEXT
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    utilisateur_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL,
+    cree_le TEXT DEFAULT CURRENT_TIMESTAMP,
+    expire_le TEXT NOT NULL,
+    revoque INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(utilisateur_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_expire ON refresh_tokens(expire_le);
+
+CREATE TABLE IF NOT EXISTS poste_presence (
+    uuid_poste TEXT PRIMARY KEY,
+    nom_poste TEXT NOT NULL,
+    adresse_ip TEXT,
+    version_app TEXT,
+    systeme TEXT,
+    est_hote INTEGER DEFAULT 0,
+    derniere_seen TEXT DEFAULT CURRENT_TIMESTAMP,
+    premiere_seen TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);

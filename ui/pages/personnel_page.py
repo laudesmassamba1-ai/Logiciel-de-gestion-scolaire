@@ -13,7 +13,7 @@ from ui.pages.helpers import (
 from ui.widgets import fmt_money
 from ui.widgets.page_templates import ListPageTemplate
 from core.config import (
-    STYLE_BTN_PRIMARY,
+    STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY,
     C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER,
 )
 
@@ -64,9 +64,26 @@ def personnel(page, ctx):
                          _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER)),
                 ) if peut_gerer else ()
             )))
+        page._personnel_rows = rows
 
-    btn_add = _btn("+ Nouvel Employe", _ouvrir_dialog, STYLE_BTN_PRIMARY)
-    tpl.header.ajouter_action(btn_add)
+    if peut_gerer:
+        btn_add = _btn("+ Nouvel Employe", _ouvrir_dialog, STYLE_BTN_PRIMARY)
+        tpl.header.ajouter_action(btn_add)
+    btn_pdf = _btn("Exporter PDF", lambda: _exporter_pdf(), STYLE_BTN_SECONDARY)
+    tpl.header.ajouter_action(btn_pdf)
+
+    def _exporter_pdf():
+        from services import rapports
+        rows = getattr(page, "_personnel_rows", [])
+        lignes = [[p["nom_complet"], p["fonction"] or "-",
+                   p["telephone"] or "-", p["email"] or "-",
+                   fmt_money(p["salaire"])] for p in rows]
+        if not rapports.export_table_pdf(
+                "Personnel et salaires",
+                f"Filtres actuels - le {rapports._date_pdf()}",
+                ["Nom complet", "Fonction", "Telephone", "Email", "Salaire"],
+                lignes, "rapport_liste_personnel.pdf"):
+            toast.info(page, "Rien a exporter : aucun employe dans ce filtre.")
 
     search.textChanged.connect(fill)
     fill()

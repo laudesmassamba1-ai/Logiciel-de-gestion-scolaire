@@ -46,13 +46,27 @@ class EleveRepository(RepositoryBase):
             "classe_id", "ecole_provenance", "pere_nom", "pere_tel", "mere_nom",
             "mere_tel", "tuteur_nom", "tuteur_tel", "adresse", "redoublant",
             "check_acte", "check_photos", "check_bulletin", "statut", "uuid_client",
+            "photo",
         ]
         sql = "INSERT INTO eleves (" + ", ".join(cols) + ") VALUES (" + ", ".join("?" for _ in cols) + ")"
-        return self._route_write("POST", "/eleve", data,
+        payload = dict(data)
+        payload.pop("photo", None)
+        classe_nom = self._classe_nom(data.get("classe_id"))
+        if classe_nom:
+            payload["classe_nom"] = classe_nom
+        return self._route_write("POST", "/eleve", payload,
                                  db.execute, sql, tuple(data.get(c) for c in cols))
 
     def update_eleve(self, eleve_id, data):
         data = dict(data)
+        # La photo (locale) n'est modifiee que si la fiche l'a explicitement
+        # changee (cle presente, vide = retiree) : un appelant partiel ne
+        # doit jamais l'effacer par accident.
+        if "photo" not in data:
+            row = db.query_one("SELECT photo FROM eleves WHERE id = ?",
+                               (eleve_id,))
+            if row is not None:
+                data["photo"] = row["photo"]
         data.setdefault("check_acte", 0)
         data.setdefault("check_photos", 0)
         data.setdefault("check_bulletin", 0)
@@ -63,10 +77,12 @@ class EleveRepository(RepositoryBase):
             "classe_id", "ecole_provenance", "pere_nom", "pere_tel", "mere_nom",
             "mere_tel", "tuteur_nom", "tuteur_tel", "adresse", "redoublant",
             "check_acte", "check_photos", "check_bulletin", "statut",
+            "photo",
         ]
         tuple_vals = tuple(data.get(c) for c in cols) + (eleve_id,)
         uuid_client = self._eleve_uuid(eleve_id)
         payload = dict(data)
+        payload.pop("photo", None)
         payload["eleve_uuid"] = uuid_client
         classe_nom = self._classe_nom(data.get("classe_id"))
         if classe_nom:
@@ -80,14 +96,19 @@ class EleveRepository(RepositoryBase):
     def delete_eleve(self, eleve_id):
         uuid_client = self._eleve_uuid(eleve_id)
         payload = {"eleve_uuid": uuid_client}
+        with db.transaction() as txn:
+            txn.execute("DELETE FROM notes WHERE eleve_id = ?", (eleve_id,))
+            txn.execute("DELETE FROM presences WHERE eleve_id = ?", (eleve_id,))
+            txn.execute("DELETE FROM paiements WHERE eleve_id = ?", (eleve_id,))
+            txn.execute("DELETE FROM eleves WHERE id = ?", (eleve_id,))
         self._route_write("DELETE", f"/eleve/{eleve_id}/notes", payload,
-                          db.execute, "DELETE FROM notes WHERE eleve_id = ?", (eleve_id,))
+                          lambda *a, **kw: None)
         self._route_write("DELETE", f"/eleve/{eleve_id}/presences", payload,
-                          db.execute, "DELETE FROM presences WHERE eleve_id = ?", (eleve_id,))
+                          lambda *a, **kw: None)
         self._route_write("DELETE", f"/eleve/{eleve_id}/paiements", payload,
-                          db.execute, "DELETE FROM paiements WHERE eleve_id = ?", (eleve_id,))
+                          lambda *a, **kw: None)
         self._route_write("DELETE", f"/eleve/{eleve_id}", payload,
-                          db.execute, "DELETE FROM eleves WHERE id = ?", (eleve_id,))
+                          lambda *a, **kw: None)
 
     def _eleve_uuid(self, eleve_id):
         row = db.query_one("SELECT uuid_client FROM eleves WHERE id = ?", (eleve_id,))

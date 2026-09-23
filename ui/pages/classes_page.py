@@ -10,11 +10,11 @@ from ui import toast
 from ui.loader import apply_ui
 from core.config import (
     C_RED, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED_BG, C_RED_BORDER,
-    C_TEXT_SECONDARY, STYLE_BTN_PRIMARY,
+    C_TEXT_SECONDARY, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY,
 )
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _classe_items, _reload_combo, _actions_cell,
-    _adapter_hauteur,
+    _adapter_hauteur, _fond_aurora_dialog,
 )
 from ui.widgets import KPICard
 from ui.widgets.page_templates import ListPageTemplate
@@ -105,6 +105,23 @@ def classes(page, ctx):
 
     btn_add = _btn("+ Nouvelle Classe", lambda: _ouvrir_dialog(), STYLE_BTN_PRIMARY)
     tpl.header.ajouter_action(btn_add)
+    btn_pdf = _btn("Exporter PDF", lambda: _exporter_pdf(), STYLE_BTN_SECONDARY)
+    tpl.header.ajouter_action(btn_pdf)
+
+    def _exporter_pdf():
+        from services import rapports
+        rows = getattr(page, "_classe_rows", [])
+        lignes = [[c["nom"], c["niveau"] or "-", c["effectif"],
+                   c["capacite"], c["titulaire"] or "-",
+                   c["salle"] or "-", c.get("cycle_nom") or "-"]
+                  for c in rows]
+        if not rapports.export_table_pdf(
+                "Classes et effectifs",
+                f"Filtres actuels - le {rapports._date_pdf()}",
+                ["Classe", "Niveau", "Effectif", "Capacite", "Titulaire",
+                 "Salle", "Cycle"], lignes,
+                "rapport_classes.pdf"):
+            toast.info(page, "Rien a exporter : aucune classe dans ce filtre.")
 
     search.textChanged.connect(fill)
     combo_niveau.currentIndexChanged.connect(fill)
@@ -126,6 +143,11 @@ def open_classe_dialog(parent, ctx, classe=None, on_created=None):
     dlg.resize(460, 480)
     dlg.setMinimumSize(380, 400)
     apply_ui("classes/classe_dialog.ui", dlg)
+    # Boutons themes par les tokens (le .ui garde des hex figes) :
+    # le theme personnalise du configurateur s'applique aussi ici.
+    dlg.btn_save.setStyleSheet(STYLE_BTN_PRIMARY)
+    dlg.btn_cancel.setStyleSheet(STYLE_BTN_SECONDARY)
+    _fond_aurora_dialog(dlg)
 
     combo_cycle = QComboBox()
     combo_cycle.addItem("-- Sans cycle --", None)

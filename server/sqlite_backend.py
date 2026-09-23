@@ -12,9 +12,20 @@ Active avec GS_DB_MODE=sqlite (c'est ce que fait l'assistant graphique).
 import os
 import sqlite3
 import threading
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import HTTPException
+
+# --- Adapters sqlite3 pour Python 3.12+ (evite DeprecationWarning) ---
+def _adapt_date(d: date) -> str:
+    return d.isoformat()
+
+def _adapt_datetime(dt: datetime) -> str:
+    return dt.isoformat()
+
+sqlite3.register_adapter(date, _adapt_date)
+sqlite3.register_adapter(datetime, _adapt_datetime)
 
 _SCHEMA_APPLIQUE = False
 _VERROU = threading.RLock()
@@ -43,12 +54,13 @@ def chemin_base() -> Path:
 
 def _appliquer_schema(conn):
     global _SCHEMA_APPLIQUE
-    if _SCHEMA_APPLIQUE:
-        return
-    schema = Path(__file__).resolve().parent / "schema_sqlite.sql"
-    conn.executescript(schema.read_text(encoding="utf-8"))
-    conn.commit()
-    _SCHEMA_APPLIQUE = True
+    with _VERROU:
+        if _SCHEMA_APPLIQUE:
+            return
+        schema = Path(__file__).resolve().parent / "schema_sqlite.sql"
+        conn.executescript(schema.read_text(encoding="utf-8"))
+        conn.commit()
+        _SCHEMA_APPLIQUE = True
 
 
 class _CurseurSQLite:
@@ -99,8 +111,15 @@ class _CurseurSQLite:
         return self._cur.fetchall()
 
     def fetchone(self):
-        lignes = self._lignes()
-        return lignes[0] if lignes else None
+        if self._cur is None or self._cur.description is None:
+            return None
+        ligne = self._cur.fetchone()
+        if ligne is None:
+            return None
+        if self._dictionnaire:
+            colonnes = [d[0] for d in self._cur.description]
+            return dict(zip(colonnes, ligne))
+        return ligne
 
     def fetchall(self):
         return self._lignes()

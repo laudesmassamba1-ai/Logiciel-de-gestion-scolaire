@@ -17,12 +17,17 @@ Usage :
 
 import json
 import threading
+import time as _time
 import urllib.request
 import urllib.error
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 TAGS_URL = "http://127.0.0.1:11434/api/tags"
 TIMEOUT = 60.0
+# Cache de disponibilite : on re-teste ollama toutes les 30 s pour que
+# l'app recupere le mode LLM si ollama demarre/se coupe en cours de route
+# (audit : plus de cache illimite a vie).
+CACHE_DISPONIBILITE = 30.0
 
 # Durée maximum d'une génération. C'est la vraie garantie « fluide » :
 # quel que soit le modèle ou la machine, Charo ne bloque JAMAIS plus de
@@ -52,14 +57,16 @@ class LLMBackend:
     def __init__(self, modele=None):
         self.modele = modele
         self._ok = None
+        self._teste_a = 0.0
         self._modele_detecte = None
         self._modele_qualite = None
         self._modele_charge = False
 
     def disponible(self) -> bool:
         """Vérifie si ollama tourne avec un modèle utilisable."""
-        if self._ok is None:
+        if self._ok is None or _time.monotonic() - self._teste_a > CACHE_DISPONIBILITE:
             self._ok = self._tester_connexion()
+            self._teste_a = _time.monotonic()
         return self._ok
 
     def _tester_connexion(self) -> bool:
@@ -130,6 +137,7 @@ class LLMBackend:
             "options": {"temperature": 0.3, "top_p": 0.9, "num_ctx": 2048},
         }
         resultat = {}
+        abandonne = {"oui": False}
 
         def _appel():
             try:
@@ -142,15 +150,21 @@ class LLMBackend:
                                             timeout=max(TIMEOUT,
                                                         duree_max + 10.0)) as r:
                     rep = json.loads(r.read().decode("utf-8"))
+                if abandonne["oui"]:
+                    return
                 resultat["texte"] = rep.get("message", {}).get("content",
                                                                "").strip()
             except Exception:
-                resultat["erreur"] = True
+                # Un appel abandonne ne doit pas marquer le backend KO :
+                # ollama est juste lent, pas forcement en panne.
+                if not abandonne["oui"]:
+                    resultat["erreur"] = True
 
         fil = threading.Thread(target=_appel, daemon=True)
         fil.start()
         fil.join(duree_max)
         if fil.is_alive():
+            abandonne["oui"] = True
             return ""                       # abandon : plus jamais de blocage
         if resultat.get("erreur"):
             self._ok = False

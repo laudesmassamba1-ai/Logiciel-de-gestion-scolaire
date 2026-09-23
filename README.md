@@ -166,46 +166,65 @@ Les installateurs sont générés dans le dossier `installers/`.
 ```
 Logiciel-de-gestion-scolaire/
   main.py                    # Point d'entree
+  build_app.py               # Script de build unifie (deb/AppImage/EXE/zip)
+  build_win.spec             # Recette PyInstaller Windows
+  build_linux.spec           # Recette PyInstaller Linux
+  setup_gestion_scolaire.iss # Installeur Inno Setup (Windows)
+  win_dpi_manifest.xml       # Manifeste DPI de l'EXE Windows
   core/
-    config.py                # Configuration, constantes, themes
-    network.py               # Client HTTP pour synchronisation
+    config.py                # Configuration, constantes, chemins, themes
+    network.py               # Etat de connexion, bascule online/offline
   database/
-    db.py                    # Singleton SQLite, schema, migrations
-  repositories/              # Couche d'acces aux donnees
+    db.py                    # Singleton SQLite, schema, migrations, file de synchro
+  repositories/              # Couche d'acces aux donnees (local-first + synchro)
+    base.py                  # _route_write : ecriture locale + push/queue serveur
+    eleve, classe, finance, note, presence, personnel, pedagogie,
+    planning, parametre, compte_repository.py
   services/                  # Logique metier
     auth.py                  # Authentification et autorisation
+    sync_service.py          # Pull structure/donnees/comptes + tombstones
     assistant_ia.py          # Mini IA locale Kola (intentions + TF-IDF + memoire)
+    ia/                      # Modules IA : langue, maths, graphe, contexte, LLM
     backup.py                # Sauvegarde/Restauration
     pdf_export.py            # Generation PDF
     reports.py               # Rapports HTML
+    hotspot.py               # Creation reseau WiFi de l'ecole
+    discovery.py             # Decouverte du serveur sur le LAN (UDP)
+    demarrage.py, serveur_local.py, appreciations.py
+  api/                       # Client HTTP + file de synchronisation
+    client.py                # Enveloppe des routes serveur
+    mapping.py               # Rebasage id locaux -> id serveur (cles naturelles)
+    sync_worker.py           # Thread de drain push + pull periodique
   ui/
     main_view.py             # Fenetre principale et navigation
     login_view.py            # Ecran de connexion
-    pages/                   # Pages modulaires
-      dashboards.py          # Tableaux de bord
-      eleves.py              # Gestion des eleves
-      classes_page.py        # Gestion des classes
-      notes_page.py          # Notes et evaluations
-      presences_page.py      # Presences
-      planning_page.py       # Emplois du temps
-      caisse_page.py         # Caisse
-      comptes_page.py        # Comptes utilisateurs
-      personnel_page.py      # Personnel
-      parametres_page.py     # Parametres
-      cycles_page.py         # Cycles et annees
-      tarifs_page.py         # Tarifs
-      paiements_page.py      # Paiements
-      programmes_page.py     # Programmes
-      statistiques_page.py   # Statistiques
-      assistant_page.py      # Fenetre de chat de l'assistante Kola
+    assistant_serveur.py     # Assistant d'installation du poste serveur
+    pages/                   # Pages modulaires (dashboards, eleves, notes,
+                             # presences, planning, caisse, comptes, personnel,
+                             # cycles, tarifs, paiements, programmes, stats, IA)
     ui_files/                # Fichiers .ui (Qt Designer)
-  tests/                     # Tests unitaires (app bureau)
-  server/                    # API de synchronisation (FastAPI + MySQL)
-    main.py                  # Application FastAPI
+    widgets/                 # Widgets partages (page_templates, etc.)
+  models/                    # Modeles de domaine (classe, eleve, finance, ...)
+  resources/
+    design_tokens.py         # Jetons de design (couleurs, polices, espacements)
+  scripts/
+    init_mysql.sql           # Initialisation de la base MySQL serveur
+    lancer_synchronise.sh    # Lancement de la synchro
+  server/                    # API de synchronisation (FastAPI + MySQL/SQLite)
+    main.py                  # Application FastAPI (~87 routes historiques)
     compat.py                # Couche de compatibilite app bureau <-> serveur
-    test_compat.py           # Tests de la couche de compatibilite
-    schema.sql               # Schema MySQL (cree automatiquement)
-    setup_service.bat        # Installation service Windows (NSSM)
+    sqlite_backend.py        # Backend SQLite sans installation (GS_DB_MODE=sqlite)
+    securite.py              # Secret JWT, limiteur de connexion
+    schema.sql               # Schema MySQL
+    schema_sqlite.sql        # Schema SQLite serveur
+  tests/                     # Tests unitaires (bureau + serveur + sync)
+  docs/                      # Memoire et rapports de travail
+    SUIVI_PROJET.md          # Memoire du projet (reference)
+    RAPPORT_BUGS.md          # Registre des bugs corriges
+    RAPPORT_BUGS_KILO_2026-08-24.md  # Recensement initial (traitement table)
+  executables/               # Installateurs et binaires a distribuer
+  data/                      # Base SQLite locale + documents (genere)
+  build/ dist/               # Sorties PyInstaller (generes)
 ```
 
 ## Licence

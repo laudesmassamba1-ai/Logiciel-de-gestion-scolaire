@@ -59,10 +59,18 @@ class GrapheEcole:
         self._noeuds.clear()
         for liste in self._adj.values():
             liste.clear()
+        conn = None
         try:
-            self._charger(db.connect())
+            conn = db.connect()
+            self._charger(conn)
         except Exception:
             pass  # base absente/en cours d'init : graphe vide, sans crash
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
         self._construit_a = time.monotonic()
 
     def _charger(self, conn):

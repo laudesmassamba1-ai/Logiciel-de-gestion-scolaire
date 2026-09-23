@@ -1,4 +1,7 @@
+import datetime
+
 from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QMessageBox, QComboBox, QPushButton, QDateEdit,
     QTableWidgetItem,
@@ -7,15 +10,15 @@ from PyQt5.QtWidgets import (
 from repositories import repos
 from ui import toast
 from ui.pages.helpers import (
-    _simple_btn_style, _classe_items, _reload_combo,
+    _btn, _simple_btn_style, _classe_items, _reload_combo,
     refuser_si_hors_annee,
 )
 from ui.widgets import KPICard
 from ui.widgets.page_templates import ListPageTemplate
 from resources.design_tokens import Colors
 from core.config import (
-    STYLE_BTN_PRIMARY, STYLE_BTN_ADD,
-    C_RED, C_RED_BG, C_RED_BORDER,
+    STYLE_BTN_PRIMARY, STYLE_BTN_ADD, STYLE_BTN_DANGER, STYLE_BTN_SECONDARY,
+    lire_composant,
 )
 
 
@@ -48,8 +51,7 @@ def presences(page, ctx):
     tpl.ajouter_filtre(btn_all_present)
     btn_all_absent = QPushButton("Tout marquer absent")
     btn_all_absent.setCursor(Qt.PointingHandCursor)
-    btn_all_absent.setStyleSheet(
-        _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER))
+    btn_all_absent.setStyleSheet(STYLE_BTN_DANGER)
     btn_all_absent.setToolTip(
         "Marquer tous les eleves de la classe comme absents")
     tpl.ajouter_filtre(btn_all_absent)
@@ -67,8 +69,35 @@ def presences(page, ctx):
     btn_save = QPushButton("Enregistrer les Presences")
     btn_save.setCursor(Qt.PointingHandCursor)
     btn_save.setStyleSheet(STYLE_BTN_PRIMARY)
+    btn_export_pdf = _btn("Exporter PDF", lambda: _exporter_pdf(), STYLE_BTN_SECONDARY)
     if peut_editer:
         tpl.header.ajouter_action(btn_save)
+    tpl.header.ajouter_action(btn_export_pdf)
+
+    def _exporter_pdf():
+        from services import rapports
+        if charge["cle"] is None:
+            toast.info(page, "Chargez d'abord une feuille de presence "
+                             "(classe et date).")
+            return
+        classe_id, date = charge["cle"]
+        date_fr = datetime.date.fromisoformat(date).strftime("%d/%m/%Y")
+        lignes = []
+        for e in repos.eleves(classe_id=classe_id):
+            statut, motif = "Present", ""
+            for _eid, combo, edit_motif in etats.values():
+                if _eid == e["id"]:
+                    statut = combo.currentText()
+                    motif = edit_motif.text().strip()
+                    break
+            lignes.append([e["matricule"], f"{e['prenom']} {e['nom']}",
+                           statut, motif])
+        if not rapports.export_table_pdf(
+                "Feuille de presence",
+                f"{combo_classe.currentText()} - {date_fr}",
+                ["Matricule", "Eleve", "Statut", "Motif"], lignes,
+                "rapport_presence_feuille.pdf"):
+            toast.info(page, "Aucun eleve a exporter pour cette classe.")
 
     etats = {}
     charge = {"cle": None}
@@ -108,6 +137,22 @@ def presences(page, ctx):
             edit_motif.setPlaceholderText("Motif (si absent)")
             tpl.table.setCellWidget(i, 3, edit_motif)
             etats[i] = (e["id"], combo, edit_motif)
+
+            # Composant themable "statuts" : teinte du texte selon la valeur.
+            coul_statuts = lire_composant("statuts")
+
+            def _teinter(_=None, c=combo):
+                couleur = {
+                    "Present": coul_statuts["present"],
+                    "Absent": coul_statuts["absent"],
+                    "Retard": coul_statuts["du"],
+                }.get(c.currentText(), coul_statuts["absent"])
+                c.setStyleSheet(
+                    f"QComboBox {{ color: {couleur}; font-weight: 700; }}"
+                    "QComboBox QAbstractItemView { color: #1E2430; }")
+
+            combo.currentTextChanged.connect(_teinter)
+            _teinter()
         charge["cle"] = (classe_id, date)
         tpl.table.refresh_height()
         tpl.pile.setCurrentWidget(tpl.table)

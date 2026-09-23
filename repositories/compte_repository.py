@@ -44,13 +44,25 @@ class CompteRepository(RepositoryBase):
             """UPDATE utilisateurs SET nom_complet = ?, role = ?, actif = ?
                WHERE id = ?""",
             (nom, role, 1 if actif else 0, user_id))
+        # Push vers serveur
+        self._route_write("PUT", f"/comptes/{user_id}",
+                          {"nom": nom, "role": role, "actif": 1 if actif else 0},
+                          lambda *a, **kw: None)
 
     def toggle_compte(self, user_id, actif):
         db.execute("UPDATE utilisateurs SET actif = ? WHERE id = ?", (1 if actif else 0, user_id))
+        self._route_write("PUT", f"/comptes/{user_id}/actif",
+                          {"actif": 1 if actif else 0},
+                          lambda *a, **kw: None)
 
     def reset_password(self, user_id, password_hash):
         db.execute("UPDATE utilisateurs SET password = ? WHERE id = ?", (password_hash, user_id))
+        self._route_write("PUT", f"/comptes/{user_id}/reset-password",
+                          {"nouveau_mot_de_passe": password_hash},
+                          lambda *a, **kw: None)
 
     def delete_compte(self, user_id):
         db.execute("DELETE FROM connexions WHERE utilisateur_id = ?", (user_id,))
         db.execute("DELETE FROM utilisateurs WHERE id = ?", (user_id,))
+        self._route_write("DELETE", f"/comptes/{user_id}", {},
+                          lambda *a, **kw: None)

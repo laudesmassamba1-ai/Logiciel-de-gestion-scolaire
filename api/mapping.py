@@ -11,7 +11,9 @@ construit un payload sur le serveur :
 
     * (« send », endpoint, payload)  -> envoyer maintenant (ids reattribues)
     * (« skip »,)                    -> la cible n'existe pas encore sur le
-        serveur : on ne pousse pas (l'ecriture locale, elle, reste valide)
+        serveur : on ne pousse PAS tout de suite, mais la ligne reste dans
+        la file (le vidage la rejouera des que la dependance arrive — aucune
+        ecriture n'est archivee sans avoir ete envoyee)
     * (« enqueue »,)                 -> le reseau a coupe pendant la
         resolution : on met en file, le drain reessaiera plus tard.
 
@@ -96,10 +98,15 @@ def _matiere_id(nom):
 def _classe_id(nom):
     if not nom:
         return None
-    data = _get(f"/classe/{quote(str(nom))}")
-    if not data:
-        return None
-    return (data.get("classe") or {}).get("id")
+    # Passage par la liste /classe + comparaison normalisee (minuscules,
+    # sans accents) : la route /classe/{nom} du serveur fait un match SQL
+    # exact (WHERE classe = %s) et raterait « 6eme » vs « 6eme B »,
+    # « 3eme » vs « 3ème »... ce qui produisait 96 x 404 par session.
+    cible = _norm(nom)
+    for row in _liste("classes", "/classe"):
+        if _norm(row.get("nom")) == cible:
+            return row.get("id")
+    return None
 
 
 def _enseignant_id(nom_complet):
@@ -199,13 +206,13 @@ def _remapper(method, endpoint, payload):
         cid = _classe_id(_pop(pl, "classe_ancien_nom"))
         if cid is None:
             return None
+        pl.pop("cycle_id", None)
         cycle_nom = _pop(pl, "cycle_nom")
         if cycle_nom is not None:
             sid = _cycle_id_ou_creer(cycle_nom) if cycle_nom else _cycle_sans_cycle()
             if sid is None:
                 return None
             pl["cycle_id"] = sid
-        pl.pop("cycle_id", None)
         return (f"/modifierClasse/{cid}", pl)
 
     if method == "DELETE" and endpoint.startswith("/supprimerClasse/"):
@@ -295,15 +302,28 @@ def _remapper(method, endpoint, payload):
         return (f"/supprimerEnseignant/{eid}", pl)
 
     # ---------- Eleves ----------
+    if method == "POST" and endpoint == "/eleve":
+        # Creation d'un eleve : son classe_id local ne veut rien dire pour
+        # le serveur. On le reattribue par le nom de classe quand il est
+        # fourni ; sinon l'eleve part sans inscription (classe inconnue).
+        if "classe_nom" in pl:
+            cid = _classe_id(_pop(pl, "classe_nom"))
+            if cid is None:
+                return None
+            pl["classe_id"] = cid
+        else:
+            pl.pop("classe_id", None)
+        return (endpoint, pl)
+
     if method == "PUT" and endpoint.startswith("/modifierEleve/"):
         eid = _eleve_id(_pop(pl, "eleve_uuid"))
         if eid is None:
             return None
+        pl.pop("classe_id", None)
         if "classe_nom" in pl:
             cid = _classe_id(_pop(pl, "classe_nom"))
             if cid is not None:
                 pl["classe_id"] = cid
-        pl.pop("classe_id", None)
         return (f"/modifierEleve/{eid}", pl)
 
     if method == "DELETE" and re.match(r"^/eleve/\d+", endpoint):
@@ -351,6 +371,17 @@ def _remapper(method, endpoint, payload):
         if cid is None:
             return None
         return (f"/planning/{cid}", pl)
+
+    # ---------- Notes / Presences / Paiements / Planning (delete by uuid_client) ----------
+    if method == "DELETE" and endpoint.startswith("/supprimerNote/"):
+        # uuid_client passe directement dans l'URL (decode)
+        return (endpoint, pl)
+
+    if method == "DELETE" and endpoint.startswith("/supprimerPresence/"):
+        return (endpoint, pl)
+
+    if method == "DELETE" and endpoint.startswith("/supprimerPaiement/"):
+        return (endpoint, pl)
 
     # ---------- Annees scolaires ----------
     if method == "POST" and endpoint == "/ajouter_annee_scolaire":
@@ -409,6 +440,13 @@ def _remapper_transactionnel(method, endpoint, pl):
         if cid is None:
             return None
         pl["eleve_id"], pl["classe_id"] = eid, cid
+        return (endpoint, pl)
+
+    if endpoint == "/planning":
+        cid = _classe_id(_pop(pl, "classe_nom"))
+        if cid is None:
+            return None
+        pl["classe_id"] = cid
         return (endpoint, pl)
 
     return (endpoint, pl)

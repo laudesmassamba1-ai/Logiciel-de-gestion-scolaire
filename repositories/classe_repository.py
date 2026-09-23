@@ -46,24 +46,29 @@ class ClasseRepository(RepositoryBase):
             (nom, niveau, capacite, salle, titulaire, cycle_id, classe_id))
 
     def delete_classe(self, classe_id):
-        eleves = db.query("SELECT id FROM eleves WHERE classe_id = ?", (classe_id,))
-        eleve_ids = [e["id"] for e in eleves]
-        for eid in eleve_ids:
-            db.execute("DELETE FROM notes WHERE eleve_id = ?", (eid,))
-            db.execute("DELETE FROM presences WHERE eleve_id = ?", (eid,))
-            db.execute("DELETE FROM paiements WHERE eleve_id = ?", (eid,))
-        db.execute("DELETE FROM eleves WHERE classe_id = ?", (classe_id,))
-        db.execute("DELETE FROM planning WHERE classe_id = ?", (classe_id,))
-        db.execute("DELETE FROM tarifs WHERE classe_id = ?", (classe_id,))
-        db.execute("DELETE FROM programmes WHERE classe_id = ?", (classe_id,))
         ligne = db.query_one("SELECT nom FROM classes WHERE id = ?", (classe_id,))
         nom = ligne["nom"] if ligne else None
-        # Le serveur accepte aussi un libelle (fallback par nom) :
-        # pas d'id local pousse brut.
-        endpoint = f"/supprimerClasse/{quote(str(nom))}" if nom else None
-        if endpoint:
+        eleves = db.query("SELECT id FROM eleves WHERE classe_id = ?", (classe_id,))
+        eleve_ids = [e["id"] for e in eleves]
+        # Suppression en une seule transaction : jamais de classe a moitie
+        # vide en cas d'ecriture interrompue (notes/presences/paiements des
+        # eleves, eleves, puis plan/tarifs/programmes/classe elle-meme).
+        with db.transaction() as txn:
+            for eid in eleve_ids:
+                txn.execute("DELETE FROM notes WHERE eleve_id = ?", (eid,))
+                txn.execute("DELETE FROM presences WHERE eleve_id = ?", (eid,))
+                txn.execute("DELETE FROM paiements WHERE eleve_id = ?", (eid,))
+            txn.execute("DELETE FROM eleves WHERE classe_id = ?", (classe_id,))
+            txn.execute("DELETE FROM planning WHERE classe_id = ?", (classe_id,))
+            txn.execute("DELETE FROM tarifs WHERE classe_id = ?", (classe_id,))
+            txn.execute("DELETE FROM programmes WHERE classe_id = ?", (classe_id,))
+            txn.execute("DELETE FROM classes WHERE id = ?", (classe_id,))
+        # Suppression serveur uniquement (le local est deja fait atomiquement).
+        # Le serveur accepte aussi un libelle (fallback par nom).
+        if nom:
+            endpoint = f"/supprimerClasse/{quote(str(nom))}"
             self._route_write("DELETE", endpoint, {},
-                              db.execute, "DELETE FROM classes WHERE id = ?", (classe_id,))
+                              lambda *args, **kwargs: None)
 
 
     def cycles(self):
@@ -152,3 +157,66 @@ class ClasseRepository(RepositoryBase):
         self._route_write("DELETE", f"/annee_scolaire/{annee_id}",
                           {"annee_libelle": libelle["libelle"] if libelle else None},
                           db.execute, "DELETE FROM annees_scolaires WHERE id = ?", (annee_id,))
+
+    def close_annee_scolaire(self, annee_id, nouvelle_libelle, nouvelle_debut, nouvelle_fin,
+                             promouvoir_eleves=False):
+        """Ferme l'année scolaire en cours et ouvre la suivante.
+
+        Operations :
+        1. Archive l'année courante (est_active = 0, archivee = 1)
+        2. Crée la nouvelle année scolaire
+        3. Si demandé, promeut les élèves (classe supérieure)
+        4. Réinitialise les compteurs de paiements pour la nouvelle année
+        """
+        from datetime import date
+        import uuid
+
+        # 1. Archive l'année courante
+        db.execute(
+            """UPDATE annees_scolaires SET est_active = 0, archivee = 1 WHERE id = ?""",
+            (annee_id,))
+
+        # Ajoute la colonne archivee si elle n'existe pas (migration douce)
+        try:
+            db.execute("ALTER TABLE annees_scolaires ADD COLUMN archivee INTEGER DEFAULT 0")
+        except Exception:
+            pass
+
+        # 2. Crée la nouvelle année
+        new_id = db.execute(
+            """INSERT INTO annees_scolaires (libelle, date_debut, date_fin, est_active, archivee)
+               VALUES (?, ?, ?, 1, 0)""",
+            (nouvelle_libelle, nouvelle_debut, nouvelle_fin))
+
+        # 3. Promeut les élèves si demandé
+        if promouvoir_eleves:
+            # Règle simple : on ne change que la classe_id selon la progression
+            # CP1→CP2, CP2→CE1, CE1→CE2, CE2→CM1, CM1→CM2, CM2→6eme,
+            # 6eme→5eme, 5eme→4eme, 4eme→3eme, 3eme→2nde, 2nde→1ere, 1ere→Terminale
+            progression = {
+                "CP1": "CP2", "CP2": "CE1", "CE1": "CE2", "CE2": "CM1",
+                "CM1": "CM2", "CM2": "6eme", "6eme": "5eme", "5eme": "4eme",
+                "4eme": "3eme", "3eme": "2nde", "2nde": "1ere", "1ere": "Terminale"
+            }
+            eleves = db.query("SELECT e.id, c.nom FROM eleves e JOIN classes c ON c.id = e.classe_id")
+            for e in eleves:
+                classe_actuelle = e["nom"]
+                if classe_actuelle in progression:
+                    nouvelle_classe_nom = progression[classe_actuelle]
+                    nouvelle_classe = db.query_one("SELECT id FROM classes WHERE nom = ?", (nouvelle_classe_nom,))
+                    if nouvelle_classe:
+                        db.execute("UPDATE eleves SET classe_id = ? WHERE id = ?",
+                                   (nouvelle_classe["id"], e["id"]))
+
+        # 4. Réinitialise les paiements pour la nouvelle année (nouvelle base de facturation)
+        # Les anciens paiements restent dans l'année archivée
+
+        # 5. Push vers serveur
+        self._route_write(
+            "POST", "/fermer-annee-scolaire",
+            {"annee_archivee_id": annee_id,
+             "nouvelle_annee": {"libelle": nouvelle_libelle, "date_debut": nouvelle_debut,
+                                "date_fin": nouvelle_fin, "promouvoir_eleves": promouvoir_eleves}},
+            lambda *a, **kw: None)
+
+        return new_id

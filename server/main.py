@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Path, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from datetime import date
 from pydantic import BaseModel
 from typing import Optional
@@ -8,10 +9,8 @@ import mysql.connector
 import os
 import sys
 import time
-from typing import Optional
 import jwt
 import bcrypt
-from passlib.context import CryptContext
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,7 +24,45 @@ DB_PASSWORD = os.environ.get("GS_DB_PASSWORD", "")
 DB_NAME = os.environ.get("GS_DB_NAME", "ecole")
 DB_PORT = int(os.environ.get("GS_DB_PORT", "3306"))
 
-app = FastAPI()
+@asynccontextmanager
+async def _startup_shutdown(app: FastAPI):
+    """Remplace @app.on_event("startup") deprecie par le gestionnaire de
+    cycle de vie (FastAPI >= 0.97). Initialise la base MySQL ou SQLite."""
+    if os.environ.get("GS_DB_MODE", "").strip().lower() == "sqlite":
+        print(" Mode SQLite : base fichier, schema auto-applique.")
+        yield
+        return
+    conn = mysql.connector.connect(
+        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, port=DB_PORT
+    )
+    cursor = conn.cursor()
+    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
+    cursor.execute(f"USE {DB_NAME}")
+    chemin_schema = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+    with open(chemin_schema, "r", encoding="utf-8") as f:
+        script_sql = f.read()
+    instructions = [req.strip() for req in script_sql.split(";") if req.strip()]
+    for instruction in instructions:
+        lignes_utiles = [
+            l for l in instruction.split("\n") if l.strip() and not l.strip().startswith("--")
+        ]
+        if not lignes_utiles:
+            continue
+        instruction_propre = "\n".join(lignes_utiles)
+        try:
+            cursor.execute(instruction_propre)
+        except mysql.connector.Error as err:
+            if err.errno != 1050:
+                raise
+    compat.creer_tables_complementaires(cursor)
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print(" Base de données vérifiée/créée avec succès au démarrage.")
+    yield
+
+
+app = FastAPI(lifespan=_startup_shutdown)
 
 _origins_brut = os.environ.get("GS_CORS_ORIGINS", "*")
 ORIGINS_AUTORISEES = [o.strip() for o in _origins_brut.split(",") if o.strip()] or ["*"]
@@ -39,6 +76,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _cloisonner_ecoles(request: Request, call_next):
+    """Refuse les appels venant d'un poste d'un AUTRE etablissement.
+
+    Quand GS_ECOLE_CODE est configure, chaque requete doit porter
+    l'en-tete X-Ecole-Code avec le meme code (mis par api/client.py).
+    Sans cela, une ecole pourrait se synchroniser avec le serveur d'une
+    autre ecole voisine : c'est le verrou de difference entre ecoles.
+    """
+    from fastapi.responses import JSONResponse
+    if securite.ECOLE_CODE and request.url.path not in (
+            "/ecole", "/docs", "/openapi.json", "/redoc"):
+        code_entete = request.headers.get("x-ecole-code", "")
+        if not securite.ecole_autorisee(code_entete):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Code de l'ecole invalide : ce serveur "
+                         "appartient a un autre etablissement."})
+    return await call_next(request)
+
+
+@app.get("/ecole")
+def identite_ecole():
+    """Code de l'etablissement heberge par ce serveur.
+
+    Accessible SANS code : c'est l'information qu'un poste lit pour se
+    rapprocher (et verifier) sa propre ecole. La confidentialite des
+    donnees reste protegee par le cloisonnement de toutes les autres routes.
+    """
+    return {"code_ecole": securite.ECOLE_CODE}
 
 # Routes de compatibilite avec l'application de bureau (enregistrees en premier)
 import compat
@@ -59,50 +128,6 @@ def get_connection():
         database=DB_NAME,
         port=DB_PORT
     )
-
-@app.on_event("startup")
-def initialiser_base_au_demarrage():
-    # Mode SQLite ("sans installation") : le schema est applique
-    # automatiquement par le backend, rien a faire ici.
-    if os.environ.get("GS_DB_MODE", "").strip().lower() == "sqlite":
-        print(" Mode SQLite : base fichier, schema auto-applique.")
-        return
-    conn = mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        port=DB_PORT
-    )
-    cursor = conn.cursor()
-
-    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
-    cursor.execute(f"USE {DB_NAME}")
-
-    chemin_schema = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
-    with open(chemin_schema, "r", encoding="utf-8") as f:
-        script_sql = f.read()
-
-    instructions = [req.strip() for req in script_sql.split(";") if req.strip()]
-
-    for instruction in instructions:
-        lignes_utiles = [
-            l for l in instruction.split("\n") if l.strip() and not l.strip().startswith("--")
-        ]
-        if not lignes_utiles:
-            continue
-        instruction_propre = "\n".join(lignes_utiles)
-        try:
-            cursor.execute(instruction_propre)
-        except mysql.connector.Error as err:
-            if err.errno != 1050:  # 1050 = table déjà existante, on ignore sans planter
-                raise
-
-    compat.creer_tables_complementaires(cursor)
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print(" Base de données vérifiée/créée avec succès au démarrage.")
 
 def hacher_mot_de_passe(mot_de_passe: str) -> str:
     # On convertit en bytes et on tronque à 72 octets max pour éviter tout blocage
@@ -149,9 +174,13 @@ def _oui_non_sql(valeur) -> str:
 def get_total_eleves()-> dict:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM eleve")
-    total_eleves = cursor.fetchone()[0]
-    return {"total_eleves": total_eleves}
+    try:
+        cursor.execute("SELECT COUNT(*) FROM eleve WHERE est_supprime = 0")
+        total_eleves = cursor.fetchone()[0]
+        return {"total_eleves": total_eleves}
+    finally:
+        cursor.close()
+        conn.close()
 
 # afficher le nombre total d'eleves par sexe 
 @app.get("/total_eleve_par_sexe")
@@ -160,7 +189,7 @@ def get_total_eleve_par_sexe() -> dict:
     cursor = conn.cursor(dictionary=True)  # Retourne les résultats sous forme de dictionnaires
     try:
         # On sélectionne aussi la colonne 'sexe'
-        cursor.execute("SELECT sexe, COUNT(*) AS total FROM eleve GROUP BY sexe")
+        cursor.execute("SELECT sexe, COUNT(*) AS total FROM eleve WHERE est_supprime = 0 GROUP BY sexe")
         total_eleve_par_sexe = cursor.fetchall()
         
         # Format propre retourné : {"total_eleves_par_sexe": [{"sexe": "M", "total": 150}, {"sexe": "F", "total": 120}]}
@@ -192,7 +221,7 @@ def get_total_eleves_par_classe(recherche: Optional[str] = None) -> dict:
             FROM eleve 
             INNER JOIN inscription ON inscription.eleve_id = eleve.id 
             INNER JOIN classe ON inscription.classe_id = classe.id 
-            WHERE classe.classe LIKE %s
+            WHERE classe.classe LIKE %s AND eleve.est_supprime = 0
         """
         cursor.execute(sql_count, (motif,))
         total_eleves = cursor.fetchone()[0]
@@ -220,7 +249,7 @@ def get_total_eleve_par_classe() -> dict:
     cursor = conn.cursor(dictionary=True)
     try:
         # On suppose que la colonne s'appelle 'classe' dans la table 'eleve'
-        cursor.execute("SELECT classe, COUNT(*) AS total FROM eleve, classe, inscription where eleve.id=inscription.eleve_id and inscription.classe_id=classe.id GROUP BY classe")
+        cursor.execute("SELECT classe, COUNT(*) AS total FROM eleve, classe, inscription where eleve.id=inscription.eleve_id and inscription.classe_id=classe.id and eleve.est_supprime = 0 GROUP BY classe")
         total_eleve_par_classe = cursor.fetchall()
         
         return {"total_eleves_par_classe": total_eleve_par_classe}
@@ -235,7 +264,7 @@ def get_total_eleve_par_sexe_par_classe(classe: str) -> dict:
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT sexe, COUNT(*) AS total FROM eleve, classe, inscription WHERE eleve.id=inscription.eleve_id and inscription.classe_id=classe.id and classe = %s GROUP BY sexe",
+            "SELECT sexe, COUNT(*) AS total FROM eleve, classe, inscription WHERE eleve.id=inscription.eleve_id and inscription.classe_id=classe.id and eleve.est_supprime = 0 and classe = %s GROUP BY sexe",
             (classe,)
         )
         resultats = cursor.fetchall()
@@ -273,7 +302,7 @@ def get_all_eleves_par_classe(classe: str)-> dict:
 def get_all_eleves()-> dict:
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT eleve.*, classe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and est_supprime = false")
+    cursor.execute("SELECT eleve.*, classe FROM eleve, inscription, classe where inscription.classe_id=classe.id and inscription.eleve_id=eleve.id and eleve.est_supprime = 0")
     eleves = cursor.fetchall()
     return {"eleves": eleves}
 
@@ -388,7 +417,7 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
         valeurs_eleve = (
             eleve.nom,
             eleve.prenom,
-            eleve.sexe,
+            compat._sexe(eleve.sexe),
             eleve.date_naissance,
             eleve.lieu_naissance,
             eleve.adresse,
@@ -408,7 +437,7 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
         annee_active = cursor.fetchone()
 
         if not annee_active:
-            raise Exception("Aucune année scolaire active n'a été trouvée.")
+            raise HTTPException(status_code=400, detail="Aucune année scolaire active n'a été trouvée.")
 
         annee_scolaire_id = annee_active["id"]
 
@@ -450,6 +479,8 @@ def ajouter_eleve(payload: RequeteAjoutEleve):
             "inscription_id": inscription_id,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(
@@ -506,6 +537,8 @@ def modifier_eleve(eleve_id: int, eleve: EleveModifier):
                 nouvelles_donnees["redoublant"])
 
         # 3. Mise à jour dynamique de la table 'eleve'
+        if nouvelles_donnees:
+            nouvelles_donnees = {k: v for k, v in nouvelles_donnees.items() if v is not None}
         if nouvelles_donnees:
             clauses_set = [f"{cle}=%s" for cle in nouvelles_donnees.keys()]
             sql = f"UPDATE eleve SET {', '.join(clauses_set)} WHERE id=%s"
@@ -583,13 +616,21 @@ def restaurer_eleve(nom: str, prenom: str):
     cursor = conn.cursor()
 
     # On restaure l'élève en le démarquant comme non-supprimé.
-    # ORDER BY id DESC LIMIT 1 : si plusieurs eleves partagent le meme
-    # nom/prenom, seul le plus recent est restaure (pas tous).
+    # Sous-requête : si plusieurs élèves partagent le même
+    # nom/prenom, seul le plus récent (est_supprime=TRUE) est restauré.
+    # Table derivee (double SELECT) : MySQL interdit de mettre a jour la
+    # table cible selectionnee dans la sous-requete de la meme instruction
+    # (erreur 1093) ; cette forme est valide en MySQL ET en SQLite.
     cursor.execute(
-        "UPDATE eleve SET est_supprime = FALSE WHERE nom = %s and prenom=%s "
-        "ORDER BY id DESC LIMIT 1", (nom, prenom))
+        "UPDATE eleve SET est_supprime = FALSE "
+        "WHERE id = (SELECT id FROM (SELECT id FROM eleve WHERE nom = %s AND prenom = %s "
+        "AND est_supprime = TRUE ORDER BY id DESC LIMIT 1) AS tmp)",
+        (nom, prenom))
     conn.commit()
-
+    if cursor.rowcount == 0:
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Élève archivé non trouvé")
     cursor.close()
     conn.close()
 
@@ -663,11 +704,13 @@ def ajouter_classe(classe: classeAjouter):
        classe.cycle_id
     )
 
-    cursor.execute(sql, valeurs)
-    conn.commit()
-
-    nouvel_id = cursor.lastrowid
-    conn.close()
+    try:
+        cursor.execute(sql, valeurs)
+        conn.commit()
+        nouvel_id = cursor.lastrowid
+    finally:
+        cursor.close()
+        conn.close()
 
     return {
         "message": "classe ajoutée avec succès",
@@ -714,6 +757,8 @@ def put_une_classe(classe_id: int, classe_data: ClasseModifier):
             "champs_modifies": nouvelles_donnees,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(
@@ -800,11 +845,13 @@ def ajouter_cycle(cycle: cycleAjouter):
       cycle.nom,
     )
 
-    cursor.execute(sql, valeurs)
-    conn.commit()
-
-    nouvel_id = cursor.lastrowid
-    conn.close()
+    try:
+        cursor.execute(sql, valeurs)
+        conn.commit()
+        nouvel_id = cursor.lastrowid
+    finally:
+        cursor.close()
+        conn.close()
 
     return {
         "message": "cycle ajouté avec succès",
@@ -935,11 +982,13 @@ def ajouter_enseignant(enseignant: enseignantAjouter):
       compat._statut_enseignant(enseignant.statut)
     )
 
-    cursor.execute(sql, valeurs)
-    conn.commit()
-
-    nouvel_id = cursor.lastrowid
-    conn.close()
+    try:
+        cursor.execute(sql, valeurs)
+        conn.commit()
+        nouvel_id = cursor.lastrowid
+    finally:
+        cursor.close()
+        conn.close()
 
     return {
         "message": "enseignant ajouté avec succès",
@@ -1166,11 +1215,12 @@ def get_paiement_par_eleve(nom: str, prenom: str) -> dict:
         FROM paiement, inscription, eleve
         WHERE paiement.inscription_id=inscription.id and inscription.eleve_id=eleve.id and eleve.nom = %s AND eleve.prenom = %s 
     """
-    cursor.execute(sql, (nom, prenom))
-    paiement = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
+    try:
+        cursor.execute(sql, (nom, prenom))
+        paiement = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
 
     if not paiement:
         raise HTTPException(status_code=404, detail="Aucun paiement trouvé pour cet élève")
@@ -1198,6 +1248,7 @@ class PaiementVersement(BaseModel):
     mois: Optional[str] = None  # Ex: "Octobre"
     uuid_client: str
 
+
 # 2. Route POST pour ajouter un paiement
 @app.post("/ajout_paiement")
 def ajouter_paiement(paiement: PaiementVersement):
@@ -1220,11 +1271,13 @@ def ajouter_paiement(paiement: PaiementVersement):
         paiement.uuid_client
     )
 
-    cursor.execute(sql, valeurs)
-    conn.commit()
-
-    nouvel_id = cursor.lastrowid
-    conn.close()
+    try:
+        cursor.execute(sql, valeurs)
+        conn.commit()
+        nouvel_id = cursor.lastrowid
+    finally:
+        cursor.close()
+        conn.close()
 
     return {
         "message": "paiement ajouté avec succès",
@@ -1274,8 +1327,8 @@ def put_un_paiement(id: int, paiement: paiementModifier):
         existant["inscription_id"],
         existant["type_frais"],
         existant["montant"],
-        existant["mode_paiement"],
-        existant["trimestre"],
+        compat._mode_paiement(existant["mode_paiement"]),
+        compat._trimestre(existant["trimestre"]),
         existant["mois"],
         id,
     )
@@ -1363,15 +1416,17 @@ def ajouter_note(note: noteAjouter):
         note.note,
         note.note_sur,
         note.date_evaluation,
-        note.trimestre,
+        compat._trimestre(note.trimestre),
         note.uuid_client
     )
 
-    cursor.execute(sql, valeurs)
-    conn.commit()
-
-    nouvel_id = cursor.lastrowid
-    conn.close()
+    try:
+        cursor.execute(sql, valeurs)
+        conn.commit()
+        nouvel_id = cursor.lastrowid
+    finally:
+        cursor.close()
+        conn.close()
 
     return {
         "message": "note ajoutée avec succès",
@@ -1412,7 +1467,7 @@ def put_un_note(id: int, note: noteModifier):
         note.note,
         note.note_sur,
         note.date_evaluation,
-        note.trimestre,
+        compat._trimestre(note.trimestre) if note.trimestre is not None else None,
         note.matiere_id,
         id
     )
@@ -1466,7 +1521,12 @@ def get_moyenne_par_type_evaluation(nom: str, prenom: str, type_evaluation: str)
     cursor.execute("""
        SELECT SUM(note * programme.coefficient) / SUM(programme.coefficient)
         FROM note, eleve, programme, inscription, matiere
-        WHERE inscription.eleve_id = eleve.id AND note.inscription_id=inscription.id and note.matiere_id = matiere.id and programme.matiere_id=matiere.id AND eleve.nom = %s AND eleve.prenom = %s AND note.type_evaluation = %s;
+        WHERE inscription.eleve_id = eleve.id AND note.inscription_id=inscription.id
+          AND note.matiere_id = matiere.id AND programme.matiere_id=matiere.id
+          AND programme.classe_id = inscription.classe_id
+          AND eleve.est_supprime = 0
+          AND eleve.nom = %s AND eleve.prenom = %s
+          AND note.type_evaluation = %s;
     """, (nom, prenom, type_evaluation))
     resultat = cursor.fetchone()
     moyenne = resultat[0] if resultat else None
@@ -1499,9 +1559,12 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
 
     # Notes du trimestre
     cursor.execute("""
-        SELECT matiere.nom, type_evaluation, note, note_sur, coefficient
+        SELECT DISTINCT matiere.nom, type_evaluation, note, note_sur, coefficient
         FROM note, matiere, programme, inscription, eleve
-        WHERE inscription.eleve_id=eleve.id and note.inscription_id=inscription.id and note.matiere_id=matiere.id and programme.matiere_id=matiere.id and inscription.eleve_id = %s AND note.trimestre = %s
+        WHERE inscription.eleve_id=eleve.id AND note.inscription_id=inscription.id
+          AND note.matiere_id=matiere.id AND programme.matiere_id=matiere.id
+          AND programme.classe_id = inscription.classe_id
+          AND inscription.eleve_id = %s AND note.trimestre = %s
         ORDER BY matiere.nom, note.type_evaluation
     """, (eleve_id, trimestre))
     notes = cursor.fetchall()
@@ -1512,6 +1575,7 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
         FROM note
         JOIN inscription ON note.inscription_id = inscription.id
         JOIN programme ON note.matiere_id = programme.matiere_id
+          AND programme.classe_id = inscription.classe_id
         WHERE inscription.eleve_id = %s AND note.trimestre = %s
           AND LOWER(note.type_evaluation) LIKE 'devoir%'
     """, (eleve_id, trimestre))
@@ -1524,6 +1588,7 @@ def get_bulletin_par_eleve(nom: str, prenom: str, trimestre: str):
         FROM note
         JOIN inscription ON note.inscription_id = inscription.id
         JOIN programme ON note.matiere_id = programme.matiere_id
+          AND programme.classe_id = inscription.classe_id
         WHERE inscription.eleve_id = %s AND note.trimestre = %s
           AND LOWER(note.type_evaluation) = 'composition'
     """, (eleve_id, trimestre))
@@ -1613,7 +1678,7 @@ def get_liste_de_presence_par_classe(classe: str):
         raise HTTPException(status_code=404, detail="classe non trouvée")
 
     #afficher la liste des eleves par classe 
-    cursor.execute("select nom, prenom, sexe, classe, presences.statut from eleve, presences, classe where eleve.id=presences.eleve_id and presences.classe_id=classe.id and classe= %s", (classe, ))
+    cursor.execute("select nom, prenom, sexe, classe, presences.statut from eleve left join presences on eleve.id=presences.eleve_id left join classe on presences.classe_id=classe.id where classe= %s", (classe, ))
     liste_eleve= cursor.fetchall()
     conn.close()
     return{"liste de presence par classe": liste_eleve}
@@ -1693,7 +1758,7 @@ def modifier_presence(id: int, presence: PresenceModifier):
     """
     valeurs = (
         donnees_actuelles["eleve_id"],
-        donnees_actuelles["statut"],
+        compat._statut_presence(donnees_actuelles["statut"]),
         donnees_actuelles["justifie"],
         donnees_actuelles["classe_id"],
         id
@@ -1710,14 +1775,19 @@ def supprimer_presence(id: int = Path(ge=1)):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM presences WHERE id = %s", (id,))
-
-    if cursor.rowcount == 0:
+    try:
+        cursor.execute("DELETE FROM presences WHERE id = %s", (id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Présence non trouvée")
+        conn.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur suppression : {str(e)}")
+    finally:
+        cursor.close()
         conn.close()
-        raise HTTPException(status_code=404, detail="Présence non trouvée")
-
-    conn.commit()
-    conn.close()
 
     return {"message": "Présence supprimée avec succès"}
 
@@ -1893,7 +1963,7 @@ def lister_programme(classe: str):
         SELECT p.id, classe.classe AS classe, m.nom AS matiere, e.nom AS enseignant_nom, p.coefficient
         FROM programme p
         JOIN matiere m ON p.matiere_id = m.id
-        JOIN enseignant e ON p.enseignant_id = e.id
+        LEFT JOIN enseignant e ON p.enseignant_id = e.id
         join classe ON p.classe_id = classe.id
         WHERE classe.classe = %s
     """, (classe,))
@@ -2062,6 +2132,8 @@ def creer_tarif_scolarite(tarif: TarifScolariteCreate):
             "tarif_id": tarif_id,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(
@@ -2106,7 +2178,11 @@ def modifier_tarif_scolarite(tarif_id: int, tarif: TarifScolariteUpdate):
     try:
         cursor.execute(sql, tuple(values))
         conn.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Tarif non trouvé")
         return {"message": "Tarif de scolarité mis à jour avec succès"}
+    except HTTPException:
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(
@@ -2391,9 +2467,46 @@ def creer_utilisateur(data: UtilisateurCreate):
 
     return {"message": "Utilisateur créé avec succès"}
 
+# 2b. Renouveler l'access token via refresh_token
+@app.post("/refresh")
+async def refresh_token(request: Request):
+    """Renouvelle l'access token a partir d'un refresh token valide.
+
+    Body JSON : {"refresh_token": "..."}
+    Reponse : {"access_token": "...", "token_type": "bearer", "expires_in": ...}
+    """
+    import json
+    body = await request.json()
+    refresh_token = body.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="refresh_token requis")
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        payload = securite.verifier_refresh_token(refresh_token, conn)
+        utilisateur_id = int(payload["sub"])
+        username = payload["username"]
+
+        # Genere nouveau couple de tokens
+        tokens = securite.creer_tokens(utilisateur_id, "", username)
+        # Stocke le nouveau refresh token
+        securite.stocker_refresh_token(conn, utilisateur_id, tokens["refresh_token"])
+
+        return {"access_token": tokens["access_token"],
+                "token_type": "bearer",
+                "expires_in": tokens["expires_in"]}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        cursor.close()
+        conn.close()
+
 # 2. Se connecter (Login)
 @app.post("/login")
-def connexion(credentials: ConnexionDemande, request: Request):
+async def connexion(credentials: ConnexionDemande, request: Request):
     adresse_ip = request.client.host if request.client else None
     securite.limiteur_connexion.verifier(adresse_ip, credentials.identifiant)
 
@@ -2446,16 +2559,16 @@ def connexion(credentials: ConnexionDemande, request: Request):
                                  credentials.identifiant, adresse_ip)
         conn.commit()
 
-        token_payload = {
-            "user_id": user["id"],
-            "telephone": user["telephone"],
-            "role": user["role"],
-        }
-        access_token = creer_token_accès(token_payload)
+        # Genere access + refresh tokens
+        tokens = securite.creer_tokens(user["id"], user["role"], user.get("identifiant") or user["telephone"])
+        # Stocke le refresh token en base
+        securite.stocker_refresh_token(conn, user["id"], tokens["refresh_token"])
 
         return {
-            "access_token": access_token,
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
             "token_type": "bearer",
+            "expires_in": tokens["expires_in"],
             "utilisateur": {
                 "id": user["id"],
                 "nom": user["nom"],
@@ -2490,9 +2603,14 @@ def lister_utilisateurs():
 
 
 @app.get("/comptes-syndication")
-def comptes_syndication():
+def comptes_syndication(request: Request):
     """Comptes utilisateurs avec identifiant et hash de mot de passe, pour
-    que chaque poste puisse proposer le meme login (multi-poste)."""
+    que chaque poste puisse proposer le meme login (multi-poste).
+    Protégé par secret de syndication quand GS_SYNC_SECRET est configuré."""
+    from server import securite
+    secret = request.headers.get("x-sync-secret", "")
+    if not securite.sync_autorisee(secret):
+        raise HTTPException(status_code=403, detail="Secret de syndication invalide")
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -2503,6 +2621,154 @@ def comptes_syndication():
             ORDER BY nom ASC, prenom ASC
         """)
         return {"comptes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.put("/comptes/{identifiant}")
+def modifier_compte(identifiant: int, data: UtilisateurCreate):
+    """Modifie un compte utilisateur (nom, prenom, telephone, email, role, mot_de_passe optionnel)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Verifie que le compte existe
+        cursor.execute("SELECT id FROM utilisateur WHERE id = %s", (identifiant,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Compte non trouve")
+
+        updates = []
+        params = []
+        if data.nom:
+            updates.append("nom = %s")
+            params.append(data.nom)
+        if data.prenom:
+            updates.append("prenom = %s")
+            params.append(data.prenom)
+        if data.telephone:
+            # Verifie unicite telephone
+            cursor.execute("SELECT id FROM utilisateur WHERE telephone = %s AND id != %s",
+                           (data.telephone, identifiant))
+            if cursor.fetchone():
+                raise HTTPException(status_code=409, detail="Telephone deja utilise")
+            updates.append("telephone = %s")
+            params.append(data.telephone)
+        if data.email is not None:
+            updates.append("email = %s")
+            params.append(data.email)
+        if data.identifiant is not None:
+            updates.append("identifiant = %s")
+            params.append(data.identifiant)
+        if data.role:
+            updates.append("role = %s")
+            params.append(data.role)
+        if data.mot_de_passe:
+            updates.append("mot_de_passe = %s")
+            params.append(hacher_mot_de_passe(data.mot_de_passe))
+            # Revoque les refresh tokens existants (securite)
+            securite.revoquer_tous_refresh_tokens(conn, identifiant)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="Aucun champ a modifier")
+
+        params.append(identifiant)
+        cursor.execute(
+            f"UPDATE utilisateur SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            params)
+        conn.commit()
+        return {"message": "Compte modifie avec succes"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.put("/comptes/{identifiant}/actif")
+def toggle_compte_actif(identifiant: int, actif: bool):
+    """Active/desactive un compte utilisateur."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM utilisateur WHERE id = %s", (identifiant,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Compte non trouve")
+
+        cursor.execute(
+            "UPDATE utilisateur SET statut = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            ("actif" if actif else "inactif", identifiant))
+        conn.commit()
+
+        # Si desactive, revoque tous les refresh tokens
+        if not actif:
+            securite.revoquer_tous_refresh_tokens(conn, identifiant)
+
+        return {"message": f"Compte {'active' if actif else 'desactive'} avec succes"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.put("/comptes/{identifiant}/reset-password")
+def reset_compte_password(identifiant: int, nouveau_mot_de_passe: str):
+    """Reinitialise le mot de passe d'un compte."""
+    if not nouveau_mot_de_passe or len(nouveau_mot_de_passe) < 6:
+        raise HTTPException(status_code=400, detail="Mot de passe trop court (min 6 caracteres)")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM utilisateur WHERE id = %s", (identifiant,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Compte non trouve")
+
+        cursor.execute(
+            "UPDATE utilisateur SET mot_de_passe = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (hacher_mot_de_passe(nouveau_mot_de_passe), identifiant))
+        conn.commit()
+
+        # Revoque tous les refresh tokens (securite)
+        securite.revoquer_tous_refresh_tokens(conn, identifiant)
+
+        return {"message": "Mot de passe reinitialise avec succes"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.delete("/comptes/{identifiant}")
+def supprimer_compte(identifiant: int):
+    """Supprime un compte utilisateur."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM utilisateur WHERE id = %s", (identifiant,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Compte non trouve")
+
+        # Supprime les refresh tokens lies
+        cursor.execute("DELETE FROM refresh_tokens WHERE utilisateur_id = %s", (identifiant,))
+        cursor.execute("DELETE FROM utilisateur WHERE id = %s", (identifiant,))
+        conn.commit()
+        return {"message": "Compte supprime avec succes"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
     finally:
         cursor.close()
         conn.close()
@@ -2621,3 +2887,250 @@ def note_syndication():
 @app.get("/ping")
 def ping():
     return {"status": "online"}
+
+
+class BatimentPoste(BaseModel):
+    uuid_poste: str
+    nom_poste: str = ""
+    adresse_ip: str = ""
+    version_app: str = ""
+    systeme: str = ""
+    est_hote: bool = False
+
+
+@app.post("/present")
+def declarer_poste(request: Request, donnees: BatimentPoste):
+    """Battement de coeur d'un poste du reseau de l'ecole.
+
+    Chaque poste s'annonce regulierement : le serveur conserve sa fiche
+    (identite, version, systeme) et met a jour son « derniere_seen ».
+    C'est la source de verite de la page « Reseau des postes »."""
+    secret = request.headers.get("x-sync-secret", "")
+    if not securite.sync_autorisee(secret):
+        raise HTTPException(status_code=403, detail="Secret de syndication invalide")
+    uuid = (donnees.uuid_poste or "").strip()
+    if not uuid or len(uuid) > 64:
+        raise HTTPException(status_code=400, detail="uuid_poste invalide")
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT uuid_poste FROM poste_presence WHERE uuid_poste = %s", (uuid,))
+        existe = cursor.fetchone() is not None
+        nom = (donnees.nom_poste or "")[:120]
+        ip = ""
+        if donnees.adresse_ip:
+            ip = donnees.adresse_ip[:45]
+        elif request.client and request.client.host:
+            ip = request.client.host[:45]
+        version = (donnees.version_app or "")[:20]
+        systeme = (donnees.systeme or "")[:80]
+        hote = 1 if donnees.est_hote else 0
+        if existe:
+            cursor.execute(
+                "UPDATE poste_presence SET nom_poste = %s, adresse_ip = %s,"
+                " version_app = %s, systeme = %s, est_hote = %s,"
+                " derniere_seen = CURRENT_TIMESTAMP WHERE uuid_poste = %s",
+                (nom, ip, version, systeme, hote, uuid))
+        else:
+            cursor.execute(
+                "INSERT INTO poste_presence"
+                " (uuid_poste, nom_poste, adresse_ip, version_app, systeme, est_hote)"
+                " VALUES (%s, %s, %s, %s, %s, %s)",
+                (uuid, nom, ip, version, systeme, hote))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+    return {"ok": True, "uuid_poste": uuid}
+
+
+def _age_presence(horodatage):
+    """Age en secondes d'un « derniere_seen » recu du serveur (UTC)."""
+    if not horodatage:
+        return None
+    import datetime as _dt
+    try:
+        valeur = _dt.datetime.strptime(str(horodatage)[:19],
+                                       "%Y-%m-%d %H:%M:%S")
+        valeur = valeur.replace(tzinfo=_dt.timezone.utc)
+        return max(0, int((_dt.datetime.now(_dt.timezone.utc) - valeur)
+                          .total_seconds()))
+    except ValueError:
+        return None
+
+
+@app.get("/postes")
+def liste_postes(request: Request):
+    """Liste des postes connus : identite, version, derniere activite et
+    etat en ligne (activite < 120 s). Utilisee par la page « Reseau »."""
+    secret = request.headers.get("x-sync-secret", "")
+    if not securite.sync_autorisee(secret):
+        raise HTTPException(status_code=403, detail="Secret de syndication invalide")
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT uuid_poste, nom_poste, adresse_ip, version_app, systeme,
+                   est_hote, premiere_seen, derniere_seen
+            FROM poste_presence
+            ORDER BY derniere_seen DESC
+        """)
+        lignes = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+    for ligne in lignes:
+        ligne["age_secondes"] = _age_presence(ligne.get("derniere_seen"))
+    return {"postes": lignes}
+
+
+@app.get("/eleve-supprimes-syndication")
+def eleve_supprimes_syndication():
+    """UUID des eleves supprimes/archives cote serveur, pour que chaque
+    poste puisse supprimer ses copies locales (tombstone propagation)."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT uuid_client FROM eleve WHERE est_supprime = TRUE"
+            " AND uuid_client IS NOT NULL AND uuid_client != ''")
+        return {"supprimes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.get("/note-supprimes-syndication")
+def note_supprimes_syndication():
+    """UUID des notes supprimes/archives cote serveur (tombstone)."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT uuid_client FROM note WHERE est_supprime = TRUE"
+            " AND uuid_client IS NOT NULL AND uuid_client != ''")
+        return {"supprimes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.get("/paiement-supprimes-syndication")
+def paiement_supprimes_syndication():
+    """UUID des paiements supprimes/archives cote serveur (tombstone)."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT uuid_client FROM paiement WHERE est_supprime = TRUE"
+            " AND uuid_client IS NOT NULL AND uuid_client != ''")
+        return {"supprimes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.get("/presence-supprimes-syndication")
+def presence_supprimes_syndication():
+    """UUID des presences supprimees/archivees cote serveur (tombstone)."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT uuid_client FROM presences WHERE est_supprime = TRUE"
+            " AND uuid_client IS NOT NULL AND uuid_client != ''")
+        return {"supprimes": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.post("/fermer-annee-scolaire")
+async def fermer_annee_scolaire(request: Request):
+    """Ferme l'année scolaire en cours et ouvre la suivante (appelée par le directeur).
+
+    Body JSON :
+    {
+        "annee_archivee_id": <id de l'année à archiver>,
+        "nouvelle_annee": {
+            "libelle": "2026-2027",
+            "date_debut": "2026-09-01",
+            "date_fin": "2027-06-30",
+            "promouvoir_eleves": true
+        }
+    }
+    """
+    from pydantic import BaseModel
+    from typing import Optional
+    import json
+
+    class NouvelleAnnee(BaseModel):
+        libelle: str
+        date_debut: str
+        date_fin: str
+        promouvoir_eleves: bool = False
+
+    class Payload(BaseModel):
+        annee_archivee_id: int
+        nouvelle_annee: NouvelleAnnee
+
+    # Parse body manually (FastAPI dependency injection would require async)
+    body = json.loads((await request.body()).decode())
+    payload = Payload(**body)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # 1. Archive l'année courante
+        cursor.execute(
+            "UPDATE annee_scolaire SET est_active = 0, archivee = 1 WHERE id = %s",
+            (payload.annee_archivee_id,))
+
+        # 2. Crée la nouvelle année
+        cursor.execute(
+            """INSERT INTO annee_scolaire (libelle, date_debut, date_fin, est_active, archivee)
+               VALUES (%s, %s, %s, 1, 0)""",
+            (payload.nouvelle_annee.libelle, payload.nouvelle_annee.date_debut,
+             payload.nouvelle_annee.date_fin))
+        nouvelle_id = cursor.lastrowid
+
+        # 3. Promeut les élèves si demandé
+        if payload.nouvelle_annee.promouvoir_eleves:
+            # Mapping de progression des classes
+            progression = {
+                "CP1": "CP2", "CP2": "CE1", "CE1": "CE2", "CE2": "CM1",
+                "CM1": "CM2", "CM2": "6eme", "6eme": "5eme", "5eme": "4eme",
+                "4eme": "3eme", "3eme": "2nde", "2nde": "1ere", "1ere": "Terminale"
+            }
+            # Pour chaque élève, trouve sa classe actuelle et la promeut
+            cursor.execute(
+                """SELECT e.id, c.classe FROM eleve e
+                   JOIN inscription i ON i.eleve_id = e.id
+                   JOIN classe c ON c.id = i.classe_id
+                   WHERE i.annee_scolaire_id = %s""",
+                (payload.annee_archivee_id,))
+            eleves = cursor.fetchall()
+            for eleve in eleves:
+                classe_actuelle = eleve.get("classe")
+                if classe_actuelle in progression:
+                    nouvelle_classe_nom = progression[classe_actuelle]
+                    cursor.execute(
+                        "SELECT id FROM classe WHERE classe = %s",
+                        (nouvelle_classe_nom,))
+                    res = cursor.fetchone()
+                    if res:
+                        nouvelle_classe_id = res[0]
+                        cursor.execute(
+                            """UPDATE inscription SET classe_id = %s
+                               WHERE eleve_id = %s AND annee_scolaire_id = %s""",
+                            (nouvelle_classe_id, eleve["id"], nouvelle_id))
+
+        conn.commit()
+        return {"nouvelle_annee_id": nouvelle_id, "message": "Année fermée avec succès"}
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        cursor.close()
+        conn.close()

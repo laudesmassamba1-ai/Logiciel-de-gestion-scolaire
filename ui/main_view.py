@@ -1,20 +1,23 @@
-from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import (QLabel, QMainWindow, QMessageBox, QPushButton,
-                             QShortcut, QWidget, QVBoxLayout, QHBoxLayout,
-                             QStackedWidget, QFrame, QScrollArea,
-                             QSpacerItem, QLineEdit, QSizePolicy)
+import os
+from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QKeySequence, QIcon
+from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QMessageBox,
+                             QPushButton, QShortcut, QSystemTrayIcon, QWidget,
+                             QVBoxLayout, QHBoxLayout, QStackedWidget, QFrame,
+                             QScrollArea, QSpacerItem, QLineEdit, QSizePolicy)
 
 from api import api_disponible
 from core.config import (
-    APP_NAME, ROLE_LABELS, C_GOLD_LIGHT, C_GOLD_PRESSED, C_RED,
-    C_RED_BG, C_INK, C_GRAD_TOP, C_GRAD_BOTTOM,
+    APP_NAME, ROLE_LABELS, C_RED,
+    C_RED_BG, C_GREEN, C_GREEN_BG, C_WARN_BG, C_WARN_TEXT, C_BG,
+    C_SIDEBAR_TEXT, C_PRIMARY_LIGHT, C_PRIMARY_PRESSED, T_SIDEBAR_LARGEUR,
     STYLE_ENTETE, STYLE_ENTETE_TITRE, STYLE_ENTETE_DATE,
     STYLE_RECHERCHE, STYLE_CHIP_APP, STYLE_NAV_ASSISTANT,
     STYLE_BADGE_API,
 )
 from ui import pages
 from ui import motion
+from resources import design_tokens
 from ui.decor import creer_avatar
 from ui.loader import apply_ui
 from ui.workers import run_async
@@ -36,6 +39,11 @@ NAV_PAGES = {
     "btn_nav_programmes": "programmes",
     "btn_nav_parametres": "parametres",
     "btn_nav_comptes": "comptes",
+    "btn_nav_bloc_notes": "bloc_notes",
+    "btn_nav_calendrier": "calendrier",
+    "btn_nav_documents": "documents",
+    "btn_nav_reseau": "reseau",
+    "btn_nav_rapports": "rapports",
 }
 
 # Titres de section de la sidebar : visibles seulement si au moins une
@@ -46,11 +54,63 @@ NAV_SECTIONS = {
                                "presences", "planning", "programmes"],
     "lbl_section_finances": ["caisse", "tarifs", "paiements"],
     "lbl_section_administration": ["personnel", "parametres", "comptes"],
+    "lbl_section_outils": ["bloc_notes", "calendrier", "documents", "reseau",
+                           "rapports"],
 }
+
+# --- Configuration « pages » du theme personnalise ---------------------
+# Le configurateur graphique peut reordonner la sidebar et masquer des pages :
+# `pages.ordre` = liste complete des pages dans l'ordre voulu,
+# `pages.masquees` = pages a retirer de la navigation.
+_PAGES_THEME = getattr(design_tokens, "THEME_BRUT", {}) or {}
+if isinstance(_PAGES_THEME.get("pages"), dict) and _PAGES_THEME["pages"]:
+    _pages_cfg = _PAGES_THEME["pages"]
+    if isinstance(_pages_cfg.get("ordre"), list) and _pages_cfg["ordre"]:
+        _par_nom = {v: k for k, v in NAV_PAGES.items()}
+        _nav_reordonne = {}
+        for _nom in _pages_cfg["ordre"]:
+            if _nom in _par_nom:
+                _nav_reordonne[_par_nom[_nom]] = _nom
+        for _cle, _nom in NAV_PAGES.items():  # pages non listees : a la fin
+            if _nom not in _nav_reordonne.values():
+                _nav_reordonne[_cle] = _nom
+        NAV_PAGES = _nav_reordonne
+    if isinstance(_pages_cfg.get("masquees"), list):
+        _masquees = set(_pages_cfg["masquees"])
+        NAV_PAGES = {k: v for k, v in NAV_PAGES.items() if v not in _masquees}
+    NAV_SECTIONS = {
+        lbl: [p for p in pages_in_section if p in NAV_PAGES.values()]
+        for lbl, pages_in_section in NAV_SECTIONS.items()
+    }
 
 DASHBOARD_BUILDERS = {
     "directeur": pages.dashboard_directeur,
     "gestionnaire": pages.dashboard_gestionnaire,
+}
+
+# Icones FA5 par defaut de la sidebar (utilisees par _poser_icones_nav et
+# proposees a l'edition dans le configurateur graphique -> Pages & icones).
+ICONES_DEFAUTS = {
+    "btn_nav_dashboard": "fa5s.th-large",
+    "btn_nav_stats": "fa5s.chart-bar",
+    "btn_nav_eleves": "fa5s.user-graduate",
+    "btn_nav_caisse": "fa5s.money-bill-alt",
+    "btn_nav_tarifs": "fa5s.tags",
+    "btn_nav_paiements": "fa5s.hand-holding-usd",
+    "btn_nav_classes": "fa5s.school",
+    "btn_nav_cycles": "fa5s.history",
+    "btn_nav_notes": "fa5s.clipboard-list",
+    "btn_nav_presences": "fa5s.calendar-check",
+    "btn_nav_planning": "fa5s.calendar-alt",
+    "btn_nav_personnel": "fa5s.users",
+    "btn_nav_programmes": "fa5s.book",
+    "btn_nav_parametres": "fa5s.cog",
+    "btn_nav_comptes": "fa5s.user-shield",
+    "btn_nav_bloc_notes": "fa5s.sticky-note",
+    "btn_nav_calendrier": "fa5s.solid.calendar-alt",
+    "btn_nav_documents": "fa5s.folder-open",
+    "btn_nav_reseau": "fa5s.network-wired",
+    "btn_nav_rapports": "fa5s.file-pdf",
 }
 
 PAGE_TITRES = {
@@ -69,6 +129,11 @@ PAGE_TITRES = {
     "programmes": "Matieres et Programmes",
     "parametres": "Parametres Etablissement",
     "comptes": "Gestion des Comptes",
+    "bloc_notes": "Bloc Notes",
+    "calendrier": "Calendrier",
+    "documents": "Espace Documents",
+    "reseau": "Reseau des postes",
+    "rapports": "Rapports PDF",
 }
 
 BUILDERS = {
@@ -86,10 +151,19 @@ BUILDERS = {
     "programmes": pages.programmes,
     "parametres": pages.parametres,
     "comptes": pages.comptes,
+    "bloc_notes": pages.bloc_notes,
+    "calendrier": pages.calendrier,
+    "documents": pages.documents,
+    "reseau": pages.reseau,
+    "rapports": pages.rapports,
 }
 
 
 class MainWindow(QMainWindow):
+    """Fenetre principale avec signaux pour mise a jour temps reel."""
+    # Signal emis quand une alarme declenche (texte, jour, heure)
+    alarme_declenchee = pyqtSignal(str, str, str)
+
     def __init__(self, user, on_logout=None):
 
         super().__init__()
@@ -102,6 +176,11 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 600)
         self.setWindowTitle(f"{APP_NAME} - {user['nom_complet']}")
         apply_ui("main.ui", self)
+        
+        # Icone de la fenetre (pour system tray)
+        icon_path = os.path.join(os.path.dirname(__file__), "..", "assets", "icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         self._poser_icones_nav()
 
@@ -111,18 +190,57 @@ class MainWindow(QMainWindow):
         self._inserer_avatar()
         self.lbl_api_status = QLabel()
         self.lbl_api_status.setStyleSheet(
-            STYLE_BADGE_API + " background-color: #FEF3C7; color: #A67B0A;")
+            STYLE_BADGE_API + f" background-color: {C_WARN_BG};"
+            f" color: {C_WARN_TEXT};")
         self.lbl_api_status.installEventFilter(self)
         self.btn_logout.clicked.connect(self.logout)
         self._api_checking = False
         self._refresh_api_status()
+
+        # Le poste peut rejoindre le serveur de l'ecole tout seul en
+        # arriere-plan (sync_worker) : on rafraichit le badge regulierement
+        # pour qu'il passe a « En Ligne » sans action de l'utilisateur.
+        self._api_timer = QTimer(self)
+        self._api_timer.setInterval(8000)
+        self._api_timer.timeout.connect(self._refresh_api_status)
+        self._api_timer.start()
+
+        # Alarms du calendrier : verification reguliere, chaque alarme ne
+        # sonne qu'une seule fois (marquee signalee apres notification).
+        self._alarmes_verifiees = []
+        self._minuteur_alarmes = QTimer(self)
+        self._minuteur_alarmes.setInterval(10000)
+        self._minuteur_alarmes.timeout.connect(self._verifier_alarmes)
+        self._minuteur_alarmes.start()
+
+        # Verification immediate au demarrage pour rattraper les alarmes
+        # ratees pendant que l'app etait fermee
+        QTimer.singleShot(2000, self._verifier_alarmes)
 
         self._wire_nav()
         self._wrap_nav_in_scroll()
         self._ajouter_bouton_assistant()
         self._construire_entete()
         self._installer_palette()
-        self.navigate("dashboard")
+
+        # Raccourci CACHE « Configurateur graphique » (theme, pages,
+        # tailles, couleurs) : outil avance, volontairement non affiche
+        # dans l'interface standard.
+        self._sc_config_theme = QShortcut(QKeySequence("Ctrl+Shift+T"), self)
+        self._sc_config_theme.activated.connect(self._ouvrir_configurateur)
+
+        # Page de demarrage : reglage LOCAL au poste (configurateur -> Poste).
+        _local_cfg = (getattr(design_tokens, "THEME_BRUT", {}) or {}).get("local") or {}
+        _demarrage = _local_cfg.get("page_demarrage") or "dashboard"
+        if _demarrage in BUILDERS:
+            self.navigate(_demarrage)
+        else:
+            self.navigate("dashboard")
+
+    def _ouvrir_configurateur(self):
+        from ui.pages.configurateur import ConfigurateurTheme
+        fenetre = ConfigurateurTheme(self)
+        fenetre.exec_()
 
     def _inserer_avatar(self):
         """Avatar circulaire (initiales) a cote du nom, en haut de la
@@ -155,29 +273,23 @@ class MainWindow(QMainWindow):
             import qtawesome as qta
         except ImportError:
             return
-        icones = {
-            "btn_nav_dashboard": "fa5s.th-large",
-            "btn_nav_stats": "fa5s.chart-bar",
-            "btn_nav_eleves": "fa5s.user-graduate",
-            "btn_nav_caisse": "fa5s.money-bill-alt",
-            "btn_nav_tarifs": "fa5s.tags",
-            "btn_nav_paiements": "fa5s.hand-holding-usd",
-            "btn_nav_classes": "fa5s.school",
-            "btn_nav_cycles": "fa5s.history",
-            "btn_nav_notes": "fa5s.clipboard-list",
-            "btn_nav_presences": "fa5s.calendar-check",
-            "btn_nav_planning": "fa5s.calendar-alt",
-            "btn_nav_personnel": "fa5s.users",
-            "btn_nav_programmes": "fa5s.book",
-            "btn_nav_parametres": "fa5s.cog",
-            "btn_nav_comptes": "fa5s.user-shield",
-        }
+        icones = dict(ICONES_DEFAUTS)
+        # Icônes personnalisables (configurateur -> Pages) : surcharge des
+        # entrees dont le theme fournit une icone « fa5s.* » valide.
+        _icones_theme = (getattr(design_tokens, "THEME_BRUT", {}) or {}).get("icones") or {}
+        if isinstance(_icones_theme, dict):
+            for _nom_page, _icone in _icones_theme.items():
+                if not isinstance(_icone, str) or not _icone.startswith("fa5"):
+                    continue
+                for _nom_btn, _nom_page_btn in NAV_PAGES.items():
+                    if _nom_page_btn == _nom_page:
+                        icones[_nom_btn] = _icone
         for nom_btn, icone in icones.items():
             btn = getattr(self, nom_btn, None)
             if btn is None:
                 continue
             try:
-                btn.setIcon(qta.icon(icone, color="#C8960C"))
+                btn.setIcon(qta.icon(icone, color=C_SIDEBAR_TEXT))
                 btn.setIconSize(QSize(16, 16))
             except Exception:
                 continue
@@ -307,7 +419,7 @@ class MainWindow(QMainWindow):
         split.addWidget(self._colonne)
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
-        split.setSizes([208, max(1, self.width() - 208)])
+        split.setSizes([T_SIDEBAR_LARGEUR, max(1, self.width() - T_SIDEBAR_LARGEUR)])
         lay.insertWidget(0, split, 1)
         self.mainSplit = split
 
@@ -396,13 +508,249 @@ class MainWindow(QMainWindow):
         if event.type() != QEvent.MouseButtonPress:
             return super().eventFilter(source, event)
         if source is self.lbl_api_status:
-            self._ouvrir_assistant_serveur()
+            self._synchroniser_badge()
             return True
         if getattr(self, "recherche_entete", None) is source:
             self._ouvrir_palette(self.recherche_entete.text().strip())
             self.recherche_entete.clear()
             return True
         return super().eventFilter(source, event)
+
+    def _verifier_alarmes(self):
+        from repositories import repos
+        from ui import toast
+        uid = self.user.get("id", 0)
+        nouvelles = []
+        for ev in repos.agenda.alarmes_dues(uid):
+            if ev["id"] in self._alarmes_verifiees:
+                continue
+            self._alarmes_verifiees.append(ev["id"])
+            repos.agenda.marquer_alarme_signalee(ev["id"])
+            nouvelles.append(ev)
+        if not nouvelles:
+            return
+        for ev in nouvelles:
+            texte = f"\U0001F514 {ev['titre']}" + (f" ({ev['jour']} {ev['heure'] or ''})" if ev['heure'] else f" ({ev['jour']})")
+            # Toast non-bloquant (visible si l'app est au premier plan)
+            toast.info(self, texte)
+            # Notification systeme (visible meme si l'app est reduite)
+            self._notifier_systeme(ev['titre'], ev['jour'], ev['heure'] or "")
+            # Afficher la boite de dialogue d'alarme persistante (son en boucle)
+            self._afficher_dialogue_alarme(ev)
+            # Signal pour mise a jour temps reel (page calendrier)
+            self.alarme_declenchee.emit(ev["titre"], ev["jour"], ev["heure"] or "")
+
+    def _afficher_dialogue_alarme(self, evenement):
+        """Affiche une dialogue modale d'alarme avec son en boucle jusqu'a action utilisateur."""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QCheckBox
+        from PyQt5.QtCore import Qt, QTimer
+        from PyQt5.QtMultimedia import QSoundEffect
+        from PyQt5.QtCore import QUrl
+        from core.config import (data_dir, C_RED, C_RED_HOVER, C_RED_PRESSED,
+                                 C_GREEN, C_GREEN_BG, C_AURORA,
+                                 C_TEXT, C_WARNING, C_WARN_BG,
+                                 C_WARNING_HOVER, C_WARNING_PRESSED, C_CONTOUR)
+        
+        dlg = QDialog(self)
+        dlg.setWindowTitle("🔔 Alarme - " + evenement['titre'])
+        dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowStaysOnTopHint | Qt.WindowSystemMenuHint)
+        dlg.setModal(True)
+        dlg.setMinimumWidth(420)
+        dlg.setStyleSheet(f"""
+            QDialog {{ {C_AURORA} }}
+            QLabel {{ color: {C_TEXT}; }}
+            QPushButton {{ 
+                border-radius: 10px; padding: 12px 24px; font-weight: 600; font-size: 13px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        # Icon + titre
+        titre_lbl = QLabel(f"🔔  {evenement['titre']}")
+        titre_lbl.setStyleSheet(f"font-size: 20px; font-weight: 700; color: {C_RED};")
+        titre_lbl.setWordWrap(True)
+        layout.addWidget(titre_lbl)
+        
+        # Details
+        details = []
+        if evenement['jour']:
+            details.append(f"📅 {evenement['jour']}")
+        if evenement['heure']:
+            details.append(f"⏰ {evenement['heure']}")
+        if details:
+            detail_lbl = QLabel("  •  ".join(details))
+            detail_lbl.setStyleSheet(f"font-size: 14px; color: {C_TEXT};")
+            layout.addWidget(detail_lbl)
+        
+        # Checkbox snooze
+        cb_snooze = QCheckBox("Reporter de 10 minutes")
+        cb_snooze.setStyleSheet(f"color: {C_TEXT}; font-size: 13px;")
+        layout.addWidget(cb_snooze)
+        
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+        
+        btn_arreter = QPushButton("⏹  Arrêter l'alarme")
+        btn_arreter.setStyleSheet(f"""
+            QPushButton {{ background: {C_RED}; color: white; border: 1px solid {C_CONTOUR}; }}
+            QPushButton:hover {{ background: {C_RED_HOVER}; }}
+            QPushButton:pressed {{ background: {C_RED_PRESSED}; }}
+        """)
+        btn_arreter.setMinimumHeight(48)
+
+        btn_snooze = QPushButton("⏸  Snooze (10 min)")
+        btn_snooze.setStyleSheet(f"""
+            QPushButton {{ background: {C_WARNING}; color: white; border: 1px solid {C_CONTOUR}; }}
+            QPushButton:hover {{ background: {C_WARNING_HOVER}; }}
+            QPushButton:pressed {{ background: {C_WARNING_PRESSED}; }}
+        """)
+        btn_snooze.setMinimumHeight(48)
+        
+        btn_layout.addWidget(btn_snooze)
+        btn_layout.addWidget(btn_arreter)
+        layout.addLayout(btn_layout)
+        
+        # Son en boucle
+        son_path = data_dir() / "alarm.wav"
+        effect = None
+        timer_loop = None
+        
+        def jouer_son_en_boucle():
+            nonlocal effect, timer_loop
+            if son_path.exists():
+                effect = QSoundEffect(dlg)
+                effect.setSource(QUrl.fromLocalFile(str(son_path)))
+                effect.setVolume(0.8)
+                effect.play()
+                # Rejouer toutes les 3 secondes (approx durée son)
+                timer_loop = QTimer(dlg)
+                timer_loop.setInterval(3000)
+                timer_loop.timeout.connect(lambda: effect.play() if effect else None)
+                timer_loop.start()
+            else:
+                # Fallback beep système
+                timer_loop = QTimer(dlg)
+                timer_loop.setInterval(1500)
+                timer_loop.timeout.connect(lambda: QApplication.beep())
+                timer_loop.start()
+        
+        def arreter_son():
+            if timer_loop:
+                timer_loop.stop()
+            if effect:
+                effect.stop()
+        
+        def on_arreter():
+            arreter_son()
+            # Marquer l'alarme comme traitée si pas snooze
+            if not cb_snooze.isChecked():
+                from repositories import repos
+                repos.agenda.marquer_alarme_signalee(evenement["id"])
+            dlg.accept()
+        
+        def on_snooze():
+            arreter_son()
+            from repositories import repos
+            # Reporter l'événement de 10 minutes
+            from datetime import datetime, timedelta
+            try:
+                dt_str = f"{evenement['jour']} {evenement['heure'] or '00:00'}"
+                dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+                nouveau_dt = dt + timedelta(minutes=10)
+                repos.agenda.modifier(evenement["id"], evenement['titre'],
+                                    nouveau_dt.strftime("%Y-%m-%d"),
+                                    nouveau_dt.strftime("%H:%M"),
+                                    evenement.get('note', ''), 1)
+            except Exception:
+                pass
+            dlg.accept()
+        
+        btn_arreter.clicked.connect(on_arreter)
+        btn_snooze.clicked.connect(on_snooze)
+        
+        # Démarrer le son immédiatement
+        jouer_son_en_boucle()
+        
+        # Fermer proprement
+        def on_reject():
+            arreter_son()
+            dlg.reject()
+        dlg.rejected.connect(on_reject)
+        
+        # Afficher et forcer au premier plan
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    def _notifier_systeme(self, titre, jour, heure):
+        """Affiche une notification systeme via QSystemTrayIcon."""
+        try:
+            if not hasattr(self, "_tray_icon") or self._tray_icon is None:
+                self._tray_icon = QSystemTrayIcon(self)
+                icon_path = self.windowIcon() if not self.windowIcon().isNull() else QIcon()
+                self._tray_icon.setIcon(icon_path)
+                self._tray_icon.setVisible(True)
+            msg = f"{titre}" + (f" à {heure}" if heure else f" le {jour}")
+            self._tray_icon.showMessage(
+                "🔔 Alarme Calendrier",
+                msg,
+                QSystemTrayIcon.Information,
+                10000  # 10 secondes
+            )
+        except Exception:
+            pass  # Silencieux si pas de system tray dispo
+
+    def _jouer_son_test(self):
+        """Joue le son d'alarme une fois (pour test bouton calendrier)."""
+        try:
+            from PyQt5.QtMultimedia import QSoundEffect
+            from PyQt5.QtCore import QUrl
+            from core.config import data_dir
+            son_path = data_dir() / "alarm.wav"
+            if son_path.exists():
+                effect = QSoundEffect(self)
+                effect.setSource(QUrl.fromLocalFile(str(son_path)))
+                effect.setVolume(0.7)
+                effect.play()
+                if not hasattr(self, "_sons_actifs"):
+                    self._sons_actifs = []
+                self._sons_actifs.append(effect)
+                QTimer.singleShot(5000, lambda: self._sons_actifs.remove(effect) if effect in self._sons_actifs else None)
+            else:
+                QApplication.beep()
+        except Exception:
+            QApplication.beep()
+
+    # Alias pour compatibilite avec l'ancien code
+    _jouer_son_alarme = _jouer_son_test
+
+    def _synchroniser_badge(self):
+        """Clic sur le badge : synchronisation manuelle immediate.
+
+        Mode autonome : rien a synchroniser, on ouvre l'assistant
+        multi-postes (ou on guide le gestionnaire) pour activer la
+        connexion entre postes. Sinon on lance un pull structure/donnees/
+        comptes puis la vide de la file en tache de fond.
+        """
+        from core import network
+        if not network.sync_active():
+            self._ouvrir_assistant_serveur()
+            return
+        from services.sync_service import synchroniser_maintenant
+
+        self.lbl_api_status.setText("Synchro...")
+
+        def _tirer():
+            return synchroniser_maintenant()
+
+        def _resultat(_res):
+            self._refresh_api_status()
+
+        run_async(_tirer, _resultat)
 
     def _ouvrir_assistant_serveur(self):
         if not self.ctx.authorizer.can_edit("parametres"):
@@ -424,7 +772,8 @@ class MainWindow(QMainWindow):
           (etre connecte a Internet ne suffit pas : c'est le serveur
           GS qui est teste, pas le web en general).
 
-        Un clic sur le badge ouvre l'assistant graphique multi-postes.
+        Un clic sur le badge declenche une synchronisation immediate
+        (ou ouvre l'assistant en mode autonome).
         """
         from core import network
 
@@ -436,19 +785,21 @@ class MainWindow(QMainWindow):
 
         if not network.sync_active():
             self.lbl_api_status.setText("Mode Autonome")
-            self.lbl_api_status.setStyleSheet(_style(C_GOLD_LIGHT, C_GOLD_PRESSED))
+            self.lbl_api_status.setStyleSheet(
+                _style(C_PRIMARY_LIGHT, C_PRIMARY_PRESSED))
             self.lbl_api_status.setToolTip(
                 "Synchronisation entre postes desactivee.\n"
                 "Les donnees restent enregistrees sur ce poste.\n"
-                "Cliquez ici pour ouvrir l'assistant et activer la\n"
-                "connexion entre les ordinateurs de l'ecole.")
+                "Cliquez ici pour activer la connexion entre les\n"
+                "ordinateurs de l'ecole (assistant multi-postes).")
             return
 
         if self._api_checking:
             return
         self._api_checking = True
         self.lbl_api_status.setText("Connexion...")
-        self.lbl_api_status.setStyleSheet(_style(C_GOLD_LIGHT, C_GOLD_PRESSED))
+        self.lbl_api_status.setStyleSheet(
+            _style(C_PRIMARY_LIGHT, C_PRIMARY_PRESSED))
 
         def _check():
             try:
@@ -462,11 +813,10 @@ class MainWindow(QMainWindow):
             if en_ligne:
                 self.lbl_api_status.setText("En Ligne")
                 self.lbl_api_status.setStyleSheet(
-                    _style("#E4F6E9", "#1B7A3D"))
+                    _style(C_GREEN_BG, C_GREEN))
                 self.lbl_api_status.setToolTip(
                     "Connecte au serveur de l'ecole.\n"
-                    "Les modifications du directeur se propagent aux autres\n"
-                    "postes (structure rapatriee automatiquement).")
+                    "Clic : synchroniser maintenant (pull + file).")
                 motion.bounce_pulse(self.lbl_api_status, fois=2, duree=220)
             else:
                 self.lbl_api_status.setText("Serveur Injoignable")
@@ -475,7 +825,8 @@ class MainWindow(QMainWindow):
                     "Le logiciel ne rejoint pas le serveur de l'ecole\n"
                     "(GS_API_URL, par defaut http://127.0.0.1:8000).\n"
                     "Verifiez que le serveur est demarre :\n"
-                    "une connexion Internet normale ne suffit pas.")
+                    "une connexion Internet normale ne suffit pas.\n"
+                    "Clic : reessayer la synchronisation.")
 
         run_async(_check, _on)
 
@@ -511,11 +862,6 @@ class MainWindow(QMainWindow):
         motion.hover_lift([getattr(self, n) for n in NAV_PAGES if
                            getattr(self, n).isVisible()])
 
-    def _apply_cartoon_shadows(self):
-        """Deprecated (supprimee pour le theme moderne). Conservee pour
-        compatibilite si un ancien code la reference."""
-        return
-
     def _get_page(self, page_name):
         # Une page dont le chargement a echoue est retentee a chaque
         # navigation : l'erreur etait souvent transitoire (ex: donnees en
@@ -537,6 +883,12 @@ class MainWindow(QMainWindow):
             return None
         widget = QWidget()
         widget.setObjectName(f"page_{page_name}")
+        # Fond Apple garanti : un widget dont le stylesheet est efface par
+        # un builder (ou absent) devient transparent -> arriere-plan noir
+        # visible a travers le contenu. On force la teinte BG sur la page
+        # elle-meme (pas sur les enfants, qui gardent leurs propres styles).
+        widget.setStyleSheet(
+            f"QWidget#page_{page_name} {{ background-color: {C_BG}; }}")
         try:
             builder(widget, self.ctx)
         except Exception as exc:
@@ -606,6 +958,7 @@ def _section_label(page_name):
         "lbl_section_scolarite": "Scolarite",
         "lbl_section_finances": "Finances",
         "lbl_section_administration": "Administration",
+        "lbl_section_outils": "Outils",
     }
     for lbl, pages_in in NAV_SECTIONS.items():
         if page_name in pages_in:
@@ -631,6 +984,11 @@ def _conseil_page(page_name):
         "programmes": "Matieres et programmes",
         "parametres": "Configuration et sauvegardes",
         "comptes": "Utilisateurs et roles",
+        "bloc_notes": "Notes personnelles",
+        "calendrier": "Evenements et alarmes",
+        "documents": "PDF generes, classement et export",
+        "reseau": "Postes connectes et connexions",
+        "rapports": "Exports PDF et syntheses",
     }
     return conseils.get(page_name, "")
 

@@ -14,58 +14,54 @@
    <string>Gestion Scolaire</string>
   </property>
 <property name="styleSheet">
-     <string>
-    QMainWindow { background-color: #E7EBF3; }
+      <string>
+    QMainWindow { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #EAF2FF, stop:0.45 #F2EEFF, stop:1 #FBF4E6); }
     #sidebar {
-        background-color: #F2F5FA;
-        border-right: 1px solid #C9D2DF;
-        border-top: 1px solid #FFFFFF;
+        background: rgba(255,255,255,0.72);
+        border-right: 1px solid #E7EDF7;
     }
     #lbl_logo {
-        color: #20202A; font-size: 13px; font-weight: 800;
-        padding: 10px 18px 0px 20px; letter-spacing: 1px;
+        color: #1E2430; font-size: 14px; font-weight: 800;
+        padding: 12px 18px 0px 20px; letter-spacing: 0.5px;
     }
     #lbl_logo_subtitle {
-        color: #A57B0E; font-size: 10px; font-weight: 700;
-        padding: 0px 18px 8px 20px; letter-spacing: 0.8px;
+        color: #C8960C; font-size: 10px; font-weight: 700;
+        padding: 2px 18px 10px 20px; letter-spacing: 0.8px;
     }
     #lbl_section_general, #lbl_section_scolarite,
-    #lbl_section_finances, #lbl_section_administration {
-        color: #4A5568; font-size: 11px; font-weight: 800;
-        letter-spacing: 1.1px; margin: 0 10px;
-        padding: 10px 0px 4px 0px;
+    #lbl_section_finances, #lbl_section_administration, #lbl_section_outils {
+        color: #8C96AB; font-size: 11px; font-weight: 700;
+        letter-spacing: 1px; margin: 0 10px;
+        padding: 12px 0px 4px 0px;
     }
     #sidebar QPushButton {
-        color: #3E4451; text-align: left; padding: 8px 9px;
-        border: 1px solid transparent; border-bottom: 2px solid transparent;
+        color: #465064; text-align: left; padding: 8px 12px;
+        border: none;
         margin: 1px 8px;
-        border-radius: 10px; font-size: 12px; font-weight: 600;
+        border-radius: 12px; font-size: 13px; font-weight: 600;
         background: transparent;
     }
     #sidebar QPushButton:hover {
-        background-color: #FFFFFF; color: #2A2F3A;
-        border: 1px solid #D7DEEA; border-bottom: 2px solid #C2CBD8;
+        background-color: #EDF2FB; color: #1E2430;
     }
-    #sidebar QPushButton:pressed { background-color: #ECEFF5; }
+    #sidebar QPushButton:pressed { background-color: #E0E8F7; }
     #sidebar QPushButton:checked {
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-            stop:0 #F6C23E, stop:0.6 #DEA821, stop:1 #C28C0C);
-        color: #3F2B02; font-weight: 700;
-        border: 1px solid #B88E12; border-bottom: 2px solid #9A7007;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #E7ECFE, stop:1 #F0EBFF);
+        color: #3A52D8; font-weight: 700;
+        border: none;
     }
     #userBox {
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-            stop:0 #FFFFFF, stop:0.7 #F5F8FC, stop:1 #E9EEF6);
-        border: 1px solid #D7DEEA; border-bottom: 2px solid #C2CBD8;
-        border-radius: 14px; margin: 8px 10px;
+        background: rgba(255,255,255,0.9);
+        border: 1px solid #4A5568;
+        border-radius: 12px; margin: 8px 10px;
     }
-    #lbl_user_name { color: #20202A; font-size: 13px; font-weight: 700; }
-    #lbl_user_role { color: #A57B0E; font-size: 11px; font-weight: 700; }
+    #lbl_user_name { color: #1E2430; font-size: 13px; font-weight: 700; }
+    #lbl_user_role { color: #8B5CF6; font-size: 11px; font-weight: 700; }
     #btn_logout {
-        color: #8A93A6; text-align: left; border: none; font-size: 12px;
-        font-weight: 600; padding: 5px 0px; background: transparent; border-radius: 8px;
+        color: #8C96AB; text-align: left; border: none; font-size: 12px;
+        font-weight: 600; padding: 5px 0px; background: transparent; border-radius: 10px;
     }
-    #btn_logout:hover { color: #B91C1C; background-color: #FDECEC; }
+    #btn_logout:hover { color: #E5484D; background-color: #FFECEE; }
     </string>
     </property>
   <widget class="QWidget" name="centralwidget">
@@ -339,21 +335,93 @@
          </property>
         </widget>
        </item>
-       <item>
-        <widget class="QPushButton" name="btn_nav_parametres">
-         <property name="cursor">
-          <cursorShape>PointingHandCursor</cursorShape>
-         </property>
-         <property name="text">
-          <string>Parametres</string>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer">
+<item>
+         <widget class="QPushButton" name="btn_nav_parametres">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Parametres</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_section_outils">
+          <property name="text">
+           <string>OUTILS</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_nav_bloc_notes">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Bloc Notes</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_nav_calendrier">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Calendrier</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+<item>
+         <widget class="QPushButton" name="btn_nav_documents">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Espace Documents</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_nav_reseau">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Reseau des postes</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_nav_rapports">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Rapports PDF</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>

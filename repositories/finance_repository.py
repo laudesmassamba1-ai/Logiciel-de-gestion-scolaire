@@ -1,5 +1,5 @@
-
 import csv
+import uuid
 from urllib.parse import quote
 
 from database import db
@@ -39,16 +39,17 @@ class FinanceRepository(RepositoryBase):
         active = db.query_one(
             "SELECT libelle FROM annees_scolaires WHERE est_active = 1")
         annee = active["libelle"] if active else None
+        uuid_client = str(uuid.uuid4())
         payload = {"reference": reference, "beneficiaire": beneficiaire, "motif": motif,
                    "categorie": categorie, "montant": montant,
                    "type": type_trans, "mode_reglement": mode,
-                   "annee_scolaire": annee}
+                   "annee_scolaire": annee, "uuid_client": uuid_client}
         self._route_write(
             "POST", "/paiement", payload,
             db.execute,
-            """INSERT INTO transactions (reference, beneficiaire, motif, categorie, montant, type, mode_reglement, annee_scolaire)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (reference, beneficiaire, motif, categorie, montant, type_trans, mode, annee))
+            """INSERT INTO transactions (reference, beneficiaire, motif, categorie, montant, type, mode_reglement, annee_scolaire, uuid_client)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (reference, beneficiaire, motif, categorie, montant, type_trans, mode, annee, uuid_client))
         return reference
 
     def delete_transaction(self, transaction_id):
@@ -56,13 +57,17 @@ class FinanceRepository(RepositoryBase):
                              (transaction_id,))
         if not ligne:
             return
-        if ligne["paiement_id"]:
-            # Encaissement d'eleve : l'ecriture de caisse ne doit pas
-            # survivre a son origine, on supprime aussi le paiement source.
+        if ligne["paiement_id"] is not None:
             self._supprimer_paiement(ligne["paiement_id"])
             return
         reference = ligne["reference"]
-        if reference:
+        uuid_client = ligne.get("uuid_client")
+        if reference and uuid_client:
+            self._route_write("DELETE", f"/supprimerPaiement/{quote(reference)}",
+                              {"uuid_client": uuid_client},
+                              db.execute, "DELETE FROM transactions WHERE id = ?",
+                              (transaction_id,))
+        elif reference:
             self._route_write("DELETE", f"/supprimerPaiement/{quote(reference)}", {},
                               db.execute, "DELETE FROM transactions WHERE id = ?",
                               (transaction_id,))
@@ -174,13 +179,25 @@ class FinanceRepository(RepositoryBase):
         sql += " ORDER BY p.date_paiement DESC, p.id DESC"
         return db.query(sql, params)
 
+    def _ecriture_existe(self, paiement_id):
+        row = db.query_one(
+            "SELECT id FROM transactions WHERE paiement_id = ?",
+            (paiement_id,))
+        return row is not None
+
     def _creer_ecriture_caisse(self, paiement_id):
         """Ecriture de caisse (type 'entree') liee a un paiement d'eleve.
 
         C'est ce qui rend un encaissement visible dans la Caisse (qui ne
         lit que la table `transactions`) et dans tous les agregats qui en
         dependent : solde, export, encaissements du jour, tresorerie.
+
+        Idempotente : si une ecriture existe deja pour ce paiement (que ce
+        soit via l'insertion atomique de `add_paiement`, la reconciliation
+        ou un pull precedent), elle est laissee intacte.
         """
+        if self._ecriture_existe(paiement_id):
+            return
         p = db.query_one(
             """SELECT p.*, e.prenom, e.nom
                FROM paiements p JOIN eleves e ON e.id = p.eleve_id
@@ -190,58 +207,103 @@ class FinanceRepository(RepositoryBase):
         reference = _gen_reference("REC")
         beneficiaire = (
             f"{p['prenom'] or ''} {p['nom'] or ''}".strip() or "-")
+        uuid_client = str(uuid.uuid4())
         db.execute(
             """INSERT INTO transactions
                    (date, reference, beneficiaire, motif, categorie, montant,
-                    type, mode_reglement, annee_scolaire, paiement_id)
-               VALUES (?, ?, ?, ?, ?, ?, 'entree', ?, ?, ?)""",
+                    type, mode_reglement, annee_scolaire, paiement_id, uuid_client)
+              VALUES (?, ?, ?, ?, ?, ?, 'entree', ?, ?, ?, ?)""",
             (p["date_paiement"], reference, beneficiaire,
              p["type_frais"] or "Paiement", p["type_frais"] or "Autres",
-             p["montant"], p["mode_reglement"], p["annee_scolaire"], paiement_id))
+             p["montant"], p["mode_reglement"], p["annee_scolaire"], paiement_id, uuid_client))
+
+    def reconcilier_caisse(self):
+        """Cree les ecritures de caisse manquantes pour les paiements qui
+        n'en ont pas encore (paiements anciens, paiements rapatries par la
+        synchro, ou encaissements crees par un chemin sans ecriture).
+
+        Rend la Caisse coherente avec la liste des Paiements : chaque
+        paiement doit avoir exactement UNE ecriture 'entree' associee.
+        Idempotente : reappeler ne cree rien. Retourne le nombre d'ecritures
+        creees.
+        """
+        orphelins = db.query(
+            """SELECT p.id FROM paiements p
+               LEFT JOIN transactions t ON t.paiement_id = p.id
+               WHERE t.id IS NULL""")
+        for row in orphelins:
+            self._creer_ecriture_caisse(row["id"])
+        return len(orphelins)
 
     def _supprimer_paiement(self, paiement_id):
-        """Supprime un paiement d'eleve et son ecriture de caisse liee.
-
-        Route la suppression vers le serveur quand l'eleve a un uuid_client
-        (dedoublonne par la cle composee), sinon suppression locale pure
-        (donnee importee sans identifiant serveur).
-        """
         row = db.query_one(
-            """SELECT e.uuid_client AS uuid_client, p.montant, p.trimestre,
+            """SELECT p.uuid_client, e.uuid_client AS eleve_uuid, p.montant, p.trimestre,
                       p.type_frais, p.annee_scolaire
                FROM paiements p JOIN eleves e ON e.id = p.eleve_id
                WHERE p.id = ?""", (paiement_id,))
         if row and row["uuid_client"]:
-            ref = "|".join(str(row.get(k) or "")
+            ref = "|".join("" if row[k] is None else str(row[k])
                            for k in ("uuid_client", "montant", "trimestre",
                                      "type_frais", "annee_scolaire"))
-            self._route_write("DELETE", f"/supprimerPaiement/{quote(ref)}", {},
-                              db.execute, "DELETE FROM paiements WHERE id = ?",
-                              (paiement_id,))
+            with db.transaction() as txn:
+                txn.execute("DELETE FROM paiements WHERE id = ?", (paiement_id,))
+                txn.execute("DELETE FROM transactions WHERE paiement_id = ?",
+                            (paiement_id,))
+            self._route_write("DELETE", f"/supprimerPaiement/{quote(ref)}",
+                              {"uuid_client": row["uuid_client"]},
+                              lambda *a, **kw: None)
         elif row:
-            db.execute("DELETE FROM paiements WHERE id = ?", (paiement_id,))
-        db.execute("DELETE FROM transactions WHERE paiement_id = ?", (paiement_id,))
+            with db.transaction() as txn:
+                txn.execute("DELETE FROM paiements WHERE id = ?", (paiement_id,))
+                txn.execute("DELETE FROM transactions WHERE paiement_id = ?",
+                            (paiement_id,))
 
     def add_paiement(self, eleve_id, montant, mode_reglement, type_frais,
                      annee_scolaire="", trimestre=""):
         eleve = db.query_one(
-            "SELECT e.uuid_client, c.nom AS classe_nom FROM eleves e"
-            " LEFT JOIN classes c ON c.id = e.classe_id WHERE e.id = ?",
+            """SELECT e.uuid_client, e.nom, e.prenom, c.nom AS classe_nom
+               FROM eleves e LEFT JOIN classes c ON c.id = e.classe_id
+               WHERE e.id = ?""",
             (eleve_id,))
+        # Génère un uuid_client stable si absent
+        uuid_client = eleve["uuid_client"] if eleve and eleve["uuid_client"] else str(uuid.uuid4())
+        if eleve and not eleve["uuid_client"]:
+            db.execute("UPDATE eleves SET uuid_client = ? WHERE id = ?", (uuid_client, eleve_id))
         payload = {"eleve_id": eleve_id, "montant": montant,
                    "mode_reglement": mode_reglement, "type_frais": type_frais,
                    "annee_scolaire": annee_scolaire, "trimestre": trimestre,
-                   "eleve_uuid": eleve["uuid_client"] if eleve else None,
-                   "classe_nom": eleve["classe_nom"] if eleve else None}
-        paiement_id = self._route_write(
-            "POST", "/paiement", payload,
-            db.execute,
-            """INSERT INTO paiements (eleve_id, montant, mode_reglement, type_frais,
-                                      date_paiement, annee_scolaire, trimestre)
-               VALUES (?, ?, ?, ?, date('now', 'localtime'), ?, ?)""",
-            (eleve_id, montant, mode_reglement, type_frais, annee_scolaire, trimestre))
-        self._creer_ecriture_caisse(paiement_id)
-        return paiement_id
+                   "eleve_uuid": uuid_client,
+                   "classe_nom": eleve["classe_nom"] if eleve else None,
+                   "uuid_client": uuid_client}
+
+        def _inserer_paiement_et_caisse():
+            """Insertion atomique : le paiement ET son ecriture de caisse
+            ('entree' lise par la Caisse) sont creees dans la meme
+            transaction, sinon un encaissement sans trace de caisse
+            corromprait les soldes et la tresorerie."""
+            beneficiaire = (
+                f"{eleve['prenom'] or ''} {eleve['nom'] or ''}".strip()
+                if eleve else "-")
+            with db.transaction() as txn:
+                cur = txn.execute(
+                    """INSERT INTO paiements (eleve_id, montant, mode_reglement, type_frais,
+                                              date_paiement, annee_scolaire, trimestre, uuid_client)
+                           VALUES (?, ?, ?, ?, date('now', 'localtime'), ?, ?, ?)""",
+                        (eleve_id, montant, mode_reglement, type_frais,
+                         annee_scolaire, trimestre, uuid_client))
+                paiement_id = cur.lastrowid
+                txn.execute(
+                    """INSERT INTO transactions
+                           (date, reference, beneficiaire, motif, categorie, montant,
+                            type, mode_reglement, annee_scolaire, paiement_id, uuid_client)
+                      VALUES (date('now', 'localtime'), ?, ?, ?, ?, ?, 'entree', ?, ?, ?, ?)""",
+                    (_gen_reference("REC"), beneficiaire,
+                     type_frais or "Paiement", type_frais or "Autres",
+                     montant, mode_reglement, annee_scolaire, paiement_id, str(uuid.uuid4())))
+            return paiement_id
+
+        return self._route_write("POST", "/paiement", payload,
+                                 _inserer_paiement_et_caisse)
 
     def delete_paiement(self, paiement_id):
         self._supprimer_paiement(paiement_id)

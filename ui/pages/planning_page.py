@@ -1,18 +1,20 @@
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox,
     QComboBox, QFormLayout, QPushButton, QTableWidgetItem, QVBoxLayout,
 )
 
 from repositories import repos
-from services import reports
+from services import pdf_export
 from ui import toast
 from ui.pages.helpers import (
     _classe_items, _reload_combo,
 )
 from ui.widgets.page_templates import ListPageTemplate
 from core.config import (
-    CRENEAUX, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY,
+    CRENEAUX, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, C_AURORA, C_BORDER,
+    C_TEXT, lire_composant,
 )
 
 JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
@@ -22,7 +24,13 @@ class PlanningCellDialog(QDialog):
     def __init__(self, parent, jour, creneau, matieres, current=None):
         super().__init__(parent)
         self.setWindowTitle(f"{jour} - {creneau}")
-        self.resize(320, 120)
+        self.resize(360, 150)
+        self.setStyleSheet(
+            f"QDialog {{ {C_AURORA} }}"
+            f"QLineEdit, QComboBox {{ border: 1px solid {C_BORDER};"
+            " border-radius: 8px; padding: 5px 8px; }"
+            f"QLineEdit:focus, QComboBox:focus {{ border: 1px solid #4F6DF5; }}"
+        )
         lay = QVBoxLayout(self)
         form = QFormLayout()
         self.combo = QComboBox()
@@ -44,6 +52,11 @@ class PlanningCellDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        btn_ok = buttons.button(QDialogButtonBox.Ok)
+        btn_cancel = buttons.button(QDialogButtonBox.Cancel)
+        btn_ok.setText("OK")
+        btn_ok.setStyleSheet(STYLE_BTN_PRIMARY)
+        btn_cancel.setStyleSheet(STYLE_BTN_SECONDARY)
         lay.addWidget(buttons)
 
     def values(self):
@@ -109,7 +122,15 @@ def planning(page, ctx):
             tpl.pile.setCurrentWidget(tpl.vide)
             return
         tpl.pile.setCurrentWidget(table)
-        grid = repos.planning_for(classe_id)
+        # Composant themable "planning" : couleurs cibles de la grille.
+        comp = lire_composant("planning")
+        table.setStyleSheet(
+            "QTableWidget { gridline-color: " + comp["grille"] + ";"
+            " alternate-background-color: " + comp["fond_cellule"] + ";"
+            " border: 1px solid " + comp["bordure"] + "; }"
+            "QHeaderView::section { background: " + comp["fond_entete"] + ";"
+            " color: " + comp["texte_entete"] + "; }")
+        grid = repos.planning_for(classe_id) if hasattr(repos, 'planning_for') else {}
         for row in range(len(CRENEAUX)):
             creneau = _creneau(table, row)
             for col in range(len(JOURS)):
@@ -119,7 +140,10 @@ def planning(page, ctx):
                     texte = entree["matiere"] or ""
                     if entree.get("salle"):
                         texte += f" ({entree['salle']})"
-                    table.setItem(row, col, QTableWidgetItem(texte))
+                    item = QTableWidgetItem(texte)
+                    item.setBackground(QColor(comp["fond_occupe"]))
+                    item.setForeground(QColor(comp["texte_occupe"]))
+                    table.setItem(row, col, item)
         table.refresh_height()
 
     def _start_edit():
@@ -191,7 +215,10 @@ def planning(page, ctx):
         if not classe:
             QMessageBox.warning(page, "Planning", "Choisissez une classe.")
             return
-        reports.planning(classe)
+        try:
+            pdf_export.planning_pdf(classe)
+        except RuntimeError as e:
+            QMessageBox.warning(page, "Planning", str(e))
 
     btn_edit.clicked.connect(
         lambda: _finish_edit() if editing["on"] else _start_edit())

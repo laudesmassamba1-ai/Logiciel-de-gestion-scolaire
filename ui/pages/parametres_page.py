@@ -4,41 +4,52 @@ from pathlib import Path
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QHBoxLayout, QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton,
-    QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QLabel as QLbl, QLineEdit, QListWidget, QMessageBox, QPushButton,
+    QVBoxLayout, QWidget, QSplitter, QSpacerItem, QGroupBox, QSpinBox,
+    QScrollArea, QFileDialog, QTabWidget,
 )
+from PyQt5.QtGui import QPixmap, QFont
 
 from repositories import repos
 from ui import toast
 from ui.loader import apply_ui
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _styler_carte,
+    _btn, _simple_btn_style, _styler_carte, confirmer,
 )
 from core.config import (
     STYLE_BTN_PRIMARY, STYLE_BTN_DANGER, STYLE_BTN_SECONDARY,
     STYLE_GROUP_BOX, STYLE_HELP_MUTED, STYLE_LABEL_BOLD_MUTED,
     STYLE_IMAGE_PLACEHOLDER, STYLE_LIST_CARD, STYLE_BTN_MINI_DANGER,
     STYLE_BTN_ADD_SMALL,
-    C_GOLD_BG, C_GOLD_PRESSED, C_GOLD_BORDER,
+    C_WARN_BG, C_WARN_TEXT,
+    C_PRIMARY_PRESSED, C_TEXT,
     C_RED_BG, C_RED, C_RED_BORDER,
+    C_AURORA, C_GREEN,
+    C_BORDER,
+    API_BASE_URL, est_hote, code_ecole,
 )
+from core import network
+from api.client import api_disponible
+from services.sync_service import pull_structure
+from services.serveur_local import port_configure, adresse_locale
+from ui.assistant_serveur import ouvrir_assistant
+from services.appreciations import lire_config, enregistrer_config
+from services.backup import backup_database, restore_database, list_backups, delete_backup
+from ui.workers import run_async
 
 
 def parametres(page, ctx):
-    if page.layout() is not None:
-        return
     if not ctx.can_edit("parametres"):
-        from PyQt5.QtWidgets import QLabel as _Lbl
-        refuse = _Lbl("Acces reserve au directeur : seul le directeur peut "
+        refuse = QLabel("Acces reserve au directeur : seul le directeur peut "
                       "modifier les parametres de l'etablissement.")
-        refuse.setStyleSheet("color: #B91C1C; font-size: 14px; padding: 30px;")
+        refuse.setStyleSheet(f"color: {C_RED}; font-size: 14px; padding: 30px;")
         refuse.setWordWrap(True)
         refuse.setAlignment(Qt.AlignCenter)
         lay_refus = QVBoxLayout(page)
         lay_refus.addWidget(refuse)
         return
     apply_ui("parametres/parametres.ui", page)
-    page.setStyleSheet("")
+    page.setStyleSheet(C_AURORA)
     for _card in ("card_inputs", "card1", "card2", "card3", "previewCard"):
         _carte = getattr(page, _card, None)
         if _carte is not None:
@@ -47,7 +58,6 @@ def parametres(page, ctx):
     page.btn_delete.setStyleSheet(STYLE_BTN_DANGER)
     page.btn_update.setStyleSheet(STYLE_BTN_PRIMARY)
 
-    from PyQt5.QtWidgets import QSplitter
     body = page.horizontalLayout_Body
     split = QSplitter(Qt.Horizontal)
     split.setObjectName("parametresSplit")
@@ -65,7 +75,6 @@ def parametres(page, ctx):
     scroll_lay = page.verticalLayout_Scroll
 
     def _enlever_stretch_final():
-        from PyQt5.QtWidgets import QSpacerItem
         while scroll_lay.count():
             dernier = scroll_lay.itemAt(scroll_lay.count() - 1)
             if isinstance(dernier, QSpacerItem) and getattr(
@@ -80,10 +89,6 @@ def parametres(page, ctx):
         scroll_lay.addStretch(1)
 
 
-    from PyQt5.QtWidgets import QGroupBox, QListWidget, QLabel as QLbl
-    from PyQt5.QtGui import QPixmap
-    from PyQt5.QtCore import Qt as QtConst
-
     backup_group = QGroupBox("Sauvegarde & Restauration")
     backup_group.setStyleSheet(STYLE_GROUP_BOX)
     backup_lay = QVBoxLayout(backup_group)
@@ -96,7 +101,7 @@ def parametres(page, ctx):
     page.btn_backup.setStyleSheet(STYLE_BTN_PRIMARY)
     page.btn_restore = QPushButton("Restaurer une sauvegarde")
     page.btn_restore.setCursor(Qt.PointingHandCursor)
-    page.btn_restore.setStyleSheet(_simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD_PRESSED, border=C_GOLD_BORDER))
+    page.btn_restore.setStyleSheet(_simple_btn_style(bg=C_WARN_BG, fg=C_WARN_TEXT, border=C_BORDER))
     page.btn_delete_backup = QPushButton("Supprimer")
     page.btn_delete_backup.setCursor(Qt.PointingHandCursor)
     page.btn_delete_backup.setStyleSheet(_simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER))
@@ -141,9 +146,6 @@ def parametres(page, ctx):
     _ajouter_au_scroll(sync_group)
 
     def do_sync():
-        from api.client import api_disponible
-        from core import network
-        from core.config import API_BASE_URL
         if not api_disponible(force=True):
             boite = QMessageBox(QMessageBox.Warning, "Serveur non demarre",
                                 f"Aucun serveur joignable sur {API_BASE_URL}.\n\n"
@@ -152,10 +154,8 @@ def parametres(page, ctx):
                                 "sans aucune manipulation technique.",
                                 QMessageBox.Yes | QMessageBox.No, page)
             if boite.exec_() == QMessageBox.Yes:
-                from ui.assistant_serveur import ouvrir_assistant
                 ouvrir_assistant(page)
             return
-        from services.sync_service import pull_structure
         btn_sync.setEnabled(False)
         btn_sync.setText("Recuperation en cours...")
         try:
@@ -185,6 +185,96 @@ def parametres(page, ctx):
 
     btn_sync.clicked.connect(do_sync)
 
+    # ── Reseau & connexion entre les postes ──────────────────────────
+    reseau_group = QGroupBox("Reseau & connexion entre les postes")
+    reseau_group.setStyleSheet(STYLE_GROUP_BOX)
+    reseau_lay = QVBoxLayout(reseau_group)
+    reseau_lay.setContentsMargins(10, 10, 10, 10)
+    reseau_lay.setSpacing(8)
+
+    lbl_reseau_help = QLbl(
+        "La connexion entre les postes est AUTOMATIQUE : des qu'un autre "
+        "ordinateur de l'ecole est joignable (WiFi de l'ecole, Ethernet ou "
+        "Internet), il rejoint le serveur tout seul. Vous pouvez aussi "
+        "reprendre la main et tout configurer a la main dans la fenetre "
+        "de configuration (adresse, port, reseau WiFi de l'ecole, code de "
+        "l'ecole, hotspot, demarrage automatique).")
+    lbl_reseau_help.setStyleSheet(STYLE_HELP_MUTED)
+    lbl_reseau_help.setWordWrap(True)
+    reseau_lay.addWidget(lbl_reseau_help)
+
+    lbl_reseau_statut = QLbl()
+    lbl_reseau_statut.setWordWrap(True)
+    reseau_lay.addWidget(lbl_reseau_statut)
+
+    lbl_reseau_code = QLbl()
+    lbl_reseau_code.setStyleSheet(STYLE_HELP_MUTED)
+    reseau_lay.addWidget(lbl_reseau_code)
+
+    btn_reseau = QPushButton("Ouvrir la configuration reseau (manuel)")
+    btn_reseau.setCursor(Qt.PointingHandCursor)
+    btn_reseau.setStyleSheet(STYLE_BTN_SECONDARY)
+    reseau_lay.addWidget(btn_reseau)
+
+    _ajouter_au_scroll(reseau_group)
+
+    def _refresh_reseau(verifier_en_ligne=True):
+        actif = network.sync_active()
+        hote = est_hote()
+        debut = ("Sur ce poste : SERVEUR de l'ecole (hote) — "
+                 if hote else "Sur ce poste : CLIENT raccorde a - ") + API_BASE_URL
+        if actif:
+            lbl_reseau_statut.setStyleSheet(
+                f"color: {C_PRIMARY_PRESSED};"
+                " font-size: 13px; font-weight: 800;")
+            lbl_reseau_statut.setText(debut + " — verification de la liaison...")
+        else:
+            lbl_reseau_statut.setStyleSheet(
+                f"color: {C_TEXT}; font-size: 13px; font-weight: 800;")
+            lbl_reseau_statut.setText(
+                "Mode AUTONOME — les donnees restent sur cet ordinateur "
+                "uniquement.")
+        code = code_ecole()
+        lbl_reseau_code.setText(
+            f"Code de l'ecole : {code or 'aucun'}"
+            + (f"   |   Adresse pour les autres postes : "
+               f"{_adresse_locale()}" if hote else ""))
+        btn_reseau.setText("Ouvrir la configuration reseau (manuel)")
+        btn_reseau.setEnabled(True)
+        if not (actif and verifier_en_ligne):
+            return
+
+        def _tache():
+            try:
+                return api_disponible(force=True)
+            except Exception:
+                return False
+
+        def _fini(en_ligne):
+            if not network.sync_active():
+                return
+            lbl_reseau_statut.setText(
+                debut + (" — en ligne."
+                         if en_ligne else " — serveur injoignable pour l'instant."))
+            lbl_reseau_statut.setStyleSheet(
+                f"color: {C_GREEN if en_ligne else C_RED};"
+                " font-size: 13px; font-weight: 800;")
+
+        run_async(_tache, _fini)
+
+    def _adresse_locale():
+        return adresse_locale(port_configure())
+
+    def ouvrir_reseau():
+        btn_reseau.setEnabled(False)
+        try:
+            ouvrir_assistant(page)
+        finally:
+            _refresh_reseau()
+
+    btn_reseau.clicked.connect(ouvrir_reseau)
+    _refresh_reseau()
+
     img_lay = QHBoxLayout()
     for key, label_text in [("bandeau_haut", "Bandeau haut"), ("bandeau_bas", "Bandeau bas"), ("signature", "Signature")]:
         box = QVBoxLayout()
@@ -213,15 +303,16 @@ def parametres(page, ctx):
 
     def load():
         params = repos.parametres()
+        page.input_nom_ecole.setText(params.get("nom_ecole", ""))
         page.input_signer_name.setText(params.get("signataire_nom", ""))
         page.input_signer_title.setText(params.get("signataire_titre", ""))
         page.input_city.setText(params.get("ville", ""))
         page.input_country.setText(params.get("pays", ""))
-        remplis = sum(1 for cle in ("signataire_nom", "signataire_titre", "ville", "pays",
-                                    "bandeau_haut", "bandeau_bas", "signature")
-                      if params.get(cle))
+        cles_config = ("nom_ecole", "signataire_nom", "signataire_titre", "ville",
+                       "pays", "bandeau_haut", "bandeau_bas", "signature")
+        remplis = sum(1 for cle in cles_config if params.get(cle))
         page.lbl_progression.setText(
-            f"Configuration : {round(remplis / 7 * 100)}%")
+            f"Configuration : {round(remplis / len(cles_config) * 100)}%")
         _display_images(params)
         _load_appreciations()
 
@@ -238,12 +329,11 @@ def parametres(page, ctx):
             if img_path and Path(img_path).exists():
                 pixmap = QPixmap(img_path)
                 if not pixmap.isNull():
-                    lbl.setPixmap(pixmap.scaled(190, 75, QtConst.KeepAspectRatio, QtConst.SmoothTransformation))
+                    lbl.setPixmap(pixmap.scaled(190, 75, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                     continue
-            lbl.setText("Aucune image")
+                lbl.setText("Aucune image")
 
     def upload(key):
-        from PyQt5.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
             page, "Choisir une image", "", "Images (*.png *.jpg *.jpeg)")
         if not path:
@@ -263,16 +353,13 @@ def parametres(page, ctx):
         if lbl is not None:
             pixmap = QPixmap(path)
             if not pixmap.isNull():
-                lbl.setPixmap(pixmap.scaled(190, 75, QtConst.KeepAspectRatio, QtConst.SmoothTransformation))
+                lbl.setPixmap(pixmap.scaled(190, 75, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         page.lbl_status.setText(f"{key} choisi : {Path(path).name}")
 
     for key, btn in upload_map.items():
         btn.clicked.connect(partial(upload, key))
 
     # ── Appreciations configurables ──────────────────────────────────
-    from PyQt5.QtWidgets import QSpinBox, QScrollArea
-    from PyQt5.QtGui import QFont
-
     app_group = QGroupBox("Appreciations (notes)")
     app_group.setStyleSheet(STYLE_GROUP_BOX)
     app_lay = QVBoxLayout(app_group)
@@ -293,12 +380,13 @@ def parametres(page, ctx):
         spin = QSpinBox()
         spin.setRange(0, 20)
         spin.setValue(seuil)
-        spin.setFixedWidth(60)
+        spin.setFixedWidth(90)
         lbl_seuil = QLbl("/20  →")
         lbl_seuil.setStyleSheet(STYLE_HELP_MUTED)
         inp = QLineEdit(libelle)
         inp.setPlaceholderText("Nom de l'appreciation")
         btn_suppr = QPushButton("✕")
+        btn_suppr.setCursor(Qt.PointingHandCursor)
         btn_suppr.setFixedSize(26, 26)
         btn_suppr.setStyleSheet(STYLE_BTN_MINI_DANGER)
         row.addWidget(spin)
@@ -328,10 +416,6 @@ def parametres(page, ctx):
     _ajouter_au_scroll(app_group)
 
     def _load_appreciations():
-        from services.appreciations import lire_config
-        for w_data in app_row_widgets:
-            pass  # will clear below
-        # clear existing rows
         while app_rows_layout.count():
             item = app_rows_layout.takeAt(0)
             w = item.widget()
@@ -343,13 +427,13 @@ def parametres(page, ctx):
             _ajouter_ligne_app(p["seuil"], p["libelle"])
 
     def _save_appreciations():
-        from services.appreciations import enregistrer_config
         paliers = []
         for spin, inp in app_row_widgets:
             paliers.append({"seuil": spin.value(), "libelle": inp.text().strip()})
         enregistrer_config(paliers)
 
     def save():
+        repos.set_parametre("nom_ecole", page.input_nom_ecole.text().strip())
         repos.set_parametre("signataire_nom", page.input_signer_name.text().strip())
         repos.set_parametre("signataire_titre", page.input_signer_title.text().strip())
         repos.set_parametre("ville", page.input_city.text().strip())
@@ -368,14 +452,12 @@ def parametres(page, ctx):
         load()
 
     def delete_config():
-        from ui.pages.helpers import confirmer
         if confirmer(page, "Supprimer la configuration ?", "Parametres"):
             repos.delete_parametres()
             load()
             page.lbl_status.setText("Configuration supprimee.")
 
     def do_backup():
-        from services.backup import backup_database
         try:
             path = backup_database()
             toast.succes(page, f"Sauvegarde creee avec succes :\n{path}")
@@ -384,13 +466,10 @@ def parametres(page, ctx):
             QMessageBox.critical(page, "Erreur", f"Echec de la sauvegarde :\n{e}")
 
     def do_restore():
-        from PyQt5.QtWidgets import QFileDialog
-        from services.backup import restore_database
         path, _ = QFileDialog.getOpenFileName(
             page, "Restaurer une sauvegarde", "", "Fichiers DB (*.db)")
         if not path:
             return
-        from ui.pages.helpers import confirmer
         if confirmer(page, "Restaurer cette sauvegarde ?\n"
                       "L'application redemarrera.", "Restauration"):
             try:
@@ -404,7 +483,6 @@ def parametres(page, ctx):
                                      f"Echec de la restauration :\n{e}")
 
     def _refresh_backups():
-        from services.backup import list_backups
         backups = list_backups()
         page.list_backups.clear()
         for b in backups:
@@ -413,7 +491,6 @@ def parametres(page, ctx):
         page.lbl_backups_empty.setVisible(not backups)
 
     def do_delete_backup():
-        from services.backup import delete_backup, list_backups
         item = page.list_backups.currentItem()
         if not item:
             QMessageBox.information(page, "Sauvegarde", "Selectionnez une sauvegarde a supprimer.")
@@ -421,7 +498,6 @@ def parametres(page, ctx):
         backups = list_backups()
         idx = page.list_backups.row(item)
         if 0 <= idx < len(backups):
-            from ui.pages.helpers import confirmer
             if confirmer(page,
                          f"Supprimer la sauvegarde {backups[idx]['name']} ?",
                          "Supprimer"):
@@ -434,6 +510,79 @@ def parametres(page, ctx):
     page.btn_restore.clicked.connect(do_restore)
     page.btn_delete_backup.clicked.connect(do_delete_backup)
 
+    # ── Passage du contenu du scroll en onglets (sans casser les liens) ──
+    def _regrouper_onglets(scroll_lay):
+        page.backup_group = backup_group
+        page.sync_group = sync_group
+        page.reseau_group = reseau_group
+        page.image_host = img_host
+        page.appreciations_group = app_group
+
+        def _appartenance(w):
+            nom = w.objectName() or ""
+            if nom in ("card_inputs", "card1", "card2", "card3",
+                       "image_host"):
+                return (0, "Etablissement")
+            if nom == "appreciations_group":
+                return (1, "Appreciations")
+            if nom in ("backup_group", "sync_group", "reseau_group"):
+                return (2, "Systeme")
+            return None
+
+        contenus = []
+        non_classes = []
+        backup_group.setObjectName("backup_group")
+        sync_group.setObjectName("sync_group")
+        reseau_group.setObjectName("reseau_group")
+        img_host.setObjectName("image_host")
+        app_group.setObjectName("appreciations_group")
+        while scroll_lay.count():
+            item = scroll_lay.takeAt(0)
+            w = item.widget()
+            if w is None:
+                continue
+            groupe = _appartenance(w)
+            if groupe is None:
+                non_classes.append(w)
+            else:
+                contenus.append((groupe[0], groupe[1], w))
+
+        tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+        tabs.setStyleSheet(
+            "QTabBar::tab { padding: 8px 16px; font-weight: 600; }"
+            "QTabWidget::pane { border: none; }"
+            "QTabWidget#ongletsParams { background: transparent; }")
+        tabs.setObjectName("ongletsParams")
+
+        pages = {}
+        for indice, nom_onglet, w in sorted(contenus,
+                                            key=lambda x: x[0]):
+            if nom_onglet not in pages:
+                page_tab = QWidget()
+                lay_tab = QVBoxLayout(page_tab)
+                lay_tab.setContentsMargins(0, 8, 0, 8)
+                lay_tab.setSpacing(8)
+                pages[nom_onglet] = (page_tab, lay_tab)
+            _, lay_tab = pages[nom_onglet]
+            lay_tab.addWidget(w)
+            lay_tab.addStretch(1)
+
+        for nom_onglet in ("Etablissement", "Appreciations", "Systeme"):
+            conteneur = pages.get(nom_onglet)
+            if conteneur is not None:
+                tabs.addTab(conteneur[0], nom_onglet)
+
+        if tabs.count() == 0:
+            for w in non_classes:
+                scroll_lay.addWidget(w)
+            return
+        for w in non_classes:
+            scroll_lay.addWidget(w)
+        scroll_lay.addWidget(tabs)
+
+    _regrouper_onglets(scroll_lay)
+
     load()
     _refresh_backups()
-    page.refresh = lambda: (load(), _refresh_backups())
+    page.refresh = lambda: (load(), _refresh_backups(), _refresh_reseau())

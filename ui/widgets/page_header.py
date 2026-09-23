@@ -3,7 +3,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
-from resources.design_tokens import Colors, FontSize, Spacing
+from resources.design_tokens import Colors, FontFamily, FontSize, Spacing
 
 
 class PageHeader(QFrame):
@@ -19,13 +19,15 @@ class PageHeader(QFrame):
         colonne.setSpacing(Spacing.XS)
         lbl_titre = QLabel(titre)
         lbl_titre.setStyleSheet(
-            f"font-size: {FontSize.PAGE_TITLE}px; font-weight: 700;"
+            f"font-family: '{FontFamily.DISPLAY}', '{FontFamily.BODY}', '{FontFamily.EMOJI}', 'Segoe UI', sans-serif;"
+            f" font-size: {FontSize.PAGE_TITLE}px; font-weight: 800;"
+            " letter-spacing: -0.4px;"
             f" color: {Colors.TEXT_PRIMARY}; border: none; background: transparent;")
         self._accroche = None
         accroche = QLabel(sous_titre) if sous_titre else QLabel()
         if sous_titre:
             accroche.setStyleSheet(
-                f"font-size: {FontSize.BODY}px; color: {Colors.TEXT_MUTED};"
+                f"font-size: {FontSize.SUBTITLE}px; color: {Colors.TEXT_MUTED};"
                 " border: none; background: transparent;")
         self._accroche = accroche
         colonne.addWidget(lbl_titre)
@@ -35,9 +37,9 @@ class PageHeader(QFrame):
         accent = QFrame()
         accent.setFixedSize(46, 3)
         accent.setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            f" stop:0 {Colors.PRIMARY}, stop:1 rgba(218,165,32,0));"
-            " border: none; border-radius: 2px; margin-top: 2px;")
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+            f" stop:0 {Colors.GRAD_TOP}, stop:1 {Colors.GRAD_BOTTOM});"
+            " border: none; border-radius: 2px; margin-top: 4px;")
         colonne.addWidget(accent)
 
         lay.addLayout(colonne)

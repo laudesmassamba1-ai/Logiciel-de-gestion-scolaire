@@ -13,12 +13,19 @@ Composant requis : NetworkManager (nmcli). Dependance systeme, pas Python.
 """
 
 import re
+import secrets
 import shutil
 import subprocess
 import time
 
 SSID_DEF = "Gestion-Ecole"
-MOT_DE_PASSE_DEF = "Gestion2026"
+
+
+def _mot_de_passe_hotspot():
+    """Password WiFi fort genere a la volee : aucun mot de passe n'est
+    code en dur (audit securite). L'admin le lit dans le retour pour le
+    saisir sur les postes clients."""
+    return secrets.token_urlsafe(12).replace("-", "x").replace("_", "x")[:12]
 
 _NOM_CONNEXION = "gs-hotspot"
 
@@ -112,7 +119,7 @@ def hotspot_actif():
     return reseau_deja_cree()
 
 
-def creer_hotspot(ssid=None, nom=None):
+def creer_hotspot(ssid=None, nom=None, mot_de_passe=None):
     """Cree et active le point d'acces WiFi de l'ecole.
 
     Renvoie le dict {ssid, mot_de_passe, partage, interface}.
@@ -131,6 +138,7 @@ def creer_hotspot(ssid=None, nom=None):
             "ou une cle WiFi pour creer le reseau de l'ecole.")
 
     ssid = (ssid or SSID_DEF).strip().replace(" ", "-")
+    mot_de_passe = mot_de_passe or _mot_de_passe_hotspot()
 
     # Nettoyage d'une connexion precedente pour reconstructure.
     arreter_hotspot()
@@ -144,7 +152,7 @@ def creer_hotspot(ssid=None, nom=None):
                  "ssid", ssid,
                  "mode", "ap",
                  "wifi-sec.key-mgmt", "wpa-psk",
-                 "wifi-sec.psk", MOT_DE_PASSE_DEF,
+                 "wifi-sec.psk", mot_de_passe,
                  "ipv4.method", "shared",
                  "ipv6.method", "shared",
                  "802-11-wireless.mode", "ap")
@@ -167,7 +175,7 @@ def creer_hotspot(ssid=None, nom=None):
     partage = source_internet_disponible()
     return {
         "ssid": ssid,
-        "mot_de_passe": MOT_DE_PASSE_DEF,
+        "mot_de_passe": mot_de_passe,
         "partage": bool(partage),
         "source_internet": partage,
         "interface": iface,

@@ -19,7 +19,7 @@ class ParametreRepository(RepositoryBase):
             (cle, valeur))
 
     def delete_parametres(self):
-        for cle in ("signataire_nom", "signataire_titre", "ville", "pays"):
+        for cle in ("nom_ecole", "signataire_nom", "signataire_titre", "ville", "pays"):
             self._route_write(
                 "DELETE", f"/parametre/{cle}",
                 {"cle": cle},

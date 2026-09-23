@@ -73,7 +73,49 @@ def charger_secret_jwt(dossier=None):
 
 SECRET_KEY = charger_secret_jwt()
 ALGORITHM = "HS256"
-TOKEN_EXPIRATION_SECONDS = int(os.environ.get("GS_TOKEN_EXPIRATION_SECONDES", 8 * 3600))
+TOKEN_EXPIRATION_SECONDS = 8 * 3600
+try:
+    _raw = os.environ.get("GS_TOKEN_EXPIRATION_SECONDES", "").strip()
+    if _raw:
+        TOKEN_EXPIRATION_SECONDS = int(_raw)
+except (ValueError, TypeError):
+    pass
+
+
+# ============================================================
+# SECRET DE SYNDICATION (optionnel, protege les flux sensibles)
+# ============================================================
+# Quand GS_SYNC_SECRET est defini, les routes sensibles exigent
+# l'en-tete X-Sync-Secret correspondante. A defaut (trusted LAN),
+# les routes restent ouvertes pour la retrocompatibilite bureau.
+SYNC_SECRET = os.environ.get("GS_SYNC_SECRET", "")
+
+
+def sync_autorisee(secret_entete: str) -> bool:
+    """True si pas de secret configure OU si le secret est valide."""
+    if not SYNC_SECRET:
+        return True
+    import hmac as _hmac
+    return _hmac.compare_digest(SYNC_SECRET, secret_entete or "")
+
+
+# ============================================================
+# CODE DE L'ECOLE (cloisonnement entre etablissements)
+# ============================================================
+# Meme logiciel installe dans plusieurs ecoles : chaque serveur porte le
+# code de SON ecole (GS_ECOLE_CODE, injecte par le poste hote). Les postes
+# clients l'envoient dans l'en-tete X-Ecole-Code. Defini -> tout acces avec
+# un code different (ou absent) est refuse : une ecole ne peut jamais
+# synchroniser ses donnees avec une autre. Vide -> retrocompatibilite.
+ECOLE_CODE = os.environ.get("GS_ECOLE_CODE", "").strip()
+
+
+def ecole_autorisee(code_entete: str) -> bool:
+    """True si aucun code n'est configure OU si le code correspond."""
+    if not ECOLE_CODE:
+        return True
+    import hmac as _hmac
+    return _hmac.compare_digest(ECOLE_CODE, str(code_entete or "").strip())
 
 
 # ============================================================
@@ -137,3 +179,123 @@ class LimiteurConnexion:
 
 
 limiteur_connexion = LimiteurConnexion()
+
+
+# ============================================================
+# JWT ACCESS + REFRESH TOKENS
+# ============================================================
+# Double-token pattern :
+#   - access token : courte duree (configurable, defaut 8h), pour API calls
+#   - refresh token : longue duree (30j), pour renouveler l'access sans
+#     redemander les identifiants. Stocke hashé en base (revocable).
+# Le client desktop gere le renouvellement automatique (refresh_token_auto).
+
+REFRESH_TOKEN_EXPIRATION_DAYS = 30
+REFRESH_TOKEN_EXPIRATION_SECONDS = REFRESH_TOKEN_EXPIRATION_DAYS * 86400
+
+
+def creer_tokens(utilisateur_id: int, role: str, username: str) -> dict:
+    """Genere un couple access_token / refresh_token pour un utilisateur."""
+    import jwt as _jwt
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    access_payload = {
+        "sub": str(utilisateur_id),
+        "username": username,
+        "role": role,
+        "type": "access",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=TOKEN_EXPIRATION_SECONDS)).timestamp())
+    }
+    refresh_payload = {
+        "sub": str(utilisateur_id),
+        "username": username,
+        "type": "refresh",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=REFRESH_TOKEN_EXPIRATION_SECONDS)).timestamp())
+    }
+    access_token = _jwt.encode(access_payload, SECRET_KEY, algorithm=ALGORITHM)
+    refresh_token = _jwt.encode(refresh_payload, SECRET_KEY, algorithm=ALGORITHM)
+    return {"access_token": access_token, "refresh_token": refresh_token,
+            "token_type": "bearer", "expires_in": TOKEN_EXPIRATION_SECONDS}
+
+
+def verifier_access_token(token: str) -> dict:
+    """Verifie un access token et retourne le payload (leve HTTPException si invalide)."""
+    import jwt as _jwt
+    try:
+        payload = _jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Type de token invalide")
+        return payload
+    except _jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expire")
+    except _jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+
+def verifier_refresh_token(token: str, conn) -> dict:
+    """Verifie un refresh token (en base pour revocation)."""
+    import jwt as _jwt
+    import hashlib
+
+    try:
+        payload = _jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Type de token invalide")
+
+        # Verifie en base que le refresh token n'a pas ete revoque
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM refresh_tokens WHERE token_hash = %s AND revoque = 0",
+            (token_hash,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=401, detail="Refresh token revoque ou inconnu")
+        cursor.close()
+
+        return payload
+    except _jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expire")
+    except _jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Refresh token invalide")
+
+
+def stocker_refresh_token(conn, utilisateur_id: int, refresh_token: str):
+    """Stocke le hash du refresh token en base (pour revocation)."""
+    import hashlib
+    from datetime import datetime, timedelta, timezone
+
+    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRATION_DAYS)
+
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO refresh_tokens (utilisateur_id, token_hash, expire_le)
+           VALUES (%s, %s, %s)""",
+        (utilisateur_id, token_hash, expires_at))
+    conn.commit()
+    cursor.close()
+
+
+def revoquer_refresh_token(conn, refresh_token: str):
+    """Revoque un refresh token (logout, changement mot de passe, etc.)."""
+    import hashlib
+    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE refresh_tokens SET revoque = 1 WHERE token_hash = %s",
+        (token_hash,))
+    conn.commit()
+    cursor.close()
+
+
+def revoquer_tous_refresh_tokens(conn, utilisateur_id: int):
+    """Revoque tous les refresh tokens d'un utilisateur."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE refresh_tokens SET revoque = 1 WHERE utilisateur_id = %s",
+        (utilisateur_id,))
+    conn.commit()
+    cursor.close()

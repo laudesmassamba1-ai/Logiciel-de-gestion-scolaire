@@ -10,6 +10,16 @@ class PedagogieRepository(RepositoryBase):
     def matiere_by_id(self, matiere_id):
         return db.query_one("SELECT * FROM matieres WHERE id = ?", (matiere_id,))
 
+    def matiere_by_nom(self, nom):
+        return db.query_one("SELECT * FROM matieres WHERE nom = ?", (nom,))
+
+    def enseignant_par_matiere(self, matiere_id):
+        return db.query_one(
+            """SELECT e.id FROM personnel e
+               JOIN programmes p ON p.enseignant_id = e.id
+               WHERE p.matiere_id = ? AND e.fonction LIKE '%Enseignant%'
+               LIMIT 1""", (matiere_id,))
+
     def add_matiere(self, nom, coefficient=1):
         return self._route_write("POST", "/matiere", {"nom": nom, "coefficient": coefficient},
                                  db.execute,
@@ -26,12 +36,14 @@ class PedagogieRepository(RepositoryBase):
                           (nom, coefficient, matiere_id))
 
     def delete_matiere(self, matiere_id):
-        db.execute("DELETE FROM programmes WHERE matiere_id = ?", (matiere_id,))
-        db.execute("DELETE FROM notes WHERE matiere_id = ?", (matiere_id,))
         ancien = self.matiere_by_id(matiere_id)
+        with db.transaction() as txn:
+            txn.execute("DELETE FROM programmes WHERE matiere_id = ?", (matiere_id,))
+            txn.execute("DELETE FROM notes WHERE matiere_id = ?", (matiere_id,))
+            txn.execute("DELETE FROM matieres WHERE id = ?", (matiere_id,))
         self._route_write("DELETE", f"/supprimerMatiere/{matiere_id}",
                           {"matiere_nom": ancien["nom"] if ancien else None},
-                          db.execute, "DELETE FROM matieres WHERE id = ?", (matiere_id,))
+                          lambda *a, **kw: None)
 
     def enseignants(self):
         return db.query(

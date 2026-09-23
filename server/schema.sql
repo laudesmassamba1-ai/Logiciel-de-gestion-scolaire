@@ -23,7 +23,8 @@ CREATE TABLE annee_scolaire (
     libelle VARCHAR(50) NOT NULL,
     date_debut DATE NOT NULL,
     date_fin DATE NOT NULL,
-    est_active TINYINT(1) DEFAULT 0
+    est_active TINYINT(1) DEFAULT 0,
+    archivee TINYINT(1) DEFAULT 0
 );
 
 -- 4. matiere
@@ -103,6 +104,7 @@ CREATE TABLE note (
     date_evaluation DATE NOT NULL,
     trimestre ENUM('T1', 'T2', 'T3'),
     uuid_client VARCHAR(100),
+    est_supprime TINYINT(1) DEFAULT 0,
     FOREIGN KEY (inscription_id) REFERENCES inscription(id),
     FOREIGN KEY (matiere_id) REFERENCES matiere(id)
 );
@@ -119,6 +121,7 @@ CREATE TABLE paiement (
     trimestre ENUM('T1', 'T2', 'T3'),
     mois VARCHAR(20),
     uuid_client VARCHAR(100),
+    est_supprime TINYINT(1) DEFAULT 0,
     FOREIGN KEY (inscription_id) REFERENCES inscription(id)
 );
 
@@ -142,6 +145,7 @@ CREATE TABLE presences (
     statut ENUM('Present', 'Absent', 'En retard') NOT NULL,
     justifie ENUM('Oui', 'Non') DEFAULT 'Non',
     uuid_client VARCHAR(100),
+    est_supprime TINYINT(1) DEFAULT 0,
     FOREIGN KEY (eleve_id) REFERENCES eleve(id),
     FOREIGN KEY (classe_id) REFERENCES classe(id)
 );
@@ -178,6 +182,7 @@ CREATE TABLE IF NOT EXISTS planning (
     creneau VARCHAR(30) NOT NULL,
     matiere VARCHAR(100),
     salle VARCHAR(50),
+    uuid_client VARCHAR(100),
     FOREIGN KEY (classe_id) REFERENCES classe(id)
 );
 
@@ -191,7 +196,8 @@ CREATE TABLE IF NOT EXISTS caisse_transaction (
     montant DECIMAL(12,2) NOT NULL,
     type ENUM('entree', 'sortie') NOT NULL,
     mode_reglement VARCHAR(30),
-    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    uuid_client VARCHAR(100)
 );
 
 -- 17. audit_log (piste d'audit des operations sensibles)
@@ -204,4 +210,28 @@ CREATE TABLE IF NOT EXISTS audit_log (
     adresse_ip VARCHAR(45),
     INDEX idx_audit_action (action),
     INDEX idx_audit_date (horodatage)
+);
+
+-- 18. refresh_tokens (pour renouvellement auto des access tokens)
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    utilisateur_id INT NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expire_le TIMESTAMP NOT NULL,
+    revoque TINYINT(1) DEFAULT 0,
+    INDEX idx_refresh_user (utilisateur_id),
+    INDEX idx_refresh_expire (expire_le)
+);
+
+-- 19. poste_presence (postes connectes au serveur, battements de coeur)
+CREATE TABLE IF NOT EXISTS poste_presence (
+    uuid_poste VARCHAR(64) PRIMARY KEY,
+    nom_poste VARCHAR(120) NOT NULL,
+    adresse_ip VARCHAR(45),
+    version_app VARCHAR(20),
+    systeme VARCHAR(80),
+    est_hote TINYINT DEFAULT 0,
+    derniere_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    premiere_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

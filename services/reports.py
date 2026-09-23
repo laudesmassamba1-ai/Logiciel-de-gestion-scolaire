@@ -43,7 +43,10 @@ def _open_in_browser(path: Path):
 
 def _write(title, body_html, filename):
 
-    path = DOCS_DIR / filename
+    # Path(...).name neutralise toute tentative de traversee (../) via un
+    # nom de classe / matricule : le rapport reste toujours dans DOCS_DIR.
+    nom = Path(filename).name or "rapport.html"
+    path = DOCS_DIR / nom
     html = (f"<html><head><meta charset='utf-8'><title>{echap(title)}</title>"
             f"<style>{STYLE}</style></head><body>{body_html}</body></html>")
     path.write_text(html, encoding="utf-8")
@@ -148,7 +151,7 @@ def certificat_scolarite(eleve, params):
     {_entete_doc()}
     <h2 style="text-align:center;">CERTIFICAT DE SCOLARITE</h2>
     <p>Nous, soussignes, certifions que l'eleve <strong>{echap(eleve['prenom'])} {echap(eleve['nom'])}</strong>,
-    matricule <strong>{echap(eleve['matricule'])}</strong>, ne le {eleve['date_naissance'] or '-'}
+    matricule <strong>{echap(eleve['matricule'])}</strong>, ne le {echap(eleve['date_naissance'] or '-')}
     a {echap(eleve['lieu_naissance'] or '-')}, est regulierement inscrit(e) dans notre etablissement.</p>
     <table><tr><th>Classe</th><th>Statut</th><th>Date d'inscription</th></tr>
     <tr><td>{echap(eleve['classe_nom'] or '-')}</td><td>{echap(eleve['statut'])}</td>

@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>Dossier d'Inscription Complet</string>
   </property>
-<property name="styleSheet"><string>QWidget#FormInscriptionEleve { background-color: #E7EBF3; font-family: sans-serif; }</string></property>
+<property name="styleSheet"><string>QWidget#FormInscriptionEleve { background: transparent; }</string></property>
   <layout class="QVBoxLayout" name="verticalLayout_Main">
    <property name="spacing">
     <number>15</number>
@@ -35,7 +35,7 @@
      <item>
       <widget class="QLabel" name="lbl_title">
        <property name="styleSheet">
-        <string>font-size: 20px; font-weight: bold; color: #1D1D1F;</string>
+        <string>font-size: 20px; font-weight: bold; color: #1E2430;</string>
        </property>
        <property name="text">
         <string>Dossier d'Inscription &amp; Reinscription</string>
@@ -58,7 +58,7 @@
      <item>
       <widget class="QRadioButton" name="radio_new">
        <property name="styleSheet">
-        <string>font-weight: bold; color: #1D1D1F; font-size: 13px;</string>
+        <string>font-weight: bold; color: #1E2430; font-size: 13px;</string>
        </property>
        <property name="text">
         <string>Nouvelle Inscription</string>
@@ -71,7 +71,7 @@
      <item>
       <widget class="QRadioButton" name="radio_reins">
        <property name="styleSheet">
-        <string>font-weight: bold; color: #1D1D1F; font-size: 13px;</string>
+        <string>font-weight: bold; color: #1E2430; font-size: 13px;</string>
        </property>
        <property name="text">
         <string>Reinscription</string>
@@ -101,12 +101,12 @@
        </property>
        <item>
         <widget class="QFrame" name="card_eleve">
-         <property name="styleSheet"><string>QFrame#card_eleve { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; padding: 12px; }</string></property>
+         <property name="styleSheet"><string>QFrame#card_eleve { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; padding: 12px; }</string></property>
          <layout class="QVBoxLayout" name="verticalLayout_Card1">
           <item>
            <widget class="QLabel" name="lbl_sec1">
             <property name="styleSheet">
-             <string>font-size: 14px; font-weight: bold; color: #C8960C; border: none;</string>
+             <string>font-size: 14px; font-weight: bold; color: #4F6DF5; border: none;</string>
             </property>
             <property name="text">
              <string>1. Identite de l'Eleve &amp; Affectation Pedagogique</string>
@@ -186,7 +186,7 @@
                  <string>Ajouter une nouvelle classe manuellement</string>
                 </property>
                 <property name="styleSheet">
-                 <string>background-color: #C8960C; color: #1D1D1F; font-weight: bold; border-radius: 11px; padding: 8px 12px;</string>
+                 <string>background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5B7BF7, stop:1 #7C5CF0); color: #FFFFFF; font-weight: bold; border-radius: 12px; padding: 8px 12px;</string>
                 </property>
                 <property name="text">
                  <string>+ Classe</string>
@@ -209,12 +209,12 @@
        </item>
        <item>
         <widget class="QFrame" name="card_parents">
-         <property name="styleSheet"><string>QFrame#card_parents { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; padding: 12px; }</string></property>
+         <property name="styleSheet"><string>QFrame#card_parents { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; padding: 12px; }</string></property>
          <layout class="QVBoxLayout" name="verticalLayout_Card2">
           <item>
            <widget class="QLabel" name="lbl_sec2">
             <property name="styleSheet">
-             <string>font-size: 14px; font-weight: bold; color: #C8960C; border: none;</string>
+             <string>font-size: 14px; font-weight: bold; color: #4F6DF5; border: none;</string>
             </property>
             <property name="text">
              <string>2. Coordonnees des Parents &amp; Contacts d'Urgence</string>
@@ -290,12 +290,12 @@
          </property>
          <item>
           <widget class="QFrame" name="card_pieces">
-           <property name="styleSheet"><string>QFrame#card_pieces { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; padding: 12px; }</string></property>
+           <property name="styleSheet"><string>QFrame#card_pieces { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; padding: 12px; }</string></property>
            <layout class="QVBoxLayout" name="verticalLayout_Pieces">
             <item>
              <widget class="QLabel" name="lbl_sec3">
               <property name="styleSheet">
-               <string>font-size: 14px; font-weight: bold; color: #C8960C; border: none;</string>
+               <string>font-size: 14px; font-weight: bold; color: #4F6DF5; border: none;</string>
               </property>
               <property name="text">
                <string>3. Pieces du Dossier</string>
@@ -328,12 +328,12 @@
          </item>
          <item>
           <widget class="QFrame" name="card_caisse">
-           <property name="styleSheet"><string>QFrame#card_caisse { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; padding: 12px; }</string></property>
+           <property name="styleSheet"><string>QFrame#card_caisse { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; padding: 12px; }</string></property>
            <layout class="QVBoxLayout" name="verticalLayout_Caisse">
             <item>
              <widget class="QLabel" name="lbl_sec4">
               <property name="styleSheet">
-               <string>font-size: 14px; font-weight: bold; color: #C8960C; border: none;</string>
+               <string>font-size: 14px; font-weight: bold; color: #4F6DF5; border: none;</string>
               </property>
               <property name="text">
                <string>4. Premier Versement (Caisse)</string>
@@ -394,7 +394,7 @@
      <item>
       <widget class="QPushButton" name="btn_cancel">
        <property name="styleSheet">
-        <string>background-color: #E7EBF3; color: #373D4A; border: 1px solid #E1E6EF; border-radius: 11px; padding: 10px 20px; font-weight: bold;</string>
+        <string>background: transparent; color: #465064; border: 1px solid #4A5568; border-radius: 12px; padding: 10px 20px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Annuler</string>
@@ -404,7 +404,7 @@
      <item>
       <widget class="QPushButton" name="btn_save">
        <property name="styleSheet">
-        <string>background-color: #C8960C; color: #1D1D1F; border-radius: 11px; padding: 10px 22px; font-weight: bold;</string>
+        <string>background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5B7BF7, stop:1 #7C5CF0); color: #FFFFFF; border-radius: 12px; padding: 10px 22px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Enregistrer &amp; Imprimer Reçu</string>

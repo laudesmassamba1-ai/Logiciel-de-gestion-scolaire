@@ -15,11 +15,10 @@ class AuthService:
         user = db.query_one(
             "SELECT * FROM utilisateurs WHERE username = ? OR email = ?",
             (username, username))
-        if not user:
-            return None, "Identifiant ou mot de passe incorrect."
-        if not user["actif"]:
-            return None, "Ce compte est desactive."
-        if not verify_password(password, user["password"]):
+        # Message volontairement identique quel que soit le cas : pas de
+        # divulgation de l'existence d'un compte ni de son etat (extremite).
+        if not user or not verify_password(password, user["password"]) \
+                or not user["actif"]:
             return None, "Identifiant ou mot de passe incorrect."
         # Upgrade silencieux : les tres anciens hash SHA-256 non sales sont
         # re-haches en PBKDF2 des que le mot de passe est verifie correct.
@@ -81,12 +80,14 @@ class RoleAuthorizer:
     NAV = {
         "directeur": ["dashboard", "comptes", "stats", "eleves", "classes", "cycles",
                        "notes", "presences", "planning", "caisse", "tarifs",
-                       "paiements", "personnel", "programmes", "parametres"],
+                       "paiements", "personnel", "programmes", "parametres",
+                       "bloc_notes", "calendrier", "documents", "reseau", "rapports"],
         # Le gestionnaire n'a PAS acces au personnel/RH, aux parametres
         # de l'etablissement ni a la gestion des comptes.
         "gestionnaire": ["dashboard", "stats", "eleves", "classes", "cycles", "notes",
                           "presences", "planning", "caisse", "tarifs", "paiements",
-                          "programmes"],
+                          "programmes", "bloc_notes", "calendrier", "documents",
+                          "reseau", "rapports"],
     }
 
     # Pages reservees au directeur, interdites d'edition pour les autres.

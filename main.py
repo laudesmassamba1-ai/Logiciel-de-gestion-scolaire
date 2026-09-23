@@ -3,11 +3,12 @@ import sys
 import threading
 import traceback
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QFontDatabase, QIcon
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
-from core.config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE, SYNC_ACTIVE, SERVEUR_AUTO
+from core.config import APP_NAME, APP_STYLESHEET, APP_FONT_FAMILY, APP_FONT_FALLBACK, APP_FONT_SIZE, SERVEUR_AUTO
+from resources import design_tokens
 from database import db
 from services import auth_service as auth
 from ui.login_view import FirstSetupDialog, LoginDialog
@@ -79,7 +80,7 @@ def main():
     app.setOrganizationName(APP_NAME)
     app.setFont(_pick_base_font())
     app.setStyleSheet(APP_STYLESHEET)
-    icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+    icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
@@ -108,18 +109,45 @@ def main():
         threading.Thread(target=_auto_demarrer, daemon=True).start()
 
     # Thread de synchronisation (push de la file d'attente + pull de la
-    # structure modifiee par le directeur). Demarre des que la sync est
-    # active, ou des que le poste doit hoster le serveur : il idlera
-    # tant que le reseau n'est pas joignable.
-    if SYNC_ACTIVE or SERVEUR_AUTO:
-        from api.sync_worker import SyncWorker
-        _sync_worker = SyncWorker()
+    # structure modifiee par le directeur). Il tourne TOUJOURS : sur un
+    # poste autonome, il decouvre et rejoint automatiquement le serveur
+    # de l'ecole des qu'il est joignable (meme WiFi, Ethernet, Internet),
+    # puis pousse/recoit les donnees. Sinon il reste simplement en veille.
+    from api.sync_worker import SyncWorker
+    _sync_worker = SyncWorker()
 
-        def _stop_sync_worker():
-            _sync_worker.requestInterruption()
-            _sync_worker.wait(3000)
-        app.aboutToQuit.connect(_stop_sync_worker)
-        _sync_worker.start()
+    def _stop_sync_worker():
+        _sync_worker.requestInterruption()
+        # Le drain HTTP en cours peut prendre le temps d'un timeout
+        # (api timeout 2 s) ; un wait trop court detruit le QThread
+        # pendant qu'il tourne. Fenetre large -> arret propre.
+        _sync_worker.wait(30000)
+    app.aboutToQuit.connect(_stop_sync_worker)
+    _sync_worker.start()
+
+    # Sauvegarde automatique des bases (app + serveur) : une copie
+    # quotidienne pendant l'execution et une derniere a la fermeture.
+    # Le PC hote est la source de verite : sans copie, un disque qui lache
+    # ou un ordinateur vole aneantit notes et paiements. Rotation 30 jours.
+    from services import sauvegarde
+    try:
+        sauvegarde.sauvegarder_si_quotidien()
+    except Exception as exc:
+        print("Sauvegarde quotidienne : echec", exc)
+
+    def _sauvegarder_fermeture():
+        try:
+            sauvegarde.sauvegarder_maintenant("fermeture")
+        except Exception as exc:
+            print("Sauvegarde a la fermeture : echec", exc)
+
+    _timer_sauvegarde = QTimer()
+    _timer_sauvegarde.setInterval(30 * 60 * 1000)  # verification toutes les 30 min
+    _timer_sauvegarde.timeout.connect(
+        lambda: threading.Thread(
+            target=sauvegarde.sauvegarder_si_quotidien, daemon=True).start())
+    _timer_sauvegarde.start()
+    app.aboutToQuit.connect(_sauvegarder_fermeture)
 
     # Boucle de session : apres une deconnexion, on revient a l'ecran de
     # connexion au lieu de quitter l'application.
@@ -129,7 +157,20 @@ def main():
             sys.exit(0)
 
         window = MainWindow(user)
-        window.showMaximized()
+        # Reglages LOCAUX au poste (configurateur graphique -> onglet Poste) :
+        # taille de fenetre et etat maximise/fenetre au demarrage.
+        _local_cfg = (getattr(design_tokens, "THEME_BRUT", {}) or {}).get("local") or {}
+        try:
+            _w = int(_local_cfg.get("largeur_fenetre") or 0)
+            _h = int(_local_cfg.get("hauteur_fenetre") or 0)
+        except (TypeError, ValueError):
+            _w = _h = 0
+        if _w >= 800 and _h >= 500:
+            window.resize(_w, _h)
+        if _local_cfg.get("maximise", True):
+            window.showMaximized()
+        else:
+            window.show()
         app.exec_()
 
         # Fenetre fermee : si la session a ete effacee, c'est une

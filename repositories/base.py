@@ -28,17 +28,17 @@ class RepositoryBase:
         # Les ids locaux sont reattribues vers les ids serveur par
         # api.mapping au moment de l'envoi (references par noms / uuid) :
         #   * « send »    -> envoyer maintenant (payload reattribue) ;
-        #   * « skip »    -> la cible n'existe pas encore sur le serveur,
-        #                    on garde l'ecriture locale sans pousser ;
+        #   * « skip »    -> la cible n'existe pas encore sur le serveur :
+        #                    on garde l'ecriture locale ET on met en file pour
+        #                    re-essayer au prochain drain (sinon perte silente) ;
         #   * « enqueue » -> resolution impossible maintenant : on met en
         #                    file, le drain reessaiera (vrai moyen de retry).
+        server_sent = False
         if network.sync_active() and network.is_online():
             from api import mapping
             action = mapping.remap(method, endpoint, payload)
             if action[0] == "send":
                 _, endpoint2, payload2 = action
-                # 1 retry immediat : resilience aux micro-coupures reseau
-                # avant de basculer l'operation dans la file d'attente.
                 for _ in range(2):
                     try:
                         from api.client import _request
@@ -46,15 +46,15 @@ class RepositoryBase:
                     except Exception:
                         err = "echec reseau"
                     if not err:
+                        server_sent = True
                         break
                 else:
-                    # On reserve l'operation ORIGINALE (avec cles naturelles) :
-                    # le drain la reattribuera a son tour.
                     self._enqueue(method, endpoint, payload)
             elif action[0] == "enqueue":
                 self._enqueue(method, endpoint, payload)
-            # « skip » : rien a pousser ni a mettre en file.
+            elif action[0] == "skip":
+                self._enqueue(method, endpoint, payload)
         result = fn(*args, **kwargs)
-        if network.sync_active() and not network.is_online():
+        if not server_sent and network.sync_active() and not network.is_online():
             self._enqueue(method, endpoint, payload)
         return result

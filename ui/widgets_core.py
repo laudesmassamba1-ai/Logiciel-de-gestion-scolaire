@@ -6,18 +6,27 @@ from PyQt5.QtWidgets import QSizePolicy, QWidget
 
 
 from core.config import (
-    C_GOLD, C_BLUE, C_RED, C_WARNING,
+    C_ACCENT_VIOLET, C_BLUE, C_RED, C_WARNING, C_GREEN,
     C_BORDER_STRONG, C_TEXT_MUTED, C_TEXT_LIGHT, C_TEXT, C_CARD,
-    C_EMPTY_STATE,
+    C_EMPTY_STATE, lire_composant,
 )
 
 CHART_COLORS = [
-    C_GOLD, C_BLUE, C_RED, C_WARNING,
-    C_BORDER_STRONG, C_TEXT_MUTED, C_TEXT_LIGHT, C_TEXT,
+    C_ACCENT_VIOLET, C_BLUE, C_GREEN, C_WARNING, C_RED,
+    C_TEXT_LIGHT, C_BORDER_STRONG, C_TEXT_MUTED,
 ]
 
 def _color(i):
     return QColor(CHART_COLORS[i % len(CHART_COLORS)])
+
+
+def _font(point_size, bold=False):
+    """QFont doux et antialiase (net y compris en petites tailles)."""
+    f = QFont()
+    f.setPointSize(point_size)
+    f.setBold(bold)
+    f.setStyleStrategy(QFont.PreferAntialias)
+    return f
 
 
 def fmt_money(montant) -> str:
@@ -40,6 +49,16 @@ class _BaseChart(QWidget):
         self.values = []
         self.setMinimumHeight(200)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Composant themable "statistiques" : couleurs cibles des graphiques.
+        self.comp_stat = lire_composant("statistiques")
+        self.grille_col = QColor(self.comp_stat.get("grille", C_EMPTY_STATE))
+
+    def _couleur(self, i, premiere=None):
+        """Couleur de paletete; la 1ere est remplacable par le composant."""
+        pal = CHART_COLORS[:]
+        if premiere:
+            pal[0] = premiere
+        return QColor(pal[i % len(pal)])
 
     def set_data(self, labels, values, titre=None):
 
@@ -57,17 +76,14 @@ class _BaseChart(QWidget):
         if not self.titre:
             return 0
         painter.setPen(QColor(C_TEXT))
-        font = QFont()
-        font.setPointSize(10)
-        font.setBold(True)
+        font = _font(10, bold=True)
         painter.setFont(font)
         painter.drawText(6, 4, self.width() - 12, 26, Qt.AlignLeft, self.titre)
         return 26
 
     def _draw_empty(self, painter, y, hauteur):
         painter.setPen(QColor(C_EMPTY_STATE))
-        font = QFont()
-        font.setPointSize(9)
+        font = _font(9)
         painter.setFont(font)
         painter.drawText(6, y, self.width() - 12, hauteur,
                          Qt.AlignCenter, "Aucune donnee a afficher")
@@ -98,20 +114,34 @@ class SimpleBarChart(_BaseChart):
         if span <= 0:
             span = 1.0
         n = len(self.labels)
-        pad = 12
+        pad = 36
         chart_top = y0 + 26
         chart_bottom = h - 32
         chart_h = chart_bottom - chart_top
         if chart_h < 40:
             chart_h = 40
-        bar_w = max(6.0, (w - pad * 2) / n * 0.55)
+        bar_w = min(80.0, max(6.0, (w - pad * 2) / n * 0.55))
         gap = (w - pad * 2) / n
         zero_y = chart_top + (max_val / span) * chart_h
 
-        font = QFont()
-        font.setPointSize(8)
+        font = _font(8)
         painter.setFont(font)
         fm = painter.fontMetrics()
+
+        grid_steps = min(5, max(1, int(round(max_val / max(1, max_val / 5)))))
+        for s in range(0, grid_steps + 1):
+            gy = chart_bottom - (s / grid_steps) * chart_h
+            painter.setPen(QPen(self.grille_col, 1, Qt.DashLine))
+            painter.drawLine(pad - 4, int(gy), int(w - pad + 4), int(gy))
+            val_label = f"{int(s / grid_steps * max_val):,}".replace(",", " ")
+            painter.setPen(QColor(C_TEXT_MUTED))
+            small_font = _font(7)
+            painter.setFont(small_font)
+            painter.drawText(2, int(gy) - 3, pad - 8, 14, Qt.AlignRight, val_label)
+            painter.setFont(font)
+
+        painter.setPen(QPen(self.grille_col, 1))
+        painter.drawLine(pad - 4, int(chart_bottom), int(w - pad + 4), int(chart_bottom))
 
         for i, (label, value) in enumerate(zip(self.labels, self.values)):
             x = pad + i * gap + (gap - bar_w) / 2
@@ -122,7 +152,7 @@ class SimpleBarChart(_BaseChart):
             else:
                 bar_h = (-v / span) * chart_h
                 y = zero_y
-            painter.setBrush(_color(i))
+            painter.setBrush(self._couleur(i, self.comp_stat.get("barres")))
             painter.setPen(Qt.NoPen)
             painter.drawRoundedRect(int(x), int(y), int(bar_w), int(bar_h), 3, 3)
 
@@ -148,7 +178,7 @@ class SimpleBarChart(_BaseChart):
             painter.setPen(QColor(C_TEXT_MUTED))
 
         if min_val < 0:
-            painter.setPen(QPen(QColor(C_EMPTY_STATE), 1, Qt.DashLine))
+            painter.setPen(QPen(self.grille_col, 1, Qt.DashLine))
             painter.drawLine(pad, int(zero_y), int(w - pad), int(zero_y))
         painter.end()
 
@@ -172,8 +202,7 @@ class SimplePieChart(_BaseChart):
 
         total = sum(self.values)
 
-        font = QFont()
-        font.setPointSize(8)
+        font = _font(8)
         painter.setFont(font)
         fm = painter.fontMetrics()
 
@@ -195,7 +224,7 @@ class SimplePieChart(_BaseChart):
         start_angle = 0
         for i, value in enumerate(self.values):
             span_angle = (value / total) * 360 * 16
-            painter.setBrush(_color(i))
+            painter.setBrush(self._couleur(i, self.comp_stat.get("secteurs")))
             painter.setPen(QPen(QColor(C_CARD), 2))
             painter.drawPie(center_x - radius, center_y - radius,
                             radius * 2, radius * 2,
@@ -208,7 +237,7 @@ class SimplePieChart(_BaseChart):
         y = y0 + 6
         for i, texte in enumerate(texte_leg):
             painter.setPen(Qt.NoPen)
-            painter.setBrush(_color(i))
+            painter.setBrush(self._couleur(i, self.comp_stat.get("secteurs")))
             painter.drawRoundedRect(int(legend_x), int(y) + 2, 10, 10, 2, 2)
             painter.setPen(QColor(C_TEXT))
             elide = fm.elidedText(texte, Qt.ElideRight, texte_w)
@@ -252,8 +281,7 @@ class SimpleLineChart(_BaseChart):
             painter.end()
             return
 
-        font = QFont()
-        font.setPointSize(8)
+        font = _font(8)
         painter.setFont(font)
         fm = painter.fontMetrics()
 
@@ -295,8 +323,8 @@ class SimpleLineChart(_BaseChart):
         for i in range(5):
             gy = top + (bottom - top) * i / 4
             val = vmax - (vmax - vmin) * i / 4
-            pen = QPen(QColor(C_EMPTY_STATE) if i in (0, 4)
-                       else QColor(C_EMPTY_STATE).lighter(160), 1)
+            pen = QPen(self.grille_col if i in (0, 4)
+                       else self.grille_col.lighter(160), 1)
             pen.setStyle(Qt.SolidLine if i in (0, 4) else Qt.DashLine)
             painter.setPen(pen)
             painter.drawLine(int(left), int(gy), int(w - right), int(gy))
@@ -322,7 +350,7 @@ class SimpleLineChart(_BaseChart):
 
         # Une polyline coloriee par serie, traits renforces pour la lecture.
         for i, (nom, vals) in enumerate(self.series):
-            couleur = _color(i)
+            couleur = self._couleur(i, self.comp_stat.get("courbe"))
             for j in range(len(vals) - 1):
                 x1, y1 = _x(j), _y(vals[j])
                 x2, y2 = _x(j + 1), _y(vals[j + 1])
@@ -342,7 +370,7 @@ class SimpleLineChart(_BaseChart):
             ligne_max = (w - left - right) / n_legende
             for i, (nom, vals) in enumerate(self.series):
                 x = left + i * ligne_max
-                couleur = _color(i)
+                couleur = self._couleur(i, self.comp_stat.get("courbe"))
                 painter.setPen(Qt.NoPen)
                 painter.setBrush(couleur)
                 painter.drawRoundedRect(int(x), int(ly), 10, 10, 3, 3)

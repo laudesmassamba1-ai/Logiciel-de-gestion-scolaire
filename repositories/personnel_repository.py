@@ -48,3 +48,6 @@ class PersonnelRepository(RepositoryBase):
             """SELECT COALESCE(SUM(salaire), 0) AS s FROM personnel
                WHERE statut IS NULL OR LOWER(statut) != 'inactif'""")
         return row["s"] if row else 0
+
+    def personnel_by_id(self, pid):
+        return db.query_one("SELECT * FROM personnel WHERE id = ?", (pid,))

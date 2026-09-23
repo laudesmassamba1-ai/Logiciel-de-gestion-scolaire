@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
 
 from repositories import repos
 from ui import toast
+from services import rapports
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _money_edit, _classe_items, _reload_combo,
     _add_btn, _actions_cell,
@@ -16,6 +17,7 @@ from ui.widgets.page_templates import ListPageTemplate
 from resources.design_tokens import Colors
 from core.config import (
     C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER,
+    STYLE_BTN_SECONDARY,
 )
 
 
@@ -44,6 +46,19 @@ def tarifs(page, ctx):
 
     btn_add_tarif = _add_btn(
         "+ Nouveau Tarif", lambda: open_tarif_dialog(page, ctx, refresh))
+
+    def _exporter_pdf():
+        lignes = [[t["classe_nom"] or "-", t["type_frais"],
+                   fmt_money(t["montant"]), t["annee_scolaire"] or "-"]
+                  for t in repos.tarifs(classe_id=combo_classe.currentData())]
+        rapports.export_table_pdf(
+            "Tarifs & scolarite",
+            "Montants des frais par classe et par type",
+            ["Classe", "Type de frais", "Montant", "Annee scolaire"], lignes,
+            "rapport_tarifs.pdf")
+
+    tpl.header.ajouter_action(
+        _btn("Exporter PDF", lambda: _exporter_pdf(), STYLE_BTN_SECONDARY))
     if peut_editer:
         tpl.header.ajouter_action(btn_add_tarif)
 

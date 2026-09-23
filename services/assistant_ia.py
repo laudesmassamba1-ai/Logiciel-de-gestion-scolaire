@@ -26,15 +26,17 @@ Le moteur ne touche jamais au reseau ni a l'affichage : il renvoie des
 reponses structurees {"texte", "action", "choix"} que l'interface execute.
 """
 
+import csv
 import datetime
 import math
+import random
 import re
 import time
 import unicodedata
 from collections import Counter
 from difflib import SequenceMatcher
 
-from core.config import PERIODES, ROLE_LABELS
+from core.config import DOCS_DIR, PERIODES, ROLE_LABELS
 from database import db
 from repositories import repos
 from services.ia.contexte import ContexteConversation
@@ -47,6 +49,335 @@ from services.ia.apprentissage import MoteurApprentissage
 NOM_ASSISTANT = "Charo"
 
 _LLM = None
+
+
+# =============================================================================
+# PERSONNALITE DE CHARO — langage naturel, chaleureux, humain
+# =============================================================================
+
+class PersonaliteCharo:
+    """Générateur de langage naturel pour Charo.
+    
+    Transforme les réponses techniques en conversation chaleureuse,
+    tout en gardant la précision des chiffres et des faits.
+    """
+    
+    # Salutations variées selon l'heure et le contexte
+    SALUTATIONS_DEBUT = [
+        "{moment} {prenom} ! 😊 Je suis Charo, votre assistante. Comment puis-je vous aider aujourd'hui ?",
+        "{moment} {prenom} ! Prête à vous aider. Une question sur les élèves, la caisse, les notes... ?",
+        "Salut {prenom} ! Ravie de vous revoir. Qu'est-ce que je fais pour vous ?",
+        "Coucou {prenom} ! 🌞 Charo à votre service. Besoin de quelque chose ?",
+    ]
+    
+    SALUTATIONS_RETOUR = [
+        "Encore moi ! 😄 Quoi d'autre ?",
+        "Oui {prenom} ?",
+        "Je vous écoute !",
+        "Dites-moi tout.",
+    ]
+    
+    # Formules de transition douces
+    TRANSITIONS = [
+        "Alors, ",
+        "Voici ce que j'ai trouvé : ",
+        "C'est noté ! ",
+        "D'accord, ",
+        "Parfait, ",
+    ]
+    
+    # Formules de fin chaleureuses
+    FINS = [
+        " 😊",
+        " !",
+        " N'hésitez pas si vous avez d'autres questions.",
+        " Besoin d'autre chose ?",
+        " Je reste là si vous voulez creuser.",
+    ]
+    
+    # Empathie selon le contexte
+    EMPATHIE_ABSENCES = [
+        "Il y a quelques absents aujourd'hui... J'espère que tout va bien pour eux.",
+        "Quelques absences notées. Rien de grave j'espère !",
+    ]
+    EMPATHIE_SOLDE_FAIBLE = [
+        "Attention, la caisse est un peu juste. 💛",
+        "Le solde est bas, faut garder l'œil ouvert.",
+    ]
+    EMPATHIE_BONNE_MOYENNE = [
+        "Bravo à eux ! 🎉",
+        "Super résultat !",
+        "Ils font du bon travail.",
+    ]
+    EMPATHIE_MOYENNE_FAIBLE = [
+        "Ça peut mieux faire, mais on est là pour les aider. 💪",
+        "Y a du progrès à faire, mais pas de panique.",
+    ]
+    
+    # Phrases de "je ne sais pas" humaines
+    PAS_COMPRIS = [
+        "Hmm, je ne suis pas sûre de comprendre... 🤔",
+        "Là, je sèche un peu...",
+        "C'est pas très clair pour moi, pouvez-vous reformuler ?",
+        "Je n'ai pas saisi, désolée !",
+    ]
+    
+    # Propositions d'apprentissage naturelles
+    APPRENTISSAGE_PROPOSE = [
+        "Je ne connais pas encore la réponse à ça. Vous voulez me l'apprendre ? 😊",
+        "C'est nouveau pour moi ! Envie de m'enseigner la bonne réponse ?",
+        "Pas encore dans ma mémoire... Je retiens si vous me le dites ?",
+    ]
+    
+    def __init__(self, user=None):
+        self.user = user
+        self._compteur_tours = 0
+        self._derniere_salutation = None
+    
+    def _prenom(self):
+        if not self.user:
+            return ""
+        prenom = (self.user.get("prenom") or "").strip()
+        if not prenom:
+            nom = self.user.get("nom_complet") or ""
+            prenom = nom.split()[0] if nom else ""
+        return prenom
+    
+    @staticmethod
+    def _moment_jour():
+        """« Bonjour », « Bon après-midi » ou « Bonsoir » selon l'heure."""
+        from datetime import datetime
+        heure = datetime.now().hour
+        if 5 <= heure < 12:
+            return "Bonjour"
+        if 12 <= heure < 18:
+            return "Bon après-midi"
+        return "Bonsoir"
+
+    def salutation(self, premier_contact=True):
+        """Salutation naturelle selon le contexte et le moment de la journee."""
+        prenom = self._prenom()
+        if premier_contact:
+            base = random.choice(self.SALUTATIONS_DEBUT)
+        else:
+            base = random.choice(self.SALUTATIONS_RETOUR)
+        texte = base.format(prenom=prenom, moment=self._moment_jour())
+        if not prenom:
+            texte = texte.replace("{prenom} ", "")
+        return texte
+    
+    def envelopper(self, texte_technique, contexte=None, type_reponse="info"):
+        """Transforme une réponse technique en langage naturel.
+        
+        Args:
+            texte_technique: La réponse brute du moteur (avec chiffres exacts)
+            contexte: Dict avec infos contextuelles (type: 'eleve', 'classe', 'caisse', 'absences', etc.)
+            type_reponse: 'info', 'creation', 'navigation', 'erreur', 'apprentissage', 'calcul'
+        """
+        if not texte_technique or not texte_technique.strip():
+            return texte_technique
+        
+        self._compteur_tours += 1
+        prenom = self._prenom()
+        transition = random.choice(self.TRANSITIONS) if self._compteur_tours > 1 else ""
+        fin = random.choice(self.FINS)
+        
+        # Ajout d'empathie contextuelle
+        empathie = ""
+        if contexte:
+            empathie = self._empathie_contextuelle(contexte, texte_technique)
+        
+        # Pour les réponses courtes/simples, rester naturel sans trop envelopper
+        if len(texte_technique) < 80 and "\n" not in texte_technique:
+            return f"{transition}{texte_technique}{empathie}{fin}"
+        
+        # Pour les réponses structurées (listes, tableaux), garder la structure mais humaniser l'intro
+        lignes = texte_technique.strip().split("\n")
+        if len(lignes) > 1:
+            intro = f"{transition}Voici ce que j'ai trouvé :"
+            if empathie:
+                intro += f" {empathie}"
+            corps = "\n".join(lignes)
+            return f"{intro}\n\n{corps}{fin}"
+        
+        # Réponse moyenne : phrase complète
+        return f"{transition}{texte_technique}{empathie}{fin}"
+    
+    def _empathie_contextuelle(self, contexte, texte):
+        """Ajoute une touche d'empathie selon le contexte."""
+        type_ctx = contexte.get("type")
+        
+        if type_ctx == "absences" and "absent" in texte.lower():
+            return " " + random.choice(self.EMPATHIE_ABSENCES)
+        
+        if type_ctx == "caisse":
+            # Détecter si solde faible
+            if "solde" in texte.lower():
+                # Extraire le chiffre approximatif
+                import re
+                m = re.search(r"solde\s*:?\s*([\d\s,.]+)", texte.lower())
+                if m:
+                    try:
+                        val = float(m.group(1).replace(" ", "").replace(",", "."))
+                        if val < 50000:
+                            return " " + random.choice(self.EMPATHIE_SOLDE_FAIBLE)
+                    except:
+                        pass
+        
+        if type_ctx == "moyenne" or "moyenne" in texte.lower():
+            if "meilleur" in texte.lower() or "premier" in texte.lower():
+                return " " + random.choice(self.EMPATHIE_BONNE_MOYENNE)
+            if "faible" in texte.lower() or "dernier" in texte.lower() or "queue" in texte.lower():
+                return " " + random.choice(self.EMPATHIE_MOYENNE_FAIBLE)
+        
+        return ""
+    
+    def pas_compris(self):
+        return random.choice(self.PAS_COMPRIS)
+    
+    def proposer_apprentissage(self, question):
+        base = random.choice(self.APPRENTISSAGE_PROPOSE)
+        return f"{base} (Question : « {question} »)"
+    
+    def confirmation_creation(self, type_objet, nom):
+        return f"C'est bon ! J'ai créé {type_objet} « {nom} » pour vous. ✨"
+    
+    def erreur_douce(self, erreur):
+        messages = [
+            f"Oups, ça n'a pas marché : {erreur}. On réessaie ?",
+            f"Petit souci technique : {erreur}. Pas de panique, on résout ça.",
+            f"Ça a coincé : {erreur}. Vous voulez que j'essaye autrement ?",
+        ]
+        return random.choice(messages)
+    
+    def au_revoir(self):
+        prenom = self._prenom()
+        messages = [
+            f"Au revoir {prenom} ! À bientôt ! 👋",
+            f"Bonne journée {prenom} ! Charo reste là si vous avez besoin.",
+            f"À la prochaine {prenom} ! 😊",
+        ]
+        return random.choice(messages).replace("{prenom} ", "") if not prenom else random.choice(messages).format(prenom=prenom)
+    
+    def merci(self):
+        messages = [
+            "Avec plaisir ! 😊",
+            "De rien, c'est mon job !",
+            "Ravie d'avoir pu aider !",
+            "Pas de souci, n'hésitez pas !",
+        ]
+        return random.choice(messages)
+    
+    def suggestion_personnalisee(self, dernier_contexte=None):
+        """Suggestions adaptées au dernier échange."""
+        base = [
+            "Combien d'élèves au total ?",
+            "Solde de la caisse",
+            "Qui est absent aujourd'hui ?",
+            "Moyenne générale de l'école",
+        ]
+        if dernier_contexte:
+            if dernier_contexte == "eleve":
+                return [
+                    f"Moyenne de {self._nom_dernier_eleve()}",
+                    f"Paiements de {self._nom_dernier_eleve()}",
+                    f"Fiche de {self._nom_dernier_eleve()}",
+                ]
+            if dernier_contexte == "classe":
+                return [
+                    f"Moyenne de la classe {self._nom_derniere_classe()}",
+                    f"Tarifs de la classe {self._nom_derniere_classe()}",
+                    f"Combien de filles en {self._nom_derniere_classe()}",
+                ]
+            if dernier_contexte == "caisse":
+                return [
+                    "Dernières transactions",
+                    "Masse salariale",
+                    "Combien d'élèves ?",
+                ]
+            if dernier_contexte == "absences":
+                return [
+                    "Qui est absent hier ?",
+                    "Solde de la caisse",
+                    f"Moyenne de la classe {self._nom_derniere_classe()}",
+                ]
+        return base
+    
+    # Ces méthodes seront reliées à l'instance AssistantIA
+    def _nom_dernier_eleve(self):
+        return "l'élève"
+    
+    def _nom_derniere_classe(self):
+        return "la classe"
+
+
+# Instance globale (sera initialisée avec l'utilisateur dans AssistantIA)
+_PERSONNALITE = None
+
+def get_personnalite(user=None):
+    global _PERSONNALITE
+    if _PERSONNALITE is None or (_PERSONNALITE.user != user):
+        _PERSONNALITE = PersonaliteCharo(user)
+    return _PERSONNALITE
+
+
+def apprentissage_rapide(user, prenom, nom, qualite):
+    """Chip « Apprendre à Charo » depuis la fiche eleve.
+
+    Retient une qualite sur un eleve dans la memoire de l'utilisateur
+    courant (utilisateur_id). Renvoie le texte de confirmation, ou None si
+    ce fait a deja ete appris (idempotent).
+    """
+    prenom = (prenom or "").strip()
+    nom = (nom or "").strip()
+    partie = " ".join(p for p in (prenom, nom) if p).strip()
+    qualite = (qualite or "").strip().strip(" .")
+    if not partie or not qualite:
+        return None
+    uid = (user or {}).get("id")
+    m = MoteurApprentissage()
+    m.ensure_tables()
+    question = f"retiens que {partie} : {qualite}"
+    existe = db.query_one("SELECT id FROM ia_memoire WHERE question = ?",
+                          (question,))
+    if existe:
+        return None
+    db.execute(
+        "INSERT INTO ia_memoire (type, question, reponse, source,"
+        " utilisateur_id) VALUES ('fait', ?, ?, 'fiche', ?)",
+        (question, f"{partie} : {qualite}", uid))
+    return question
+
+
+def exporter_memoire(chemin=None, utilisateur=None):
+    """Exporte la memoire accessible (la sienne + les faits partages) en CSV.
+
+    Retourne le chemin du fichier ecrit. Sans chemin, ecrit dans
+    DOCS_DIR/memoire_charo.csv.
+    """
+    MoteurApprentissage().ensure_tables()
+    uid = (utilisateur or {}).get("id")
+    lignes = db.query(
+        "SELECT * FROM ia_memoire "
+        "WHERE utilisateur_id IS NULL OR utilisateur_id = ? "
+        "ORDER BY id",
+        (uid,))
+    if chemin is None:
+        from pathlib import Path
+        DOCS_DIR.mkdir(parents=True, exist_ok=True)
+        chemin = str(DOCS_DIR / "memoire_charo.csv")
+    encodage = "utf-8-sig"
+    with open(chemin, "w", newline="", encoding=encodage) as f:
+        ecrivain = csv.writer(f)
+        ecrivain.writerow(["id", "type", "question", "reponse", "score",
+                           "usage", "source", "appris_le", "dernier_usage",
+                           "utilisateur_id"])
+        for l in lignes:
+            ecrivain.writerow([l["id"], l["type"], l["question"], l["reponse"],
+                               l["score"], l["usage"], l["source"],
+                               l["appris_le"], l["dernier_usage"],
+                               l.get("utilisateur_id") or ""])
+    return chemin
 
 
 def _llm_disponible():
@@ -531,6 +862,10 @@ class AssistantIA:
         self._last_llm_reponse = None
         self._llm_question_originale = None
         self._compteur_tours = 0
+        # Personnalité chaleureuse
+        self._personnalite = get_personnalite(user)
+        self._premier_contact = True
+        self._dernier_type_contexte = None
 
     # ------------------------------------------------------------------
     # API publique
@@ -564,7 +899,8 @@ class AssistantIA:
             return self._avancer_flux(t, brut)
 
         if _non(t):
-            return self._rep("Rien a annuler. Comment puis-je aider ?")
+            return self._rep(self._personnalite.envelopper(
+                "Rien à annuler. Comment puis-je vous aider ?"), contexte_type="general")
 
         # Fil de discussion : « et en cm2 ? » / « et ses paiements ? »
         reformulee = self.contexte.reformuler(t)
@@ -589,17 +925,17 @@ class AssistantIA:
                 t, "bonjour", "salut", "bonsoir", "hello", "coucou", "hey",
                 "merci", "super", "genial", "top", "bye", "revoir"):
             if _mot_present(t, "merci"):
-                return self._rep("Avec plaisir ! N'hesitez pas si vous avez "
-                                 "une autre question.")
+                return self._rep(self._personnalite.merci(), contexte_type="general",
+                                 deja_naturel=True)
             if _mot_present(t, "bye", "revoir"):
-                return self._rep(f"A bientot ! {NOM_ASSISTANT} reste "
-                                 "disponible ici.")
+                return self._rep(self._personnalite.au_revoir(), contexte_type="general",
+                                 deja_naturel=True)
+            # Salutation chaleureuse via la personnalité
             return self._rep(
-                f"Bonjour {self._prenom_utilisateur()} ! Je suis "
-                f"{NOM_ASSISTANT}, votre assistante. Demandez-moi par exemple : "
-                "« combien d'eleves ? », « solde de la caisse », « qui est "
-                "absent aujourd'hui ? » ou tapez « aide ».",
-                choix=self.suggestions())
+                self._personnalite.salutation(premier_contact=self._premier_contact),
+                choix=self.suggestions(),
+                contexte_type="salutation",
+                deja_naturel=True)
 
         resultat_calcul = self._calcul_libre(t)
         if resultat_calcul is not None:
@@ -623,7 +959,8 @@ class AssistantIA:
 
         if _contient_un(t, "posez-moi autre chose"):
             return self._rep("Bien sur ! Que voulez-vous savoir ?",
-                             choix=self.suggestions())
+                             choix=self.suggestions(),
+                             deja_naturel=True)
 
         if _contient(t, "la bonne reponse") and \
                 _contient_un(t, "apprendre", "apprends") and \
@@ -632,7 +969,8 @@ class AssistantIA:
                              "etape": "collecte_reponse",
                              "question": self._derniere_question_brute}
             return self._rep("Bien sur. Quelle est la bonne reponse a "
-                             "retenir ? (envoyez-la telle quelle)")
+                             "retenir ? (envoyez-la telle quelle)",
+                             deja_naturel=True)
 
         if _contient_un(t, "statisti", "apprentissage auto", "tes progres",
                         "evolue", "combien de questions"):
@@ -829,11 +1167,18 @@ class AssistantIA:
     def suggestions(self):
         """Suggestions contextuelles, améliorées par le LLM quand disponible.
 
+        La base est adaptee au role de l'utilisateur (le gestionnaire vit
+        sur la caisse et les paiements, le directeur sur la vue d'ensemble).
         Le LLM ne reformule les suggestions que si le modèle est déjà chargé
         en mémoire (sinon, le premier appel prend ~30s ce qui bloquerait
         l'interface)."""
-        base = ["Combien d'eleves ?", "Solde de la caisse",
-                "Qui est absent aujourd'hui ?", "Aide"]
+        role = (self.user or {}).get("role")
+        if role == "gestionnaire":
+            base = ["Solde de la caisse", "Dernières transactions",
+                    "Paiements de ce mois", "Aide"]
+        else:
+            base = ["Combien d'eleves ?", "Solde de la caisse",
+                    "Qui est absent aujourd'hui ?", "Aide"]
         if not self._llm.disponible() or not self._llm._modele_charge:
             return base
         try:
@@ -937,6 +1282,7 @@ class AssistantIA:
         if time.monotonic() - self._vocab_date < 60.0:
             return self._vocab_cache
         mots = {normaliser_ia(m) for m in _VOCABULAIRE_DE_BASE}
+        conn = None
         try:
             for sujet in MANUEL:
                 mots.update(normaliser_ia(c) for c in sujet["clefs"])
@@ -957,6 +1303,12 @@ class AssistantIA:
                 mots.add(normaliser_ia(nom))
         except Exception:
             pass
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
         mots.discard("")
         self._vocab_cache = mots
         self._vocab_date = time.monotonic()
@@ -1021,31 +1373,68 @@ class AssistantIA:
     # ------------------------------------------------------------------
 
     def _rep(self, texte, action=None, choix=None, explication=None,
-             suggestions=None, llme=False, source="moteur"):
-        """Crée une réponse structurée.
+             suggestions=None, llme=False, source="moteur", contexte_type=None,
+             deja_naturel=False):
+        """Crée une réponse structurée avec personnalité chaleureuse.
 
         Chaque réponse livrée est journalisée (moteur d'apprentissage
         autonome) avec sa source (memoire/llm/corpus/manuel/...).
         Si *llme* est True et le backend LLM est disponible, le texte est
         reformulé pour être plus naturel et conversationnel (comme les IA
-        modernes). Le texte original est conservé en secours."""
-        texte_final = texte.strip()
+        modernes). Le texte original est conservé en secours.
+        
+        La personnalité de Charo enveloppe la réponse technique dans un
+        langage naturel, empathique et humain.
+        
+        Si *deja_naturel* est True, le texte est considéré comme déjà
+        formulé en langage naturel (salutations, aide, merci, etc.) et
+        n'est pas ré-enveloppé."""
+        texte_brut = texte.strip()
+        
+        # Appliquer la personnalité (sauf si déjà naturel ou pour certaines sources)
+        if not deja_naturel and (source not in ("memoire", "llm") or llme):
+            # Déterminer le contexte pour l'empathie
+            ctx = {"type": contexte_type} if contexte_type else None
+            if self._dernier_type_contexte and not contexte_type:
+                ctx = {"type": self._dernier_type_contexte}
+            
+            # Première réponse : salutation chaleureuse
+            if self._premier_contact:
+                texte_final = self._personnalite.salutation(premier_contact=True)
+                self._premier_contact = False
+                # Ajouter la réponse technique après la salutation
+                if texte_brut:
+                    texte_final += "\n\n" + self._personnalite.envelopper(texte_brut, ctx, source)
+            else:
+                texte_final = self._personnalite.envelopper(texte_brut, ctx, source)
+        else:
+            # Pour memoire/llm ou deja_naturel : garder le texte brut (déjà formulé)
+            texte_final = texte_brut
+            if self._premier_contact:
+                self._premier_contact = False
+        
+        # LLM enhancement en plus de la personnalité
         if llme and self._llm.disponible() and texte_final:
             reformule = self._llm.reformuler_naturel(
                 texte_final,
                 self._contexte_conversation[-1] if self._contexte_conversation else "")
             if reformule:
                 texte_final = reformule
+        
+        # Mettre à jour le contexte pour les suggestions futures
+        if contexte_type:
+            self._dernier_type_contexte = contexte_type
+        
         rep = {"texte": texte_final, "action": action, "choix": choix}
         self._derniere_reponse = rep
         if explication:
             self._derniere_explication = explication
         if suggestions:
             rep["suggestions"] = suggestions
-        self._contexte_conversation.append(texte.strip())
+        self._contexte_conversation.append(texte_brut)
         if len(self._contexte_conversation) > 10:
             self._contexte_conversation.pop(0)
-        self._historique.append(("assistant", texte.strip()))
+        self._historique.append(("assistant", texte_brut))
         if len(self._historique) > 10:
             self._historique.pop(0)
         try:
@@ -1134,8 +1523,12 @@ class AssistantIA:
         if self._memoire_chargee:
             return
         self._assurer_table_memoire()
+        uid = (self.user or {}).get("id")
         self._index_memoire.vider()
-        for ligne in db.query("SELECT * FROM ia_memoire ORDER BY id"):
+        for ligne in db.query(
+                "SELECT * FROM ia_memoire "
+                "WHERE utilisateur_id IS NULL OR utilisateur_id = ? "
+                "ORDER BY id", (uid,)):
             texte_clef = ligne["question"] if ligne["type"] == "qa" \
                 else f"{ligne['question']} {ligne['reponse']}"
             self._index_memoire.ajouter(texte_clef)
@@ -1144,10 +1537,11 @@ class AssistantIA:
 
     def _memo_ajouter(self, type_mem, question, reponse_txt, source="manuel"):
         self._assurer_table_memoire()
+        uid = (self.user or {}).get("id")
         db.execute(
-            "INSERT INTO ia_memoire (type, question, reponse, source)"
-            " VALUES (?, ?, ?, ?)",
-            (type_mem, question[:200], reponse_txt[:2000], source))
+            "INSERT INTO ia_memoire (type, question, reponse, source,"
+            " utilisateur_id) VALUES (?, ?, ?, ?, ?)",
+            (type_mem, question[:200], reponse_txt[:2000], source, uid))
         self._memoire_chargee = False
         self._charger_index_memoire()
 
@@ -1157,9 +1551,12 @@ class AssistantIA:
         if resultat is None:
             return None
         score, texte_clef = resultat
+        uid = (self.user or {}).get("id")
         ligne = None
         for candidate in db.query(
-                "SELECT * FROM ia_memoire ORDER BY LENGTH(question) DESC"):
+                "SELECT * FROM ia_memoire "
+                "WHERE utilisateur_id IS NULL OR utilisateur_id = ? "
+                "ORDER BY LENGTH(question) DESC", (uid,)):
             clef = candidate["question"] if candidate["type"] == "qa" \
                 else f"{candidate['question']} {candidate['reponse']}"
             if normaliser(clef) == normaliser(texte_clef):
@@ -1189,9 +1586,12 @@ class AssistantIA:
                 return self._rep("Que dois-je oublier ? (ex : « oublie le "
                                  "code » ou « oublie tout »)")
             self._assurer_table_memoire()
+            uid = (self.user or {}).get("id")
             lignes = db.query(
-                "SELECT id, question FROM ia_memoire WHERE question LIKE ? "
-                "OR reponse LIKE ?", (f"%{motif}%", f"%{motif}%"))
+                "SELECT id, question FROM ia_memoire "
+                "WHERE (utilisateur_id IS NULL OR utilisateur_id = ?) "
+                "AND (question LIKE ? OR reponse LIKE ?)",
+                (uid, f"%{motif}%", f"%{motif}%"))
             for l in lignes:
                 db.execute("DELETE FROM ia_memoire WHERE id = ?", (l["id"],))
             self._memoire_chargee = False
@@ -1203,7 +1603,11 @@ class AssistantIA:
         if _contient_un(t, "ta memoire", "ce que tu as appris", "ce que tu sais",
                         "liste appris", "memorise"):
             self._assurer_table_memoire()
-            lignes = db.query("SELECT * FROM ia_memoire ORDER BY id DESC LIMIT 20")
+            uid = (self.user or {}).get("id")
+            lignes = db.query(
+                "SELECT * FROM ia_memoire "
+                "WHERE utilisateur_id IS NULL OR utilisateur_id = ? "
+                "ORDER BY id DESC LIMIT 20", (uid,))
             if not lignes:
                 return self._rep("Ma memoire est vide pour l'instant. "
                                  "Enseignez-moi : « retiens que ... » ou "
@@ -1249,9 +1653,11 @@ class AssistantIA:
         self._attente = {"type": "apprentissage", "etape": "proposition",
                          "question": brut_original}
         return self._rep(
-            f"Je n'ai pas de reponse pour : « {brut_original} ».\n"
-            "Voulez-vous me l'apprendre ? (oui / non)",
-            choix=["Oui", "Non"])
+            f"Pardon, je n'ai pas encore de réponse pour « {brut_original} ».\n"
+            "Je peux retenir la bonne réponse : voulez-vous me l'apprendre ? "
+            "(oui / non)",
+            choix=["Oui", "Non"],
+            deja_naturel=True)
 
     # ------------------------------------------------------------------
     # Machine a etats generale (creations + apprentissage + confirmations)
@@ -1268,7 +1674,11 @@ class AssistantIA:
             self.reinitialiser()
             if _oui(t):
                 self._assurer_table_memoire()
-                db.execute("DELETE FROM ia_memoire")
+                uid = (self.user or {}).get("id")
+                db.execute(
+                    "DELETE FROM ia_memoire "
+                    "WHERE utilisateur_id IS NULL OR utilisateur_id = ?",
+                    (uid,))
                 self._memoire_chargee = False
                 return self._rep("Memoire entierement effacee.")
             return self._rep("Effacement annule. Ma memoire est intacte.")
@@ -1660,20 +2070,22 @@ class AssistantIA:
         nb_pres = presents["c"] if presents else 0
         date_fr = formater_date(jour.isoformat())
         if not lignes:
-            return self._rep(f"Aucune absence ni retard enregistre le {date_fr} "
-                             f"({nb_pres} present(s)).")
-        parties = [f"{date_fr} — {len(lignes)} marque(s) absent(s)/retard(s) :"]
+            return self._rep(f"Aucune absence ni retard enregistré le {date_fr} "
+                             f"({nb_pres} présent(s)). Tout va bien ! ✨",
+                             contexte_type="absences")
+        parties = [f"{date_fr} — {len(lignes)} élève(s) absent(s)/en retard :"]
         for l in lignes[:12]:
             nom = f"{l['prenom']} {l['nom']}".strip()
             parties.append(f"- {nom} ({l['classe'] or '?'}) : {l['statut']}"
                            + (f" — {l['motif']}" if l.get("motif") else ""))
         if len(lignes) > 12:
             parties.append(f"... et {len(lignes) - 12} autre(s).")
-        parties.append(f"Present(s) ce jour : {nb_pres}.")
+        parties.append(f"Présent(s) ce jour : {nb_pres}.")
         return self._rep(
             "\n".join(parties),
             suggestions=["Qui est absent hier ?", "Moyenne de la classe",
-                         "Solde de la caisse"])
+                         "Solde de la caisse"],
+            contexte_type="absences")
 
     # ------------------------------------------------------------------
     # Questions : moyennes et notes
@@ -1751,18 +2163,20 @@ class AssistantIA:
             return refus
         texte = self._moyenne_generale_texte()
         if texte is None:
-            return self._rep("Aucune note enregistree : impossible de "
-                             "calculer une moyenne generale.")
+            return self._rep("Aucune note enregistrée : impossible de "
+                             "calculer une moyenne générale.",
+                             contexte_type="moyenne")
         moy = self._collecter_moyennes_globales()
         return self._rep(
             texte,
-            explication=(f"J'ai calcule la moyenne generale ponderee de "
-                         f"chaque eleve (formule (D1 + D2 + 2 x Composition) "
-                         f"/ 4 par matiere, puis moyenne ponderee par les "
+            explication=(f"J'ai calculé la moyenne générale pondérée de "
+                         f"chaque élève (formule (D1 + D2 + 2 x Composition) "
+                         f"/ 4 par matière, puis moyenne pondérée par les "
                          f"coefficients), puis la moyenne simple des "
-                         f"{len(moy)} eleves notes."),
-            suggestions=["Classement des eleves", "Moyenne de la classe 6eme",
-                         "Solde de la caisse"])
+                         f"{len(moy)} élèves notés."),
+            suggestions=["Classement des élèves", "Moyenne de la classe 6ème",
+                         "Solde de la caisse"],
+            contexte_type="moyenne")
 
     def _q_classement(self, t):
         if not _contient_un(t, "classement", "classer", "rang", "rangement",
@@ -1782,24 +2196,26 @@ class AssistantIA:
                                  f"classe {classe['nom']}.")
         else:
             lignes = self._collecter_moyennes_globales()
-            titre = "Classement des eleves (toutes classes) :"
+            titre = "Classement des élèves (toutes classes) :"
             if not lignes:
-                return self._rep("Aucune note enregistree : je ne peux pas "
-                                 "classer les eleves.")
+                return self._rep("Aucune note enregistrée : je ne peux pas "
+                                 "classer les élèves.",
+                                 contexte_type="moyenne")
         lignes_aff = list(reversed(lignes))
         parties = [titre]
         for i, l in enumerate(lignes_aff[:10], start=1):
             parties.append(f"{i}. {l['prenom']} {l['nom']} ({l['classe']}) : "
                            f"{l['moyenne']:.2f} ({appreciation(l['moyenne'])})")
         if len(lignes_aff) > 10:
-            parties.append("(Top 10 affiche)")
+            parties.append("(Top 10 affiché)")
         return self._rep(
             "\n".join(parties),
-            explication=(f"J'ai trie les {len(lignes)} eleves selon leur "
-                         f"moyenne generale ponderee (coefficients des "
-                         f"matieres)."),
-            suggestions=["Moyenne generale", "Moyenne de la classe 6eme",
-                         "Qui est absent aujourd'hui ?"])
+            explication=(f"J'ai trié les {len(lignes)} élèves selon leur "
+                         f"moyenne générale pondérée (coefficients des "
+                         f"matières)."),
+            suggestions=["Moyenne générale", "Moyenne de la classe 6ème",
+                         "Qui est absent aujourd'hui ?"],
+            contexte_type="moyenne")
 
     def _q_moyennes(self, t):
         if not _contient_un(t, "moyenne", "moyennes", "resultat", "resultats",
@@ -1836,7 +2252,8 @@ class AssistantIA:
                              f"{moy:.2f}/20 ({appreciation(moy)}).")
         resultats = self._generale_eleve(eleve["id"])
         if not resultats:
-            return self._rep(f"Aucune note enregistree pour {nom_complet}.")
+            return self._rep(f"Aucune note enregistrée pour {nom_complet}.",
+                             contexte_type="moyenne")
         parties = [f"Moyennes de {nom_complet} :"]
         valeurs = []
         for p in PERIODES:
@@ -1853,20 +2270,22 @@ class AssistantIA:
                                f"({appreciation(globale)})")
         return self._rep(
             "\n".join(parties),
-            explication=(f"J'ai calcule la moyenne generale de {nom_complet} : "
-                         f"pour chaque matiere, formule (D1 + D2 + 2 x "
-                         f"Composition) / 4, puis moyenne ponderee par les "
-                         f"coefficients. Resultat final : "
+            explication=(f"J'ai calculé la moyenne générale de {nom_complet} : "
+                         f"pour chaque matière, formule (D1 + D2 + 2 x "
+                         f"Composition) / 4, puis moyenne pondérée par les "
+                         f"coefficients. Résultat final : "
                          f"{globale:.2f}/20." if len(valeurs) > 1
-                         else f"J'ai calcule la moyenne de {nom_complet} pour "
-                              f"{periode or 'la periode demandee'}."),
-            suggestions=["Moyenne de la classe", "Combien d'eleves ?",
-                         "Qui est absent aujourd'hui ?"])
+                         else f"J'ai calculé la moyenne de {nom_complet} pour "
+                              f"{periode or 'la période demandée'}."),
+            suggestions=["Moyenne de la classe", "Combien d'élèves ?",
+                         "Qui est absent aujourd'hui ?"],
+            contexte_type="moyenne")
 
     def _moyennes_de_classe(self, classe, periode):
         eleves = repos.eleve.eleves(classe_id=classe["id"])
         if not eleves:
-            return self._rep(f"Aucun eleve dans la classe {classe['nom']}.")
+            return self._rep(f"Aucun élève dans la classe {classe['nom']}.",
+                             contexte_type="moyenne")
         lignes = []
         for e in eleves:
             res = self._generale_eleve(e["id"], periode=periode)
@@ -1881,11 +2300,12 @@ class AssistantIA:
             lignes.append((res, e["prenom"], e["nom"]))
         if not lignes:
             suffixe = f" au {periode}" if periode else ""
-            return self._rep(f"Aucune note enregistree pour la classe "
-                             f"{classe['nom']}{suffixe}.")
+            return self._rep(f"Aucune note enregistrée pour la classe "
+                             f"{classe['nom']}{suffixe}.",
+                             contexte_type="moyenne")
         lignes.sort(key=lambda x: x[0], reverse=True)
         titre = f"Classe {classe['nom']}" + (f" — {periode}" if periode else "")
-        parties = [f"{titre} — {len(lignes)} eleve(s) note(s) :"]
+        parties = [f"{titre} — {len(lignes)} élève(s) noté(s) :"]
         for rang, (moy, prenom, nom) in enumerate(lignes[:10], start=1):
             parties.append(f"{rang}. {prenom} {nom} : {moy:.2f} "
                            f"({appreciation(moy)})")
@@ -1893,16 +2313,17 @@ class AssistantIA:
         parties.append(f"> Moyenne de la classe : {moyenne_classe:.2f}/20 "
                        f"({appreciation(moyenne_classe)})")
         if len(lignes) > 10:
-            parties.append("(Top 10 affiche)")
+            parties.append("(Top 10 affiché)")
         return self._rep(
             "\n".join(parties),
-            explication=(f"Pour chaque eleve, j'ai calcule la moyenne "
-                         f"generale ponderee (coefficients des matieres). "
-                         f"Puis j'ai moyenne simple de {len(lignes)} eleves = "
-                         f"{moyenne_classe:.2f}. Formule par matiere : "
+            explication=(f"Pour chaque élève, j'ai calculé la moyenne "
+                         f"générale pondérée (coefficients des matières). "
+                         f"Puis j'ai fait la moyenne simple de {len(lignes)} élèves = "
+                         f"{moyenne_classe:.2f}. Formule par matière : "
                          f"(D1 + D2 + 2 x Composition) / 4."),
             suggestions=["Moyenne de " + self._nom_dernier_eleve(),
-                         "Qui est absent aujourd'hui ?", "Solde de la caisse"])
+                         "Qui est absent aujourd'hui ?", "Solde de la caisse"],
+            contexte_type="moyenne")
 
     @staticmethod
     def _extraire_periode(t):
@@ -2021,16 +2442,17 @@ class AssistantIA:
                          f"({dernier.get('type_frais') or '-'})")
         return self._rep(
             "\n".join(texte),
-            explication=(f"J'ai additionne tous les paiements de "
+            explication=(f"J'ai additionné tous les paiements de "
                          f"{nom_complet} ({total_paye:.0f} FCFA sur "
-                         f"{len(paiements)} paiement(s)). Frais prevus de la "
-                         f"classe : {total_du:.0f} FCFA. Reste a payer : "
+                         f"{len(paiements)} paiement(s)). Frais prévus de la "
+                         f"classe : {total_du:.0f} FCFA. Reste à payer : "
                          f"{reste:.0f} FCFA." if total_du
-                         else f"J'ai additionne {len(paiements)} paiement(s) "
+                         else f"J'ai additionné {len(paiements)} paiement(s) "
                               f"pour {nom_complet} : {total_paye:.0f} FCFA."),
             suggestions=["Moyenne de " + self._nom_dernier_eleve(),
                          "Fiche de " + self._nom_dernier_eleve(),
-                         "Tarifs de la classe"])
+                         "Tarifs de la classe"],
+            contexte_type="paiement")
 
     # ------------------------------------------------------------------
     # Questions : tarifs d'une classe
@@ -2038,7 +2460,7 @@ class AssistantIA:
 
     def _q_tarifs_classe(self, t):
         if not _contient_un(t, "tarif", "tarifs", "frais", "cout", "couts",
-                            "prix", "coute"):
+        "prix", "coute"):
             return None
         if self._verifier_acces("tarifs"):
             return self._verifier_acces("tarifs")
@@ -2048,8 +2470,9 @@ class AssistantIA:
         self._derniere_classe_id = classe["id"]
         tarifs = repos.finance.tarifs(classe_id=classe["id"])
         if not tarifs:
-            return self._rep(f"Aucun tarif defini pour la classe "
-                             f"{classe['nom']}.")
+            return self._rep(f"Aucun tarif défini pour la classe "
+                             f"{classe['nom']}.",
+                             contexte_type="tarifs")
         parties = [f"Tarifs de la classe {classe['nom']} :"]
         total = 0.0
         for tr in tarifs:
@@ -2058,7 +2481,7 @@ class AssistantIA:
             parties.append(f"- {tr['type_frais']} : "
                            f"{formater_fcfa(tr['montant'])}{annee}")
         parties.append(f"> TOTAL des frais : {formater_fcfa(total)}")
-        return self._rep("\n".join(parties))
+        return self._rep("\n".join(parties), contexte_type="tarifs")
 
     # ------------------------------------------------------------------
     # Questions : caisse
@@ -2089,22 +2512,24 @@ class AssistantIA:
             parties.append(f"Solde actuel : {formater_fcfa(solde)}")
             return self._rep(
                 "\n".join(parties),
-                explication=(f"J'ai recupere les {len(lignes)} dernieres "
-                             f"transactions de la caisse et calcule le solde "
-                             f"(entrees - sorties = {solde:.0f} FCFA)."),
-                suggestions=["Solde de la caisse", "Enregistrer une entree",
-                             "Combien d'eleves ?"])
+                explication=(f"J'ai récupéré les {len(lignes)} dernières "
+                             f"transactions de la caisse et calculé le solde "
+                             f"(entrées - sorties = {solde:.0f} FCFA)."),
+                suggestions=["Solde de la caisse", "Enregistrer une entrée",
+                             "Combien d'élèves ?"],
+                contexte_type="caisse")
 
-        texte = (f"Caisse — Entrees : {formater_fcfa(entree)} | Sorties : "
+        texte = (f"Caisse — Entrées : {formater_fcfa(entree)} | Sorties : "
                  f"{formater_fcfa(sortie)} | SOLDE : {formater_fcfa(solde)}.")
         if solde < 0:
-            texte += "\nAttention : solde negatif !"
+            texte += "\n⚠️ Attention : solde négatif !"
         return self._rep(
             texte,
-            explication=(f"Solde = entrees ({entree:.0f} FCFA) - sorties "
+            explication=(f"Solde = entrées ({entree:.0f} FCFA) - sorties "
                          f"({sortie:.0f} FCFA) = {solde:.0f} FCFA."),
-            suggestions=["Dernieres transactions", "Masse salariale",
-                         "Enregistrer une entree de 5000 pour fournitures"])
+            suggestions=["Dernières transactions", "Masse salariale",
+                         "Enregistrer une entrée de 5000 pour fournitures"],
+            contexte_type="caisse")
 
     # ------------------------------------------------------------------
     # Questions : personnel
@@ -2130,14 +2555,16 @@ class AssistantIA:
         if _contient_un(t, "enseignant", "enseignants", "professeur",
                         "professeurs", "instit"):
             if not profs:
-                return self._rep("Aucun enseignant trouve dans le personnel.")
+                return self._rep("Aucun enseignant trouvé dans le personnel.",
+                                 contexte_type="personnel")
             parties = [f"{len(profs)} enseignant(s) :"]
             for p in profs[:12]:
                 parties.append(f"- {p['nom_complet']} — {p['fonction']} "
                                f"({formater_fcfa(p['salaire'])})")
-            return self._rep("\n".join(parties))
+            return self._rep("\n".join(parties), contexte_type="personnel")
         return self._rep(f"Personnel : {len(tout)} membres dont "
-                         f"{len(profs)} enseignant(s).")
+                         f"{len(profs)} enseignant(s).",
+                         contexte_type="personnel")
 
     # ------------------------------------------------------------------
     # Questions : annee active
@@ -2151,18 +2578,19 @@ class AssistantIA:
             return None
         active = repos.classe.annee_scolaire_active()
         if not active:
-            return self._rep("Aucune annee scolaire active ! Definissez-en "
-                             "une dans CYCLES & ANNEES sinon certaines saisies "
-                             "seront bloquees.",
-                             action={"type": "navigate", "page": "cycles"})
-        texte = (f"Annee scolaire active : {active['libelle']} "
+            return self._rep("Aucune année scolaire active ! Définissez-en "
+                             "une dans CYCLES & ANNÉES sinon certaines saisies "
+                             "seront bloquées.",
+                             action={"type": "navigate", "page": "cycles"},
+                             contexte_type="general")
+        texte = (f"Année scolaire active : {active['libelle']} "
                  f"(du {formater_date(active['date_debut'])} au "
                  f"{formater_date(active['date_fin'])}).")
         if _contient_un(t, "combien", "liste", "toutes", "autres"):
             toutes = repos.classe.annees_scolaires()
-            texte += "\nAnnees connues : " + \
+            texte += "\nAnnées connues : " + \
                 ", ".join(a["libelle"] for a in toutes)
-        return self._rep(texte)
+        return self._rep(texte, contexte_type="general")
 
     # ------------------------------------------------------------------
     # Questions : fiche eleve
@@ -2183,30 +2611,30 @@ class AssistantIA:
         return self._fiche_reponse(eleve)
 
     def _fiche_reponse(self, eleve):
-        sexe = {"M": "Garcon", "F": "Fille"}.get(eleve.get("sexe"), "?")
-        parties = [f"FICHE ELEVE — {eleve['prenom']} {eleve['nom']}",
+        sexe = {"M": "Garçon", "F": "Fille"}.get(eleve.get("sexe"), "?")
+        parties = [f"FICHE ÉLÈVE — {eleve['prenom']} {eleve['nom']}",
                    f"- Matricule : {eleve['matricule']}",
                    f"- Sexe : {sexe} | Statut : {eleve.get('statut') or '?'}",
-                   f"- Classe : {eleve.get('classe_nom') or 'non affectee'}"]
+                   f"- Classe : {eleve.get('classe_nom') or 'non affectée'}"]
         if eleve.get("date_naissance"):
-            parties.append(f"- Ne(e) le {formater_date(eleve['date_naissance'])}"
-                           + (f" a {eleve['lieu_naissance']}"
+            parties.append(f"- Né(e) le {formater_date(eleve['date_naissance'])}"
+                           + (f" à {eleve['lieu_naissance']}"
                               if eleve.get("lieu_naissance") else ""))
         contacts = []
         if eleve.get("pere_nom"):
-            contacts.append(f"Pere : {eleve['pere_nom']} "
+            contacts.append(f"Père : {eleve['pere_nom']} "
                             f"{eleve.get('pere_tel') or ''}".strip())
         if eleve.get("mere_nom"):
-            contacts.append(f"Mere : {eleve['mere_nom']} "
+            contacts.append(f"Mère : {eleve['mere_nom']} "
                             f"{eleve.get('mere_tel') or ''}".strip())
         if eleve.get("tuteur_nom"):
             contacts.append(f"Tuteur : {eleve['tuteur_nom']} "
                             f"{eleve.get('tuteur_tel') or ''}".strip())
         if contacts:
             parties.append("- " + " | ".join(contacts))
-        parties.append("(Double-cliquez sur l'eleve dans ELEVES pour la fiche "
-                       "complete)")
-        return self._rep("\n".join(parties))
+        parties.append("(Double-cliquez sur l'élève dans ÉLÈVES pour la fiche "
+                       "complète)")
+        return self._rep("\n".join(parties), contexte_type="eleve")
 
     # ------------------------------------------------------------------
     # Questions : effectifs
@@ -2221,13 +2649,13 @@ class AssistantIA:
             return None
         if self._verifier_acces("eleves"):
             return self._verifier_acces("eleves")
-
+        
         filtre_sexe = None
         if _contient_un(t, "fille", "filles"):
             filtre_sexe = "F"
         elif _contient_un(t, "garcon", "garcons"):
             filtre_sexe = "M"
-
+        
         classe = self._trouver_classe(t)
         if classe is not None:
             self._derniere_classe_id = classe["id"]
@@ -2236,17 +2664,20 @@ class AssistantIA:
             filles = sum(1 for e in eleves if e.get("sexe") == "F")
             capacite = classe.get("capacite") or 50
             taux = round(nb * 100.0 / capacite) if capacite else 0
-            detail_sexe = f" ({filles} fille(s), {nb - filles} garcon(s))"
+            detail_sexe = f" ({filles} fille(s), {nb - filles} garçon(s))"
             if filtre_sexe == "F":
                 return self._rep(f"Classe {classe['nom']} : {filles} fille(s) "
-                                 f"sur {nb} eleve(s).")
+                                 f"sur {nb} élève(s).",
+                                 contexte_type="effectifs")
             if filtre_sexe == "M":
                 return self._rep(f"Classe {classe['nom']} : {nb - filles} "
-                                 f"garcon(s) sur {nb} eleve(s).")
-            return self._rep(f"Classe {classe['nom']} : {nb} eleve(s)"
+                                 f"garçon(s) sur {nb} élève(s).",
+                                 contexte_type="effectifs")
+            return self._rep(f"Classe {classe['nom']} : {nb} élève(s)"
                              f"{detail_sexe} — remplissage {taux}% de la "
-                             f"capacite ({capacite} places).")
-
+                             f"capacité ({capacite} places).",
+                             contexte_type="effectifs")
+        
         for cyc in repos.classe.cycles():
             if normaliser(cyc["nom"]) in t:
                 total = db.query(
@@ -2254,36 +2685,40 @@ class AssistantIA:
                        JOIN classes cl ON cl.id = e.classe_id
                        WHERE cl.cycle_id = ?""", (cyc["id"],))
                 return self._rep(f"Cycle {cyc['nom']} : {total[0]['c']} "
-                                 "eleve(s) toutes classes confondues.")
-
+                                 "élève(s) toutes classes confondues.",
+                                 contexte_type="effectifs")
+        
         tous = repos.eleve.eleves()
         nb_total = len(tous)
         filles = sum(1 for e in tous if e.get("sexe") == "F")
         garcons = nb_total - filles
         inscrits = sum(1 for e in tous if (e.get("statut") or "") == "Inscrit")
         if filtre_sexe == "F":
-            return self._rep(f"L'ecole compte {filles} fille(s) sur "
-                             f"{nb_total} eleve(s) enregistre(s).",
-                             suggestions=["Combien de garcons ?", "Moyenne de la classe 6eme"])
+            return self._rep(f"L'école compte {filles} fille(s) sur "
+                             f"{nb_total} élève(s) enregistré(s).",
+                             suggestions=["Combien de garçons ?", "Moyenne de la classe 6ème"],
+                             contexte_type="effectifs")
         if filtre_sexe == "M":
-            return self._rep(f"L'ecole compte {garcons} garcon(s) sur "
-                             f"{nb_total} eleve(s) enregistre(s).",
-                             suggestions=["Combien de filles ?", "Moyenne de la classe 6eme"])
+            return self._rep(f"L'école compte {garcons} garçon(s) sur "
+                             f"{nb_total} élève(s) enregistré(s).",
+                             suggestions=["Combien de filles ?", "Moyenne de la classe 6ème"],
+                             contexte_type="effectifs")
         return self._rep(
-            f"Effectif total : {nb_total} eleve(s) enregistre(s) — {filles} "
-            f"fille(s), {garcons} garcon(s), dont {inscrits} au statut "
-            f"« Inscrit ».\nDemandez une classe precise : « combien d'eleves "
-            f"en 6eme ? »",
-            explication=(f"J'ai compte tous les eleves de la table principale. "
-                         f"Resultat : {nb_total} au total, {filles} filles, "
-                         f"{garcons} garcons, {inscrits} inscrits."),
-            suggestions=["Combien de filles ?", "Combien de garcons ?",
-                         "Qui est absent aujourd'hui ?"])
-
+            f"Effectif total : {nb_total} élève(s) enregistré(s) — {filles} "
+            f"fille(s), {garcons} garçon(s), dont {inscrits} au statut "
+            f"« Inscrit ».\nDemandez une classe précise : « combien d'élèves "
+            f"en 6ème ? »",
+            explication=(f"J'ai compté tous les élèves de la table principale. "
+                         f"Résultat : {nb_total} au total, {filles} filles, "
+                         f"{garcons} garçons, {inscrits} inscrits."),
+            suggestions=["Combien de filles ?", "Combien de garçons ?",
+                         "Qui est absent aujourd'hui ?"],
+            contexte_type="effectifs")
+        
     # ------------------------------------------------------------------
     # Recherche d'entites (floue)
     # ------------------------------------------------------------------
-
+        
     def _trouver_classe(self, t):
         classes = repos.classe.classes()
         if not classes:
@@ -2426,30 +2861,25 @@ class AssistantIA:
 
     def _aide(self):
         return self._rep(
-            f"Voici ce que je sais faire ({NOM_ASSISTANT}) :\n"
-            "RENSEIGNER — « combien d'eleves ? », « combien en 6eme ? », "
-            "« qui est absent aujourd'hui ? », « solde de la caisse », "
-            "« dernieres transactions », « moyenne de <eleve> », « moyenne de "
-            "la classe 6eme », « combien a paye <eleve> », « tarifs de la "
-            "classe CM2 », « masse salariale », « quelle annee est active ? »\n"
-            "CALCULER — « 125000 - 45000 », moyennes ponderees automatiques\n"
-            "CREER — « creer un cycle Superieur », « creer une matiere "
-            "Histoire coefficient 2 », « creer une classe 6eme B », "
-            "« enregistrer une entree de 5000 pour fournitures », « inscrire "
-            "un nouvel eleve »\n"
-            "OUVRIR — « ouvre les paiements », « va a la caisse »\n"
-            "APPRENDRE — « retiens que ... », « quand je dis X reponds Y », "
-            "« montre ta memoire », « oublie ... »\n"
-            "EXPLIQUER — « explique-moi », « comment tu as calculé ? » "
-            "(je detaillerai mon raisonnement)\n"
-            "COMPOSE — « X et Y ? » (je reponds aux deux questions)\n"
-            "MULTI-POSTES — « etat du serveur », « synchronise maintenant »\n"
-            "MANUEL — « comment inscrire un eleve ? », « comment faire les "
-            "bulletins ? », « comment sauvegarder ? »\n"
-            "AUTO-APPRENTISSAGE — « tes statistiques », « ameliore-toi »\n"
-            "(pour chaque reponse, vous pouvez noter 👍 / 👎 : je m'en sers "
-            "pour renforcer ou corriger ma memoire)",
-            choix=self.suggestions())
+            f"Voici ce que je sais faire, {self._personnalite._prenom() or ''} :\n"
+            "📊 **Renseigner** — « combien d'élèves ? », « qui est absent aujourd'hui ? »,\n"
+            "  « solde de la caisse », « moyenne de <élève> », « moyenne de la classe 6ème »,\n"
+            "  « combien a payé <élève> », « tarifs de la classe CM2 », « masse salariale »\n"
+            "🧮 **Calculer** — « 125000 - 45000 », moyennes pondérées automatiques\n"
+            "✨ **Créer** — « créer un cycle Supérieur », « créer une matière Histoire coef 2 »,\n"
+            "  « créer une classe 6ème B », « inscrire un nouvel élève »\n"
+            "📂 **Ouvrir** — « ouvre les paiements », « va à la caisse »\n"
+            "🧠 **Apprendre** — « retiens que... », « quand je dis X réponds Y »,\n"
+            "  « montre ta mémoire », « oublie... »\n"
+            "💡 **Expliquer** — « explique-moi », « comment tu as calculé ? »\n"
+            "🔗 **Composé** — « X et Y ? » (je réponds aux deux)\n"
+            "🌐 **Multi-postes** — « état du serveur », « synchronise maintenant »\n"
+            "📖 **Manuel** — « comment inscrire un élève ? », « comment faire les bulletins ? »\n"
+            "🔄 **Auto-apprentissage** — « tes statistiques », « améliore-toi »\n"
+            "(Sous chaque réponse, notez 👍 / 👎 pour m'aider à progresser !)",
+            choix=self.suggestions(),
+            contexte_type="aide",
+            deja_naturel=True)
 
     def _forme_stats(self):
         """Presse-citron lisible des statistiques d'apprentissage."""
@@ -2486,17 +2916,18 @@ class AssistantIA:
         except Exception:
             modifie = 0
         if int(note) > 0:
-            merci = f"Merci ! Je renforce cette reponse dans ma memoire." if modifie \
+            merci = f"Merci ! Je renforce cette réponse dans ma mémoire." if modifie \
                 else "Merci ! Je garde cette interaction en trace."
-            return self._rep(merci, source="feedback")
-        conseil = ("Je note avec attention et je vais m'ameliorer. Vous "
-                   "pouvez m'apprendre directement la bonne reponse : "
+            return self._rep(merci, source="feedback", deja_naturel=True)
+        conseil = ("Je note avec attention et je vais m'améliorer. Vous "
+                   "pouvez m'apprendre directement la bonne réponse : "
                    "« retiens que ... » ou cliquez « Apprendre la bonne "
-                   "reponse ».")
+                   "réponse ».")
         if modifie:
-            conseil += " J'ai deja baisse la confiance de la reponse fautive."
+            conseil += " J'ai déjà baissé la confiance de la réponse fautive."
         return self._rep(conseil, source="feedback",
-                         choix=["Apprendre la bonne reponse"])
+                         choix=["Apprendre la bonne réponse"],
+                         deja_naturel=True)
 
     def ameliorer(self, force=False):
         """Passe d'entrainement manuel (retourne un rapport)."""

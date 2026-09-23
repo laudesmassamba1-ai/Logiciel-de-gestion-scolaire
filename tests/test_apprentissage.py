@@ -226,7 +226,7 @@ class TestIntegration:
         rep = ia.noter_reponse(1)
         assert isinstance(rep, dict) and rep["texte"]
         neg = ia.noter_reponse(-1)
-        assert "m'ameliorer" in neg["texte"]
+        assert "m'améliorer" in neg["texte"]
 
     def test_statistiques_publiques(self, base_vierge):
         ia = _assistant()
@@ -234,3 +234,100 @@ class TestIntegration:
         assert "apprentissages" in stats
         assert "rejeux" in stats
         assert "feedback_pos" in stats
+
+
+GESTIONNAIRE = {"id": 2, "role": "gestionnaire",
+                "nom_complet": "Marie Gestion", "username": "marie"}
+
+
+class TestMemoireParUtilisateur:
+    def test_colonne_utilisateur_id_inscrite(self, base_vierge):
+        _assistant().traiter("retiens que le portail ferme a 19h")
+        ligne = base_vierge.query_one(
+            "SELECT utilisateur_id FROM ia_memoire ORDER BY id DESC LIMIT 1")
+        assert ligne["utilisateur_id"] == DIRECTEUR["id"]
+
+    def test_migration_ajoute_la_colonne(self, base_vierge):
+        _moteur().ensure_tables()          # ajoute la colonne si absente
+        base_vierge.execute(
+            "ALTER TABLE ia_memoire DROP COLUMN utilisateur_id")
+        _moteur().ensure_tables()
+        colonnes = {r["name"] for r in
+                    base_vierge.query("PRAGMA table_info(ia_memoire)")}
+        assert "utilisateur_id" in colonnes
+
+    def test_a_ne_voit_pas_la_memoire_de_b(self, base_vierge):
+        ia_a = _assistant(DIRECTEUR)
+        ia_b = _assistant(GESTIONNAIRE)
+        ia_a.traiter("retiens que le mot de passe wifi est cactus")
+        rep = ia_b.traiter("mot de passe wifi ?")
+        assert "cactus" not in rep["texte"]
+        rep = ia_a.traiter("mot de passe wifi ?")
+        assert "cactus" in rep["texte"]
+
+    def test_oublie_vise_la_memoire_de_son_utilisateur(self, base_vierge):
+        ia_a = _assistant(DIRECTEUR)
+        ia_b = _assistant(GESTIONNAIRE)
+        ia_a.traiter("retiens que la salle des profs est au rez de chaussee")
+        ia_b.traiter("retiens que la salle des profs est au premier etage")
+        ia_b.traiter("oublie la salle des profs")
+        reste = base_vierge.query_one(
+            "SELECT COUNT(*) AS c FROM ia_memoire "
+            "WHERE utilisateur_id = ?", (DIRECTEUR["id"],))
+        assert reste["c"] == 1
+
+
+class TestApprentissageRapide:
+    def test_retient_qualite_pour_l_eleve(self, base_vierge):
+        from services.assistant_ia import apprentissage_rapide
+        question = apprentissage_rapide(DIRECTEUR, "Lea", "Mbang", "bon en maths")
+        assert question and "Lea" in question
+        ligne = base_vierge.query_one(
+            "SELECT * FROM ia_memoire WHERE question = ?", (question,))
+        assert ligne is not None
+        assert ligne["source"] == "fiche"
+        assert ligne["utilisateur_id"] == DIRECTEUR["id"]
+
+    def test_idempotent(self, base_vierge):
+        from services.assistant_ia import apprentissage_rapide
+        premier = apprentissage_rapide(DIRECTEUR, "Lea", "Mbang", "bon en maths")
+        second = apprentissage_rapide(DIRECTEUR, "Lea", "Mbang", "bon en maths")
+        assert premier is not None and second is None
+        c = base_vierge.query_one(
+            "SELECT COUNT(*) AS c FROM ia_memoire WHERE question = ?",
+            (premier,))
+        assert c["c"] == 1
+
+    def test_prenom_vide_ignore(self, base_vierge):
+        from services.assistant_ia import apprentissage_rapide
+        assert apprentissage_rapide(DIRECTEUR, "", "", "bon en maths") is None
+
+    def test_rejoue_depuis_le_chat_du_meme_utilisateur(self, base_vierge):
+        from services.assistant_ia import apprentissage_rapide
+        apprentissage_rapide(DIRECTEUR, "Lea", "Mbang", "bon en maths")
+        rep = _assistant(DIRECTEUR).traiter("lea mbang est comment en maths ?")
+        assert "bon en maths" in rep["texte"]
+
+
+class TestExportMemoire:
+    def test_export_csv_filtré_par_utilisateur(self, base_vierge, tmp_path):
+        from pathlib import Path
+        from services.assistant_ia import exporter_memoire
+        ia_a = _assistant(DIRECTEUR)
+        ia_b = _assistant(GESTIONNAIRE)
+        ia_a.traiter("retiens que la cantine ouvre a midi")
+        ia_b.traiter("retiens que la cantine ouvre a 13h")
+        chemin = Path(exporter_memoire(tmp_path / "mem.csv",
+                                       utilisateur=DIRECTEUR))
+        lignes = chemin.read_text(encoding="utf-8-sig").strip().splitlines()
+        assert lignes[0].startswith("id,type,question,reponse")
+        assert len(lignes) == 2   # en-tete + 1 ligne propre a l'utilisateur
+        assert "midi" in lignes[1]
+
+    def test_export_vide_cree_un_fichier(self, base_vierge, tmp_path):
+        from pathlib import Path
+        from services.assistant_ia import exporter_memoire
+        chemin = Path(exporter_memoire(tmp_path / "mem.csv",
+                                       utilisateur=DIRECTEUR))
+        assert chemin.exists()
+        assert len(chemin.read_text(encoding="utf-8-sig").strip().splitlines()) == 1

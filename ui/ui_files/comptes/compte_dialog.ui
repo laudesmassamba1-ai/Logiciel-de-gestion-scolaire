@@ -15,15 +15,15 @@
   </property>
   <property name="styleSheet">
    <string>
-    QDialog { background-color: #FFFFFF; font-family: 'Segoe UI', sans-serif; }
+    QDialog { background-color: #FFFFFF; }
     QLineEdit, QComboBox {
-        border: 1px solid #E1E6EF;
-        border-radius: 11px;
+        border: 1px solid #4A5568;
+        border-radius: 12px;
         padding: 8px;
-        background-color: #E7EBF3;
+        background: transparent;
     }
     QLineEdit:focus, QComboBox:focus {
-        border: 1px solid #C8960C;
+        border: 1px solid #4F6DF5;
         background-color: #FFFFFF;
     }
    </string>
@@ -48,7 +48,7 @@
    <item>
     <widget class="QLabel" name="lbl_dialog_title">
      <property name="styleSheet">
-      <string>color: #1D1D1F; font-size: 16px; font-weight: bold;</string>
+      <string>color: #1E2430; font-size: 16px; font-weight: bold;</string>
      </property>
      <property name="text">
       <string>Nouveau Compte</string>
@@ -58,7 +58,7 @@
    <item>
     <widget class="QLabel" name="lbl_dialog_subtitle">
      <property name="styleSheet">
-      <string>color: #373D4A; font-size: 12px;</string>
+      <string>color: #465064; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Definissez le mot de passe du nouveau compte</string>
@@ -69,7 +69,7 @@
    <item>
     <widget class="QLabel" name="lbl_field1">
      <property name="styleSheet">
-      <string>color: #1D1D1F; font-weight: bold; font-size: 12px;</string>
+      <string>color: #1E2430; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Nom complet :</string>
@@ -87,7 +87,7 @@
    <item>
     <widget class="QLabel" name="lbl_field2">
      <property name="styleSheet">
-      <string>color: #1D1D1F; font-weight: bold; font-size: 12px;</string>
+      <string>color: #1E2430; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Role :</string>
@@ -112,7 +112,7 @@
    <item>
     <widget class="QLabel" name="lbl_field_pwd">
      <property name="styleSheet">
-      <string>color: #1D1D1F; font-weight: bold; font-size: 12px;</string>
+      <string>color: #1E2430; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Mot de passe :</string>
@@ -133,7 +133,7 @@
    <item>
     <widget class="QLabel" name="lbl_field_pwd2">
      <property name="styleSheet">
-      <string>color: #1D1D1F; font-weight: bold; font-size: 12px;</string>
+      <string>color: #1E2430; font-weight: bold; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Confirmer le mot de passe :</string>
@@ -154,7 +154,7 @@
    <item>
     <widget class="QCheckBox" name="check_compte_actif">
      <property name="styleSheet">
-      <string>color: #1D1D1F; font-size: 12px;</string>
+      <string>color: #1E2430; font-size: 12px;</string>
      </property>
      <property name="text">
       <string>Compte actif des la creation</string>
@@ -197,7 +197,7 @@
      <item>
       <widget class="QPushButton" name="btn_cancel">
        <property name="styleSheet">
-        <string>background-color: #E7EBF3; color: #1D1D1F; border: none; border-radius: 11px; padding: 10px 18px; font-weight: bold;</string>
+        <string>background-color: #F0F4FC; color: #465064; border: 1px solid #4A5568; border-radius: 12px; padding: 10px 18px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Annuler</string>
@@ -210,7 +210,7 @@
         <cursorShape>PointingHandCursor</cursorShape>
        </property>
        <property name="styleSheet">
-        <string>background-color: #C8960C; color: #1D1D1F; border: none; border-radius: 11px; padding: 10px 18px; font-weight: bold;</string>
+        <string>background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5B7BF7, stop:1 #7C5CF0); color: #FFFFFF; border: 1px solid #4A5568; border-radius: 12px; padding: 10px 18px; font-weight: bold;</string>
        </property>
        <property name="text">
         <string>Creer le compte</string>

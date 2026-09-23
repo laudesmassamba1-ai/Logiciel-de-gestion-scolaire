@@ -32,6 +32,14 @@ def _script_demarrage():
     return [str(_executable()), str(main_py)]
 
 
+def _arguments() -> list:
+    """Arguments a passer a l'executable (vide si frozen : exe complet)."""
+    script = _script_demarrage()
+    if not script:
+        return []
+    return script[1:]
+
+
 def _fichier_demarrage() -> Path:
     """Chemin canonique du fichier de demarrage selon l'OS."""
     nom = APP_NAME.lower().replace(" ", "-")
@@ -65,6 +73,10 @@ def activer_auto_demarrage() -> bool:
             shell = Dispatch("WScript.Shell")
             raccourci = shell.CreateShortCut(str(fichier))
             raccourci.Targetpath = str(exe)
+            args = _arguments()
+            if args:
+                raccourci.Arguments = " ".join(
+                    f'"{a}"' if " " in a else a for a in args)
             raccourci.WorkingDirectory = str(PROJECT_ROOT)
             raccourci.IconLocation = str(exe)
             raccourci.save()
@@ -72,11 +84,16 @@ def activer_auto_demarrage() -> bool:
         except Exception:
             # Fallback : fichier .bat
             bat = fichier.parent / f"{nom}.bat"
-            bat.write_text(f'@echo off\nstart "" "{exe}"\n', encoding="utf-8")
+            cmd = f'"{exe}"'
+            if _arguments():
+                cmd += " " + " ".join(f'"{a}"' for a in _arguments())
+            bat.write_text(f'@echo off\nstart "" {cmd}\n', encoding="utf-8")
             return bat.exists()
 
     if sys.platform == "darwin":
         exe_str = str(exe)
+        program_args = "\n".join(
+            f"\t\t<string>{a}</string>" for a in _script_demarrage() or [exe_str])
         contenu = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -85,7 +102,7 @@ def activer_auto_demarrage() -> bool:
 \t<string>com.gestion-scolaire.{nom}</string>
 \t<key>ProgramArguments</key>
 \t<array>
-\t\t<string>{exe_str}</string>
+{program_args}
 \t</array>
 \t<key>RunAtLoad</key>
 \t<true/>
@@ -100,7 +117,7 @@ def activer_auto_demarrage() -> bool:
     if getattr(sys, "frozen", False):
         exec_line = exe_str
     else:
-        exec_line = f"{exe_str} {main_py}"
+        exec_line = f'"{exe_str}" "{main_py}"'
     contenu = f"""[Desktop Entry]
 Type=Application
 Name={APP_NAME}

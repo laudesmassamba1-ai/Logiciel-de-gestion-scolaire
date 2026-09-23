@@ -139,8 +139,12 @@ def _evaluer(noeud):
             if abs(args[0]) > _LIMITES["base_max"]:
                 raise ErreurCalcul("Nombre trop grand.")
             return _FONCTIONS[noeud.func.id](args[0])
-        if noeud.func.id in ("arrondi", "round") and len(args) == 2:
-            return round(args[0], int(args[1]))
+        if noeud.func.id in ("arrondi", "round"):
+            if len(args) == 1:
+                return round(args[0])
+            if len(args) == 2:
+                return round(args[0], int(args[1]))
+            raise ErreurCalcul("Attendu : 1 ou 2 nombres pour arrondi.")
         if len(args) == 1 and noeud.func.id in _FONCTIONS:
             return _FONCTIONS[noeud.func.id]([args[0]])
         return _FONCTIONS[noeud.func.id](*args)

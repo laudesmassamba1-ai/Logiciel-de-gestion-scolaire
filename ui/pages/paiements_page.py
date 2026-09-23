@@ -18,26 +18,9 @@ from ui.pages.helpers import (
 from ui.widgets import fmt_money, KPICard, DataTable, EmptyState
 from resources.design_tokens import Colors
 from core.config import (
-    PERIODES, STYLE_BTN_PRIMARY, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER,
-    C_RED, C_RED_BG, C_RED_BORDER,
+    PERIODES, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, C_BLUE, C_BLUE_LIGHT,
+    C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER, lire_composant,
 )
-
-
-from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox,
-    QComboBox, QFormLayout, QPushButton, QTabWidget,
-    QVBoxLayout, QWidget, QStackedWidget,
-)
-
-from repositories import repos
-from ui import toast
-from ui.pages.helpers import (
-    _btn, _simple_btn_style, _money_edit, _classe_items, _reload_combo,
-    _add_btn, refuser_si_hors_annee, _actions_cell,
-)
-from ui.widgets import fmt_money, KPICard, DataTable, EmptyState
-from resources.design_tokens import Colors
-from core.config import PERIODES, STYLE_BTN_PRIMARY, C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER
 
 
 def paiements(page, ctx):
@@ -94,9 +77,25 @@ def paiements(page, ctx):
     btn_add_paiement = _add_btn(
         "+ Nouveau Paiement",
         lambda: open_paiement_dialog(page, ctx, refresh_p))
+    btn_pdf_p = _btn("Exporter PDF", lambda: _exporter_pdf_p(), STYLE_BTN_SECONDARY)
     if peut_editer:
         filtre_p.addWidget(btn_add_paiement)
+    filtre_p.addWidget(btn_pdf_p)
     lay_p.addLayout(filtre_p)
+
+    def _exporter_pdf_p():
+        from services import rapports
+        rows = getattr(page, "_paiements_rows", [])
+        lignes = [[p["date_paiement"], p["matricule"],
+                   f"{p['prenom']} {p['nom']}", p["classe_nom"] or "-",
+                   p["type_frais"] or "-", p["mode_reglement"] or "-",
+                   fmt_money(p["montant"])] for p in rows]
+        if not rapports.export_table_pdf(
+                "Paiements",
+                f"Filtres actuels - le {rapports._date_pdf()}",
+                ["Date", "Matricule", "Eleve", "Classe", "Type frais",
+                 "Mode", "Montant"], lignes, "rapport_paiements.pdf"):
+            toast.info(page, "Rien a exporter : aucun paiement dans ce filtre.")
 
     kpi_p = QHBoxLayout()
     kpi_p_nb = KPICard("Nombre de paiements", "0")
@@ -119,6 +118,7 @@ def paiements(page, ctx):
     lay_p.addWidget(pile_p, 1)
 
     def refresh_p():
+        repos.reconcilier_caisse()
         _reload_combo(combo_classe_p, _classe_items())
         rows = repos.paiements(
             classe_id=combo_classe_p.currentData(),
@@ -140,6 +140,7 @@ def paiements(page, ctx):
         kpi_p_nb.set_value(str(len(rows)))
         kpi_p_total.set_value(
             fmt_money(sum(float(p["montant"]) for p in rows)))
+        page._paiements_rows = rows
 
     def _delete_paiement(parent, ctx, p):
         from ui.pages.helpers import confirmer
@@ -213,6 +214,14 @@ def paiements(page, ctx):
         valeurs = [[m["mois"], fmt_money(m["attendu"]), fmt_money(m["paye"])]
                    for m in suivi]
         table_suivi.remplir(valeurs)
+        # Composant themable "statuts" : teinte du montant paye.
+        coul_p = lire_composant("statuts")
+        for i, m in enumerate(suivi):
+            cell = table_suivi.item(i, 2)
+            if cell is not None:
+                from PyQt5.QtGui import QColor
+                regle = float(m.get("paye") or 0) >= float(m.get("attendu") or 0)
+                cell.setForeground(QColor(coul_p["paye"] if regle else coul_p["du"]))
         if not suivi:
             vide_suivi.set_message(
                 "Aucun paiement enregistre pour cet eleve sur l'annee active", "")
@@ -258,6 +267,7 @@ def paiements(page, ctx):
     btn_bilan.setCursor(Qt.PointingHandCursor)
     btn_bilan.setStyleSheet(STYLE_BTN_PRIMARY)
     filtre_b.addWidget(btn_bilan)
+    lay_b.addLayout(filtre_b)
     lbl_bilan_total = QLabel(f"Total : {fmt_money(0)}")
     lbl_bilan_total.setStyleSheet(
         f"font-size: 18px; font-weight: bold; color: {Colors.PRIMARY};")
@@ -388,7 +398,10 @@ def open_paiement_dialog(parent, ctx, on_created):
         toast.succes(dlg, f"{fmt_money(montant.value())} encaisse.")
         dlg.accept()
 
-    buttons.accepted.disconnect()
+    try:
+        buttons.accepted.disconnect()
+    except TypeError:
+        pass
     buttons.accepted.connect(valider)
 
     dlg.exec_()

@@ -34,7 +34,7 @@
      <item>
       <widget class="QLabel" name="lbl_title">
        <property name="styleSheet">
-        <string>color: #20202A; font-size: 20px; font-weight: 700; border: none;</string>
+        <string>color: #1E2430; font-size: 20px; font-weight: 700; border: none;</string>
        </property>
        <property name="text">
         <string>Parametres de l'Etablissement</string>
@@ -57,7 +57,7 @@
      <item>
       <widget class="QLabel" name="lbl_breadcrumb">
        <property name="styleSheet">
-        <string>color: #8A8A93; font-size: 12px; border: none;</string>
+        <string>color: #8C96AB; font-size: 12px; border: none;</string>
        </property>
        <property name="text">
         <string>Parametres &gt; En-tete des documents</string>
@@ -105,13 +105,13 @@
          <item>
           <widget class="QFrame" name="card1">
            <property name="styleSheet">
-            <string>QFrame#card1 { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+            <string>QFrame#card1 { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; }</string>
            </property>
            <layout class="QHBoxLayout" name="horizontalLayout_Card1">
             <item>
              <widget class="QLabel" name="lbl_card1">
               <property name="styleSheet">
-               <string>color: #373D4A; font-weight: 700; border: none;</string>
+               <string>color: #465064; font-weight: 700; border: none;</string>
               </property>
               <property name="text">
                <string>Bandeau d'en-tete</string>
@@ -147,13 +147,13 @@
          <item>
           <widget class="QFrame" name="card2">
            <property name="styleSheet">
-            <string>QFrame#card2 { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+            <string>QFrame#card2 { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; }</string>
            </property>
            <layout class="QHBoxLayout" name="horizontalLayout_Card2">
             <item>
              <widget class="QLabel" name="lbl_card2">
               <property name="styleSheet">
-               <string>color: #373D4A; font-weight: 700; border: none;</string>
+               <string>color: #465064; font-weight: 700; border: none;</string>
               </property>
               <property name="text">
                <string>Bandeau de bas de page</string>
@@ -189,13 +189,13 @@
          <item>
           <widget class="QFrame" name="card3">
            <property name="styleSheet">
-            <string>QFrame#card3 { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+            <string>QFrame#card3 { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; }</string>
            </property>
            <layout class="QHBoxLayout" name="horizontalLayout_Card3">
             <item>
              <widget class="QLabel" name="lbl_card3">
               <property name="styleSheet">
-               <string>color: #373D4A; font-weight: 700; border: none;</string>
+               <string>color: #465064; font-weight: 700; border: none;</string>
               </property>
               <property name="text">
                <string>Image de signature</string>
@@ -231,12 +231,19 @@
          <item>
           <widget class="QFrame" name="card_inputs">
            <property name="styleSheet">
-            <string>QFrame#card_inputs { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+            <string>QFrame#card_inputs { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; }</string>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_Inputs">
             <property name="spacing">
              <number>8</number>
             </property>
+            <item>
+             <widget class="QLineEdit" name="input_nom_ecole">
+              <property name="placeholderText">
+               <string>Nom de l'ecole</string>
+              </property>
+             </widget>
+            </item>
             <item>
              <widget class="QLineEdit" name="input_signer_name">
               <property name="placeholderText">
@@ -281,13 +288,13 @@
         </size>
        </property>
        <property name="styleSheet">
-        <string>QFrame#previewCard { background-color: #FFFFFF; color: #1D1D1F; border: 1px solid #E1E6EF; border-radius: 12px; }</string>
+        <string>QFrame#previewCard { background-color: #FFFFFF; color: #1E2430; border: 1px solid #4A5568; border-radius: 12px; }</string>
        </property>
        <layout class="QVBoxLayout" name="verticalLayout_Preview">
         <item>
          <widget class="QLabel" name="lbl_preview_title">
           <property name="styleSheet">
-           <string>font-weight: 700; color: #373D4A; border: none;</string>
+           <string>font-weight: 700; color: #465064; border: none;</string>
           </property>
           <property name="text">
            <string>APERCU</string>
@@ -297,7 +304,7 @@
         <item>
          <widget class="QLabel" name="lbl_progression">
           <property name="styleSheet">
-           <string>color: #C8960C; font-weight: 700; border: none;</string>
+           <string>color: #4F6DF5; font-weight: 700; border: none;</string>
           </property>
           <property name="text">
            <string>Progression de la configuration: 100%</string>
@@ -327,7 +334,7 @@
      <item>
       <widget class="QLabel" name="lbl_status">
        <property name="styleSheet">
-        <string>color: #8A8A93; border: none;</string>
+        <string>color: #8C96AB; border: none;</string>
        </property>
        <property name="text">
         <string>Aucune modification en attente</string>

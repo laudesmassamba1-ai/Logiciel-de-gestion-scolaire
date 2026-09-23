@@ -10,11 +10,24 @@ class ApiError(Exception):
 
 
 def _request(method, path, **kwargs):
+    import os
+    sync_secret = os.environ.get("GS_SYNC_SECRET", "")
+    headers = kwargs.pop("headers", {})
+    if sync_secret:
+        headers["X-Sync-Secret"] = sync_secret
+    # Code de l'ecole : le serveur refuse les postes d'un autre etablissement.
+    try:
+        from core.config import code_ecole
+        code = code_ecole()
+        if code:
+            headers["X-Ecole-Code"] = code
+    except Exception:
+        pass
     try:
         # Lecture dynamique : l'assistant graphique peut changer l'URL
         # du serveur pendant l'execution (changement de port).
         resp = httpx.request(method, config.API_BASE_URL + path,
-                             timeout=config.API_TIMEOUT, **kwargs)
+                             timeout=config.API_TIMEOUT, headers=headers, **kwargs)
     except httpx.HTTPError as exc:
 
         return None, f"API hors ligne ({exc.__class__.__name__})"
@@ -253,6 +266,34 @@ class ApiClient:
             return None, err
         return data.get("comptes", []), None
 
+    def eleves_supprimes_syndication(self):
+        """UUID des eleves supprimes/archives cote serveur (tombstones)."""
+        data, err = _request("GET", "/eleve-supprimes-syndication")
+        if err:
+            return None, err
+        return data.get("supprimes", []), None
+
+    def notes_supprimes_syndication(self):
+        """UUID des notes supprimees/archives cote serveur (tombstones)."""
+        data, err = _request("GET", "/note-supprimes-syndication")
+        if err:
+            return None, err
+        return data.get("supprimes", []), None
+
+    def paiements_supprimes_syndication(self):
+        """UUID des paiements supprimes/archives cote serveur (tombstones)."""
+        data, err = _request("GET", "/paiement-supprimes-syndication")
+        if err:
+            return None, err
+        return data.get("supprimes", []), None
+
+    def presences_supprimes_syndication(self):
+        """UUID des presences supprimees/archives cote serveur (tombstones)."""
+        data, err = _request("GET", "/presence-supprimes-syndication")
+        if err:
+            return None, err
+        return data.get("supprimes", []), None
+
     def ajouter_compte_serveur(self, nom, username, password, role,
                                email=None, telephone=None):
         """Pousse un compte utilisateur vers le serveur partage (POST /comptes).
@@ -266,6 +307,69 @@ class ApiClient:
         data, err = _request("POST", "/comptes", json={
             "nom": nom, "email": email, "telephone": telephone or "",
             "role": role, "actif": 1, "password": password})
+        if err:
+            return None, err
+        return data, None
+
+    def fermer_annee_scolaire(self, annee_id, nouvelle_libelle, nouvelle_debut,
+                               nouvelle_fin, promouvoir_eleves=False):
+        """Ferme l'année scolaire courante et crée la suivante."""
+        payload = {
+            "annee_archivee_id": annee_id,
+            "nouvelle_annee": {
+                "libelle": nouvelle_libelle,
+                "date_debut": nouvelle_debut,
+                "date_fin": nouvelle_fin,
+                "promouvoir_eleves": promouvoir_eleves
+            }
+        }
+        data, err = _request("POST", "/fermer-annee-scolaire", json=payload)
+        if err:
+            return None, err
+        return data.get("nouvelle_annee_id"), None
+
+    def login(self, identifiant, mot_de_passe):
+        """Connexion au serveur : retourne access_token, refresh_token, utilisateur."""
+        data, err = _request("POST", "/login", json={
+            "identifiant": identifiant, "mot_de_passe": mot_de_passe})
+        if err:
+            return None, err
+        return data, None
+
+    def refresh_access_token(self, refresh_token):
+        """Renouvelle l'access token via le refresh token."""
+        data, err = _request("POST", "/refresh", json={"refresh_token": refresh_token})
+        if err:
+            return None, err
+        return data, None
+
+    def modifier_compte(self, identifiant, nom, role, actif):
+        """Modifie un compte utilisateur."""
+        data, err = _request("PUT", f"/comptes/{identifiant}",
+                             json={"nom": nom, "role": role, "actif": 1 if actif else 0})
+        if err:
+            return None, err
+        return data, None
+
+    def toggle_compte_actif(self, identifiant, actif):
+        """Active/desactive un compte."""
+        data, err = _request("PUT", f"/comptes/{identifiant}/actif",
+                             json={"actif": actif})
+        if err:
+            return None, err
+        return data, None
+
+    def reset_compte_password(self, identifiant, nouveau_mot_de_passe):
+        """Reinitialise le mot de passe."""
+        data, err = _request("PUT", f"/comptes/{identifiant}/reset-password",
+                             json={"nouveau_mot_de_passe": nouveau_mot_de_passe})
+        if err:
+            return None, err
+        return data, None
+
+    def supprimer_compte(self, identifiant):
+        """Supprime un compte."""
+        data, err = _request("DELETE", f"/comptes/{identifiant}")
         if err:
             return None, err
         return data, None

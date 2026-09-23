@@ -2,18 +2,36 @@ import datetime
 from functools import partial
 
 from PyQt5.QtCore import QSize, Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QMessageBox,
-    QPushButton, QTableWidgetItem, QVBoxLayout, QTableWidget, QHeaderView,
-    QWidget, QSizePolicy,
+    QComboBox, QDoubleSpinBox, QFrame, QGraphicsDropShadowEffect, QHBoxLayout,
+    QLabel, QMessageBox, QPushButton, QTableWidgetItem, QVBoxLayout,
+    QTableWidget, QHeaderView, QWidget, QSizePolicy,
 )
 
 from core.config import (
-    C_PRIMARY, C_TEXT_SECONDARY, C_TEXT_MUTED, C_BORDER, C_BG_ALT, C_EMPTY_STATE,
+    C_PRIMARY, C_ACCENT_VIOLET, C_TEXT, C_TEXT_SECONDARY, C_TEXT_MUTED,
+    C_TEXT_LIGHT, C_BORDER, C_BG_ALT, C_EMPTY_STATE, C_BORDER_STRONG, C_RED,
+    C_RED_BG, C_CARD, C_BG_SOFT, C_BLUE_BORDER, C_BLUE_LIGHT, C_GOLD, C_GOLD_BORDER,
+    C_GOLD_LIGHT, C_GOLD_BG, C_GOLD_PRESSED, C_CONTOUR, APP_FONT_FAMILY, FONT_DISPLAY_FAMILY,
+    FONT_EMOJI,
     STYLE_BTN_PRIMARY, STYLE_TABLE, STYLE_HEADER_TITLE, STYLE_HEADER_SUBTITLE,
     STYLE_EMPTY_STATE, STYLE_STATUS, STYLE_CARD, STYLE_SELECTOR,
 )
 from repositories import repos
+
+
+def _ombre_cartoon(widget, dy=4, alpha=0.16, blur=0):
+    """Ombre portee NETTE (« cartoon » mais pro) : nette par defaut (blur 0),
+    decalee de `dy` px vers le bas, couleur bleue invisible a 10-16 %.
+    A utiliser sur les cartes, KPI, tableaux, etats vides - jamais sur des
+    labels ou widgets de controle (surcout de rendu, effet sale)."""
+    ombre = QGraphicsDropShadowEffect(widget)
+    ombre.setBlurRadius(blur)
+    ombre.setOffset(0, dy)
+    ombre.setColor(QColor(31, 45, 80, int(255 * alpha)))
+    widget.setGraphicsEffect(ombre)
+    return ombre
 
 
 class PageContext:
@@ -50,14 +68,17 @@ def _poser_icone_plus(btn, style=None):
     except ImportError:
         return
     style = style or ""
-    if "#C8960C" in style or "DEA821" in style or "#DAA520" in style:
-        couleur = "#6B4E00"
-    elif "#FEF2F2" in style:
-        couleur = "#B91C1C"
-    elif "color: #FFFFFF" in style or "color: #ffffff" in style:
-        couleur = "#FFFFFF"
+    if (C_BLUE_LIGHT in style or C_BLUE_BORDER in style or C_PRIMARY in style):
+        couleur = C_PRIMARY
+    elif C_GOLD in style or C_GOLD_BORDER in style or C_GOLD_LIGHT in style \
+            or C_GOLD_BG in style:
+        couleur = C_GOLD_PRESSED
+    elif C_RED_BG in style:
+        couleur = C_RED
+    elif C_CARD in style:
+        couleur = C_CARD
     else:
-        couleur = "#8A8A93"
+        couleur = C_TEXT_LIGHT
     try:
         btn.setIcon(qta.icon("fa5s.plus", color=couleur))
         btn.setIconSize(QSize(15, 15))
@@ -65,12 +86,33 @@ def _poser_icone_plus(btn, style=None):
         pass
 
 
-def _simple_btn_style(bg=None, fg=None, border=None):
+def _simple_btn_style(bg=None, fg=None, border=None, compact=False):
     bg = bg or C_BG_ALT
     fg = fg or C_TEXT_SECONDARY
-    border = border or C_BORDER
+    border = border or C_CONTOUR
+    if compact:
+        # Boutons de cellule : padding reduit pour ne jamais etre tronques
+        # dans une colonne d'actions (le texte doit tenir sans depasser).
+        return (f"background-color: {bg}; color: {fg}; border: 1px solid {border};"
+                " border-radius: 10px; padding: 5px 10px;"
+                " font-size: 12px; font-weight: 600;")
     return (f"background-color: {bg}; color: {fg}; border: 1px solid {border};"
-            " border-radius: 12px; padding: 6px 12px; font-size: 12px; font-weight: 600;")
+            " border-radius: 12px; padding: 8px 16px; font-size: 13px; font-weight: 600;")
+
+
+def _fond_aurora_dialog(dlg):
+    """Remplace le fond blanc des .ui live par l'aurora du theme.
+
+    Le QSS des .ui pose `QDialog { background-color: #FFFFFF; }` qui
+    prime sur APP_STYLESHEET : on repond sur le QSS charge pour remplacer
+    UNIQUEMENT cette regle (les cartes et champs restent blancs).
+    """
+    from core.config import C_AURORA
+    qss = dlg.styleSheet() or ""
+    ancien = "QDialog { background-color: #FFFFFF; }"
+    if ancien in qss:
+        nouveau = f"QDialog {{ background: {C_AURORA} }}"
+        dlg.setStyleSheet(qss.replace(ancien, nouveau))
 
 
 def _adapter_hauteur(dlg):
@@ -81,8 +123,8 @@ def _adapter_hauteur(dlg):
     if lay is None:
         return
     besoin = max(lay.sizeHint().height(), lay.minimumSize().height())
-    dispo = QApplication.primaryScreen().availableGeometry().height() - 48
-    hauteur = min(besoin, max(dispo, 360))
+    dispo = QApplication.primaryScreen().availableGeometry().height() - 64
+    hauteur = min(besoin, max(dispo, 420))
     dlg.setMinimumHeight(hauteur)
     dlg.resize(dlg.width(), hauteur)
 
@@ -135,7 +177,7 @@ def _classe_items(avec_toutes=True):
 
 
 def _fit_rows(t):
-    t.verticalHeader().setDefaultSectionSize(40)
+    t.verticalHeader().setDefaultSectionSize(44)
 
 
 def _fill_table_space(t):
@@ -185,7 +227,6 @@ def _make_table(headers):
     t.setAlternatingRowColors(True)
     t.setShowGrid(False)
     t.verticalHeader().setVisible(False)
-    t.verticalHeader().setDefaultSectionSize(40)
     t.horizontalHeader().setStretchLastSection(True)
     t.horizontalHeader().setMinimumSectionSize(80)
     t.setStyleSheet(STYLE_TABLE)
@@ -197,7 +238,8 @@ def _page_header(parent_lay, titre, sous_titre):
     header = QVBoxLayout()
     header.setSpacing(4)
     t = QLabel(titre)
-    t.setStyleSheet(STYLE_HEADER_TITLE)
+    t.setStyleSheet(
+        f"font-size: 24px; font-weight: 700; color: {C_TEXT}; margin: 0;")
     s = QLabel(sous_titre)
     s.setStyleSheet(STYLE_HEADER_SUBTITLE)
     header.addWidget(t)
@@ -207,7 +249,7 @@ def _page_header(parent_lay, titre, sous_titre):
     accent.setFixedSize(46, 3)
     accent.setStyleSheet(
         f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-        f" stop:0 #DAA520, stop:1 rgba(218,165,32,0));"
+        f" stop:0 {C_PRIMARY}, stop:1 {C_ACCENT_VIOLET});"
         " border: none; border-radius: 2px; margin-top: 2px;")
     header.addWidget(accent)
     parent_lay.addLayout(header)
@@ -218,37 +260,47 @@ def _kpi_card(label, valeur, couleur=C_PRIMARY):
     frame.setMaximumHeight(92)
     frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
     frame.setStyleSheet(
-        f"background-color: #FFFFFF;"
-        f" border: 3px solid {couleur}; border-radius: 16px;")
+        f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        f" stop:0 {C_CARD}, stop:1 {C_BG_SOFT});"
+        f" border: 1px solid {C_BORDER};"
+        f" border-radius: 16px;")
     v = QVBoxLayout(frame)
-    v.setContentsMargins(16, 8, 16, 8)
+    v.setContentsMargins(16, 10, 16, 10)
     v.setSpacing(4)
     val = QLabel(str(valeur))
     val.setObjectName("kpi_value")
-    val.setStyleSheet(f"font-size: 22px; font-weight: 800; color: {couleur};")
+    val.setStyleSheet(
+        f"font-family: '{FONT_DISPLAY_FAMILY}', '{APP_FONT_FAMILY}', '{FONT_EMOJI}', 'Segoe UI', sans-serif;"
+        f" font-size: 26px; font-weight: 800; letter-spacing: -0.5px;"
+        f" color: {couleur}; border: none; background: transparent;")
     lab = QLabel(label)
-    lab.setStyleSheet(f"font-size: 11px; color: {C_TEXT_MUTED}; font-weight: 600;")
+    lab.setStyleSheet(
+        "font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;"
+        f" font-weight: 700; color: {C_TEXT_MUTED}; border: none; background: transparent;")
     v.addWidget(val)
     v.addWidget(lab)
+    _ombre_cartoon(frame, dy=4, alpha=0.14)
     return frame
 
 
 def _styler_carte(frame, accent=None):
-    """Style moderne d'une carte existante (contour colore uniforme).
+    """Style « Apple minimal » d'une carte existante : fond blanc, coins
+    uniformes, hairline 1 px. `accent` est conserve pour compatibilite de
+    signature mais n'est plus dessine (aucune bande).
 
     Utilisee par les tableaux de bord dont les frames viennent des .ui.
     Le selecteur est porte par l'objectName de la frame : une regle
     "QFrame { ... }" nue cascade sur les QLabel enfants (ils deviennent
     eux aussi des cadres), seule une regle "QFrame#nom" est ciblee.
     """
-    if accent is None:
-        accent = C_PRIMARY
     try:
         nom = frame.objectName() or "carteStylee"
         frame.setObjectName(nom)
         frame.setStyleSheet(
-            f"QFrame#{nom} {{ background-color: #FFFFFF;"
-            f" border: 3px solid {accent}; border-radius: 16px; }}")
+            f"QFrame#{nom} {{ background-color: {C_CARD};"
+            f" border: 1px solid {C_BORDER};"
+            f" border-radius: 16px; }}")
+        _ombre_cartoon(frame, dy=4, alpha=0.14)
     except RuntimeError:
         pass
 
@@ -298,8 +350,8 @@ def _empty_state(texte, sous_titre="", bouton=None, hauteur=180):
     box.setMaximumHeight(hauteur)
     box.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
     box.setStyleSheet(
-        "QFrame { background: rgba(255,255,255,0.55);"
-        " border: 1px dashed #C4CCDA; border-radius: 12px; }")
+        f"QFrame {{ background: {C_CARD};"
+        f" border: 1px dashed {C_BORDER_STRONG}; border-radius: 12px; }}")
     lay = QVBoxLayout(box)
     lay.setContentsMargins(20, 16, 20, 16)
     lay.setSpacing(6)

@@ -11,13 +11,14 @@ from PyQt5.QtWidgets import (
 
 from repositories import repos
 from ui import toast
+from services import rapports
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _add_btn, _actions_cell,
 )
 from ui.widgets import DataTable, EmptyState
 from core.config import (
-    C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_GOLD, C_GOLD_BG, C_GOLD_BORDER,
-    C_RED, C_RED_BG, C_RED_BORDER,
+    C_BLUE, C_BLUE_LIGHT, C_BLUE_BORDER, C_PRIMARY, C_PRIMARY_LIGHT,
+    C_RED, C_RED_BG, C_RED_BORDER, STYLE_BTN_SECONDARY, STYLE_BTN_DANGER,
 )
 
 
@@ -28,9 +29,32 @@ def cycles_annees(page, ctx):
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    lay.addWidget(PageHeader(
+    header = PageHeader(
         "Cycles & Annees Scolaires",
-        "Cycles pedagogiques et annees scolaires de l'établissement"))
+        "Cycles pedagogiques et annees scolaires de l'établissement")
+    lay.addWidget(header)
+
+    def _exporter_cycles():
+        lignes = [[c["nom"], c["description"] or "-"] for c in repos.cycles()]
+        rapports.export_table_pdf(
+            "Liste des cycles",
+            "Cycles pedagogiques de l'établissement",
+            ["Nom", "Description"], lignes, "rapport_cycles.pdf")
+
+    def _exporter_annees():
+        lignes = [[a["libelle"], a["date_debut"] or "-", a["date_fin"] or "-",
+                   "Oui" if a["est_active"] else "Non"]
+                  for a in repos.annees_scolaires()]
+        rapports.export_table_pdf(
+            "Annees scolaires",
+            "Annees scolaires de l'établissement",
+            ["Libelle", "Debut", "Fin", "Active"], lignes,
+            "rapport_annees_scolaires.pdf")
+
+    header.ajouter_action(_btn("Cycles PDF", lambda: _exporter_cycles(),
+                               STYLE_BTN_SECONDARY))
+    header.ajouter_action(_btn("Annees PDF", lambda: _exporter_annees(),
+                               STYLE_BTN_SECONDARY))
 
     tabs = QTabWidget()
     lay.addWidget(tabs, 1)
@@ -104,7 +128,7 @@ def cycles_annees(page, ctx):
         for i, a in enumerate(rows):
             cell = _actions_cell(*(
                 (_btn("Activer", partial(_set_active, page, ctx, a),
-                      _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD, border=C_GOLD_BORDER)),)
+                      _simple_btn_style(bg=C_PRIMARY_LIGHT, fg=C_PRIMARY, border=C_BLUE_BORDER)),)
                 if not a["est_active"] and peut_editer else ()
             ) + (
                 (_btn("Supprimer", partial(_delete_annee, page, ctx, a),
@@ -129,6 +153,81 @@ def cycles_annees(page, ctx):
     btn_add_annee = _add_btn(
         "+ Nouvelle Annee", lambda: open_annee_dialog(page, ctx, None, fill_annees))
     lay_a.addWidget(btn_add_annee, 0, Qt.AlignRight)
+
+    # Bouton « Fermer l'année » (directeur uniquement)
+    if ctx.can_edit("cycles") and ctx.role == "directeur":
+        def _fermer_annee():
+            active = repos.annee_scolaire_active()
+            if not active:
+                toast.erreur(page, "Aucune annee active a fermer.")
+                return
+            from ui.pages.helpers import confirmer
+            if not confirmer(page,
+                    f"Fermer l'annee {active['libelle']} et ouvrir la suivante ?\n"
+                    "Cette action est irreversible : l'annee courante sera archivée.",
+                    "Fermer l'année"):
+                return
+            # Dialogue pour saisir la nouvelle année
+            from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDateEdit, QCheckBox
+            from PyQt5.QtCore import QDate
+            dlg = QDialog(page)
+            dlg.setWindowTitle("Fermer l'annee et ouvrir la suivante")
+            dlg.resize(420, 280)
+            lay_d = QVBoxLayout(dlg)
+            form = QFormLayout()
+            libelle = QLineEdit()
+            libelle.setPlaceholderText("Ex: 2026-2027")
+            debut = QDateEdit()
+            debut.setDisplayFormat("dd/MM/yyyy")
+            debut.setCalendarPopup(True)
+            debut.setDate(QDate.currentDate().addYears(1))
+            debut.setDate(QDate(debut.date().year(), 9, 1))
+            fin = QDateEdit()
+            fin.setDisplayFormat("dd/MM/yyyy")
+            fin.setCalendarPopup(True)
+            fin.setDate(QDate(debut.date().year() + 1, 6, 30))
+            promouvoir = QCheckBox("Promouvoir les eleves (classe superieure)")
+            form.addRow("Libelle :", libelle)
+            form.addRow("Date de debut :", debut)
+            form.addRow("Date de fin :", fin)
+            lay_d.addLayout(form)
+            lay_d.addWidget(promouvoir)
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            buttons.rejected.connect(dlg.reject)
+            lay_d.addWidget(buttons)
+
+            def valider_fermer():
+                if not libelle.text().strip():
+                    QMessageBox.warning(dlg, "Annee", "Le libelle est obligatoire.")
+                    return
+                d, f = debut.date(), fin.date()
+                if f <= d:
+                    QMessageBox.warning(dlg, "Annee",
+                                        "La date de fin doit etre posterieure a la "
+                                        "date de debut.")
+                    return
+                try:
+                    new_id = repos.close_annee_scolaire(
+                        active["id"], libelle.text().strip(),
+                        d.toString("yyyy-MM-dd"), f.toString("yyyy-MM-dd"),
+                        promouvoir_eleves=promouvoir.isChecked())
+                    if new_id:
+                        toast.succes(page,
+                            f"Annee {active['libelle']} archivée. "
+                            f"Nouvelle annee creee (ID {new_id}).")
+                        fill_annees()
+                    else:
+                        toast.erreur(page, "Echec de la fermeture de l'annee.")
+                except Exception as exc:
+                    QMessageBox.critical(dlg, "Erreur", str(exc))
+                dlg.accept()
+
+            buttons.accepted.connect(valider_fermer)
+            dlg.exec_()
+
+        btn_fermer = _btn("Fermer l'annee", _fermer_annee, STYLE_BTN_DANGER)
+        lay_a.addWidget(btn_fermer, 0, Qt.AlignRight)
+
     if not peut_editer:
         btn_add_annee.setVisible(False)
 

@@ -10,17 +10,16 @@ feedback inline (aucune boite modale apres action).
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QApplication, QCheckBox, QDialog, QFrame, QGraphicsDropShadowEffect,
-    QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox,
-    QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
-from PyQt5.QtGui import QColor
 
 from core import network
 from core.config import (
-    C_CARD, C_BORDER, C_BG, C_INK, C_TEXT, C_TEXT_MUTED, C_TEXT_SECONDARY,
-    C_RED, C_RED_BG, C_RED_BORDER, C_PRIMARY, C_PRIMARY_HOVER,
-    C_GOLD_BG, C_GOLD_BORDER, C_GOLD_PRESSED,
+    C_CARD, C_BORDER, C_BG, C_BG_SOFT, C_INK, C_TEXT, C_TEXT_MUTED,
+    C_TEXT_SECONDARY, C_TEXT_LIGHT, C_BORDER_STRONG, C_AURORA,
+    C_RED, C_RED_BG, C_RED_BORDER, C_RED_PRESSED, C_GREEN, C_GREEN_BG,
+    C_PRIMARY, C_PRIMARY_LIGHT, C_PRIMARY_PRESSED, C_BLUE_BORDER,
     STYLE_BTN_PRIMARY,
 )
 from services import serveur_local
@@ -33,7 +32,7 @@ def _carte():
     carte.setObjectName("serveurCarte")
     carte.setStyleSheet(
         f"QFrame#serveurCarte {{ background: {C_CARD};"
-        f" border: 1px solid {C_BORDER}; border-radius: 14px; }}")
+        f" border: 1px solid {C_BORDER}; border-radius: 12px; }}")
     return carte
 
 
@@ -64,7 +63,7 @@ class AssistantServeur(QDialog):
         self.setMinimumSize(620, 520)
         self.resize(720, 640)
         self.setSizeGripEnabled(True)
-        self.setStyleSheet(f"QDialog {{ background-color: {C_BG}; }}")
+        self.setStyleSheet(f"QDialog {{ {C_AURORA} }}")
 
         enveloppe = QVBoxLayout(self)
         enveloppe.setContentsMargins(0, 0, 0, 0)
@@ -92,7 +91,7 @@ class AssistantServeur(QDialog):
         defile.setStyleSheet(
             f"QScrollArea {{ background: {C_BG}; border: none; }}"
             "QScrollBar:vertical { background: transparent; width: 10px; }"
-            "QScrollBar::handle:vertical { background: #C9C9D4;"
+            f"QScrollBar::handle:vertical {{ background: {C_BORDER_STRONG};"
             " border-radius: 5px; min-height: 30px; }"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical"
             " { height: 0; }")
@@ -114,7 +113,7 @@ class AssistantServeur(QDialog):
         ligne.addWidget(titre)
         ligne.addStretch(1)
 
-        self.pilule = _chip("...", C_GOLD_BG, C_GOLD_PRESSED)
+        self.pilule = _chip("...", C_PRIMARY_LIGHT, C_PRIMARY_PRESSED)
         ligne.addWidget(self.pilule)
         racine.addLayout(ligne)
 
@@ -136,6 +135,12 @@ class AssistantServeur(QDialog):
         self.lbl_etat.setWordWrap(True)
         self.lbl_etat.setStyleSheet(f"color: {C_TEXT}; font-size: 13px;")
         lay.addWidget(self.lbl_etat)
+
+        self.btn_sync_now = _btn(
+            "Synchroniser maintenant",
+            self._synchroniser_maintenant,
+            STYLE_BTN_PRIMARY, max_h=44)
+        lay.addWidget(self.btn_sync_now)
         racine.addWidget(carte)
 
     def _construire_adresse(self, racine):
@@ -150,7 +155,7 @@ class AssistantServeur(QDialog):
         self.lbl_adresse = QLabel("Activez la connexion pour obtenir l'adresse.")
         self.lbl_adresse.setStyleSheet(
             f"background: {C_BG}; border: 1px solid {C_BORDER};"
-            " border-radius: 12px; padding: 10px 14px; color: #20202A;"
+            f" border-radius: 12px; padding: 10px 14px; color: {C_INK};"
             " font-family: 'DejaVu Sans Mono', monospace; font-size: 12px;")
         self.lbl_adresse.setTextInteractionFlags(Qt.TextSelectableByMouse)
         ligne.addWidget(self.lbl_adresse, 1)
@@ -159,10 +164,10 @@ class AssistantServeur(QDialog):
         self.btn_copier.setCursor(Qt.PointingHandCursor)
         self.btn_copier.setMinimumHeight(38)
         self.btn_copier.setStyleSheet(
-            f"QPushButton {{ background: {C_GOLD_BG}; color: {C_GOLD_PRESSED};"
-            f" border: 1px solid {C_GOLD_BORDER}; border-radius: 12px;"
+            f"QPushButton {{ background: {C_PRIMARY_LIGHT}; color: {C_PRIMARY_PRESSED};"
+            f" border: 1px solid {C_BLUE_BORDER}; border-radius: 12px;"
             " padding: 0 18px; font-weight: 700; font-size: 12px; }"
-            "QPushButton:hover { background-color: #F7EECF; }")
+            f"QPushButton:hover {{ background-color: {C_PRIMARY_LIGHT}; }}")
         self.btn_copier.clicked.connect(self._copier_adresse)
         ligne.addWidget(self.btn_copier)
         lay.addLayout(ligne)
@@ -171,6 +176,41 @@ class AssistantServeur(QDialog):
         self.lbl_adresse_local.setStyleSheet(
             f"color: {C_TEXT_MUTED}; font-size: 11px;")
         lay.addWidget(self.lbl_adresse_local)
+
+        ligne_code = QHBoxLayout()
+        ligne_code.setSpacing(8)
+        lbl_code_titre = QLabel("Code de l'ecole :")
+        lbl_code_titre.setStyleSheet(
+            f"color: {C_TEXT_SECONDARY}; font-size: 13px;")
+        self.lbl_code_ecole = QLabel("Aucun")
+        self.lbl_code_ecole.setStyleSheet(
+            f"color: {C_PRIMARY_PRESSED}; font-weight: 800; font-size: 14px;"
+            f" background: {C_PRIMARY_LIGHT}; border: 1px solid {C_BLUE_BORDER};"
+            " border-radius: 10px; padding: 6px 14px;"
+            " font-family: 'DejaVu Sans Mono', monospace;")
+        self.btn_regenerer_code = QPushButton("Regenerer")
+        self.btn_regenerer_code.setCursor(Qt.PointingHandCursor)
+        self.btn_regenerer_code.setMinimumHeight(38)
+        self.btn_regenerer_code.setFixedWidth(100)
+        self.btn_regenerer_code.setStyleSheet(
+            f"QPushButton {{ background: {C_PRIMARY_LIGHT}; color: {C_PRIMARY_PRESSED};"
+            f" border: 1px solid {C_BLUE_BORDER}; border-radius: 12px;"
+            " padding: 0 14px; font-weight: 700; font-size: 12px; }"
+            f"QPushButton:hover {{ background-color: {C_PRIMARY_LIGHT}; }}")
+        self.btn_regenerer_code.clicked.connect(self._regenerer_code)
+        ligne_code.addWidget(lbl_code_titre)
+        ligne_code.addWidget(self.lbl_code_ecole, 1)
+        ligne_code.addWidget(self.btn_regenerer_code)
+        lay.addLayout(ligne_code)
+
+        self.lbl_code_explication = QLabel(
+            "Ce code identifie VOTRE ecole. Un poste ne se synchronise "
+            "qu'avec un serveur portant ce MEME code : deux ecoles voisines "
+            "qui utilisent le logiciel ne se melangent jamais.")
+        self.lbl_code_explication.setWordWrap(True)
+        self.lbl_code_explication.setStyleSheet(
+            f"color: {C_TEXT_MUTED}; font-size: 11px;")
+        lay.addWidget(self.lbl_code_explication)
 
         self._carte_adresse = carte
         racine.addWidget(carte)
@@ -209,10 +249,12 @@ class AssistantServeur(QDialog):
         self.btn_scan.setFixedWidth(90)
         self.btn_scan.setStyleSheet(
             f"QPushButton {{ background: {C_RED_BG}; color: {C_RED};"
-            " border: 1px solid #E8C3C3; border-radius: 12px;"
+            f" border: 1px solid {C_RED_BORDER}; border-radius: 12px;"
             " padding: 0 12px; font-weight: 700; font-size: 12px; }"
-            f"QPushButton:hover {{ background: {C_RED}22; }}"
-            "QPushButton:disabled { opacity: 0.5; }")
+            f"QPushButton:hover {{ background: {C_RED}; color: white; }}"
+            f"QPushButton:pressed {{ background: {C_RED_PRESSED}; color: white; }}"
+            "QPushButton:disabled { background: #F0F1F4; color: #A9B0BF;"
+            " border-color: #E2E6EE; }")
         self.btn_scan.clicked.connect(self._scanner_reseau)
         ligne_adr.addWidget(self.btn_scan)
 
@@ -223,6 +265,19 @@ class AssistantServeur(QDialog):
         self.btn_connecter.clicked.connect(self._connecter_client)
         ligne_adr.addWidget(self.btn_connecter)
         lay.addLayout(ligne_adr)
+
+        ligne_code = QHBoxLayout()
+        ligne_code.setSpacing(8)
+        lbl_code = QLabel("Code ecole :")
+        lbl_code.setStyleSheet(
+            f"color: {C_TEXT_SECONDARY}; font-size: 13px;")
+        self.input_code = QLineEdit()
+        self.input_code.setPlaceholderText(
+            "Code de l'ecole (donne par le directeur / affiche sur l'hote)")
+        self.input_code.setMinimumHeight(38)
+        ligne_code.addWidget(lbl_code)
+        ligne_code.addWidget(self.input_code, 1)
+        lay.addLayout(ligne_code)
 
         self.btn_deconnecter = _btn(
             "Revenir au mode autonome (pas de serveur distant)",
@@ -267,7 +322,7 @@ class AssistantServeur(QDialog):
         self.btn_hotspot = _btn(
             "Creer le reseau WiFi de l'ecole (hotspot)",
             self.creer_hotspot, _simple_btn_style(
-                C_GOLD_BG, C_GOLD_PRESSED, C_GOLD_BORDER), max_h=40)
+                C_PRIMARY_LIGHT, C_PRIMARY_PRESSED, C_BLUE_BORDER), max_h=40)
         self.btn_hotspot.setEnabled(False)
         lay.addWidget(self.btn_hotspot)
 
@@ -291,6 +346,13 @@ class AssistantServeur(QDialog):
         self.chk_serveur_auto.setStyleSheet(f"color: {C_TEXT}; font-size: 12px;")
         self.chk_serveur_auto.stateChanged.connect(self._on_serveur_auto_changed)
         lay.addWidget(self.chk_serveur_auto)
+
+        self.chk_auto_connect = QCheckBox(
+            "Rejoindre automatiquement le serveur de l'ecole des qu'il est "
+            "joignable (meme WiFi ou Internet)")
+        self.chk_auto_connect.setStyleSheet(f"color: {C_TEXT}; font-size: 12px;")
+        self.chk_auto_connect.stateChanged.connect(self._on_auto_connect_changed)
+        lay.addWidget(self.chk_auto_connect)
 
         self.chk_app_auto = QCheckBox(
             "Lancer l'application au demarrage de l'ordinateur")
@@ -321,8 +383,8 @@ class AssistantServeur(QDialog):
 
     def _feedback(self, texte, erreur=False):
         self.lbl_feedback.setStyleSheet(
-            f"background: {'#FDECEC' if erreur else '#FFF8E1'};"
-            f" color: {C_RED if erreur else '#8A6410'};"
+            f"background: {C_RED_BG if erreur else C_GREEN_BG};"
+            f" color: {C_RED if erreur else C_GREEN};"
             " border-radius: 12px; padding: 10px 14px; font-size: 12px;"
             " font-weight: 600;")
         self.lbl_feedback.setText(texte)
@@ -337,22 +399,94 @@ class AssistantServeur(QDialog):
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(1200, lambda: self.btn_copier.setText("Copier"))
 
-    def rafraichir(self):
-        from core.config import API_BASE_URL, est_hote, ecrire_config_sync, lire_config_sync
+    def _synchroniser_maintenant(self):
+        """Bouton « Synchroniser maintenant » : pull complet puis vidage
+        immédiat de la file — pas besoin d'attendre le cycle automatique."""
+        from ui.workers import run_async
+        self.btn_sync_now.setEnabled(False)
+        self.btn_sync_now.setText("Synchronisation en cours...")
+        QApplication.processEvents()
 
+        def _tache():
+            from services.sync_service import synchroniser_maintenant
+            return synchroniser_maintenant()
+
+        def _fini(resultat):
+            self.btn_sync_now.setEnabled(True)
+            self.btn_sync_now.setText("Synchroniser maintenant")
+            if isinstance(resultat, Exception):
+                self._feedback(f"Synchronisation impossible : {resultat}",
+                               erreur=True)
+                return
+            if resultat.get("erreurs"):
+                self._feedback(
+                    "Synchronisation terminee avec des problemes :\n- " +
+                    "\n- ".join(resultat["erreurs"]), erreur=True)
+                return
+            self._feedback(
+                "Synchronisation terminee.\n"
+                f"- envoyees vers le serveur : {resultat['envoyes']}\n"
+                "- recuperees depuis le serveur\n  (structure / donnees / "
+                f"comptes) : {resultat['structure']} / "
+                f"{resultat['donnees']} / {resultat['comptes']}")
+            self.rafraichir()
+
+        run_async(_tache, _fini)
+
+    def _regenerer_code(self):
+        """Remplace le code de l'ecole. Les postes DEJA connectes gardent
+        l'ancien code : ils doivent etre reconnectes pour se mettre a jour
+        (mise a jour attendue : protection renforcee du reseau)."""
+        from services import connexion
+        aconfirmer = confirmer(
+            self,
+            "Regenerer le code de l'ecole ?\n\n"
+            "Les postes deja connectes devront l'actualiser dans "
+            "l'assistant avant de re-synchroniser.",
+            "Code de l'ecole")
+        if not aconfirmer:
+            return
+        nouveau = connexion.definir_code_ecole(connexion.nouveau_code_ecole())
+        self.lbl_code_ecole.setText(nouveau)
+        self._feedback(
+            f"Nouveau code : {nouveau}\n"
+            "Saisissez-le sur chaque poste de l'ecole dans « Code ecole ».",
+            erreur=False)
+        # Le serveur tourne deja avec l'ancien code : on le relance pour que
+        # le cloisonnement prenne effet immediatement sans attendre un reboot.
+        from ui.workers import run_async
+        from services import serveur_local
+        from core.config import lire_config_sync
+
+        def _tache():
+            if not serveur_local.api_joignable(delai=0.5):
+                return None
+            auto_srv = bool(lire_config_sync().get("serveur_auto", False))
+            serveur_local.arreter_serveur()
+            return serveur_local.demarrer_serveur(
+                serveur_local.port_configure(), serveur_auto=auto_srv)
+
+        def _fini(resultat):
+            if isinstance(resultat, Exception):
+                self._feedback(
+                    f"Relance du serveur impossible : {resultat}", erreur=True)
+            elif resultat is not None:
+                ok, message = resultat
+                if not ok and message:
+                    self._feedback(message, erreur=True)
+            self.rafraichir()
+
+        run_async(_tache, _fini)
+
+    def _afficher_etat(self, actif, joignable=None):
+        """Pilule + texte d'etat. joignable=None = verification en cours."""
+        from core.config import est_hote
         est_hote_mode = est_hote()
-        actif = network.sync_active()
-        joignable = serveur_local.api_joignable(delai=1.2) if actif else False
-
-        # --- Afficher le bon mode (hote / client) ---
-        self._carte_adresse.setVisible(est_hote_mode)
-        self._carte_client.setVisible(not est_hote_mode)
-        # L'avatar "serveur" est toujours visible dans les options
-
         if actif and joignable:
             self.pilule.setText("Connecte")
             self.pilule.setStyleSheet(
-                "background: #E4F6E9; color: #1B7A3D; border-radius: 12px;"
+                f"background: {C_GREEN_BG}; color: {C_GREEN};"
+                " border-radius: 12px;"
                 " padding: 6px 14px; font-size: 12px; font-weight: 800;")
             if est_hote_mode:
                 self.lbl_etat.setText(
@@ -361,7 +495,17 @@ class AssistantServeur(QDialog):
             else:
                 self.lbl_etat.setText(
                     "Ce poste est connecte au serveur de l'ecole.")
-            self.lbl_etat.setStyleSheet("color: #166534; font-size: 13px;")
+            self.lbl_etat.setStyleSheet(f"color: {C_GREEN}; font-size: 13px;")
+        elif actif and joignable is None:
+            self.pilule.setText("Verification...")
+            self.pilule.setStyleSheet(
+                f"background: {C_PRIMARY_LIGHT}; color: {C_PRIMARY_PRESSED};"
+                " border-radius: 12px;"
+                " padding: 6px 14px; font-size: 12px; font-weight: 800;")
+            self.lbl_etat.setText(
+                "Verification du serveur en cours...")
+            self.lbl_etat.setStyleSheet(
+                f"color: {C_TEXT_MUTED}; font-size: 13px;")
         elif actif:
             self.pilule.setText("Serveur injoignable")
             self.pilule.setStyleSheet(
@@ -379,13 +523,43 @@ class AssistantServeur(QDialog):
         else:
             self.pilule.setText("Mode autonome")
             self.pilule.setStyleSheet(
-                "background: #F1F1F5; color: #8A8A93; border-radius: 12px;"
+                f"background: {C_BG_SOFT}; color: {C_TEXT_LIGHT};"
+                " border-radius: 12px;"
                 " padding: 6px 14px; font-size: 12px; font-weight: 800;")
             self.lbl_etat.setText(
                 "Les donnees restent sur cet ordinateur uniquement. "
                 "Activez la connexion pour partager avec les autres postes.")
             self.lbl_etat.setStyleSheet(
                 f"color: {C_TEXT_MUTED}; font-size: 13px;")
+
+    def rafraichir(self):
+        from core.config import API_BASE_URL, est_hote, ecrire_config_sync, lire_config_sync
+
+        est_hote_mode = est_hote()
+        actif = network.sync_active()
+
+        # --- Afficher le bon mode (hote / client) ---
+        self._carte_adresse.setVisible(est_hote_mode)
+        self._carte_client.setVisible(not est_hote_mode)
+        # L'avatar "serveur" est toujours visible dans les options
+
+        # La verification de disponibilite s'execute hors du thread GUI.
+        self._afficher_etat(actif, joignable=None)
+        if actif:
+            from ui.workers import run_async
+
+            def _tache():
+                try:
+                    return serveur_local.api_joignable(delai=1.2)
+                except Exception:
+                    return False
+
+            def _fini(joignable):
+                if isinstance(joignable, Exception):
+                    joignable = False
+                self._afficher_etat(actif, joignable)
+
+            run_async(_tache, _fini)
 
         self.btn_activer.setEnabled(not actif and est_hote_mode)
         self.btn_arreter.setEnabled(actif and est_hote_mode)
@@ -412,6 +586,16 @@ class AssistantServeur(QDialog):
             self.lbl_adresse_local.setText("")
             self.btn_copier.setEnabled(False)
 
+        # Code de l'ecole (cree au premier demarrage du serveur).
+        from services import connexion
+        if est_hote_mode:
+            code_local = connexion.code_ecole_local()
+            self.lbl_code_ecole.setText(code_local or "Aucun")
+            self.btn_regenerer_code.setEnabled(bool(code_local))
+        else:
+            if not self.input_code.text().strip():
+                self.input_code.setText(connexion.code_ecole_local())
+
         # --- Carte client ---
         if not est_hote_mode:
             # En mode client, on affiche l'adresse actuellement utilisee
@@ -424,7 +608,13 @@ class AssistantServeur(QDialog):
                 self.btn_deconnecter.setEnabled(True)
                 self.btn_deconnecter.show()
             else:
-                self.lbl_client_statut.setText("")
+                if lire_config_sync().get("auto_connect", True):
+                    self.lbl_client_statut.setText(
+                        "Recherche automatique du serveur de l'ecole en "
+                        "cours (meme WiFi ou Internet)...")
+                else:
+                    self.lbl_client_statut.setText(
+                        "Connexion automatique desactivee.")
                 self.btn_connecter.setEnabled(True)
                 self.btn_deconnecter.hide()
 
@@ -433,6 +623,10 @@ class AssistantServeur(QDialog):
         self.chk_serveur_auto.blockSignals(True)
         self.chk_serveur_auto.setChecked(bool(cfg.get("serveur_auto", False)))
         self.chk_serveur_auto.blockSignals(False)
+
+        self.chk_auto_connect.blockSignals(True)
+        self.chk_auto_connect.setChecked(bool(cfg.get("auto_connect", True)))
+        self.chk_auto_connect.blockSignals(False)
 
         from services.demarrage import est_auto_demarrage
         self.chk_app_auto.blockSignals(True)
@@ -454,7 +648,13 @@ class AssistantServeur(QDialog):
         from core.config import ecrire_config_sync
         serveur_auto = self.chk_serveur_auto.isChecked()
         ecrire_config_sync(port=port, api_url=f"http://127.0.0.1:{port}",
-                           serveur_auto=serveur_auto)
+                           serveur_auto=serveur_auto, auto_connect=False)
+
+        # Code de l'ecole : genere au premier demarrage du serveur. Le serveur
+        # ne repondra qu'aux postes portant ce meme code.
+        from services import connexion
+        if not connexion.code_ecole_local():
+            connexion.definir_code_ecole(connexion.nouveau_code_ecole())
 
         from ui.workers import run_async
 
@@ -469,6 +669,7 @@ class AssistantServeur(QDialog):
             en_ligne, message = (resultat if isinstance(resultat, tuple)
                                  else (False, str(resultat)))
             network.set_sync_active(en_ligne)
+            network.set_online() if en_ligne else network.set_offline()
             ecrire_config_sync(sync_active=en_ligne)
             adresse = serveur_local.adresse_locale(port)
             if en_ligne:
@@ -495,8 +696,10 @@ class AssistantServeur(QDialog):
             return
         _, message = serveur_local.arreter_serveur()
         network.set_sync_active(False)
+        network.set_offline()
         from core.config import ecrire_config_sync
-        ecrire_config_sync(sync_active=False, serveur_auto=False, pid=None)
+        ecrire_config_sync(sync_active=False, serveur_auto=False,
+                           auto_connect=False, pid=None)
         self.chk_serveur_auto.setChecked(False)
         self._feedback(message)
         self.rafraichir()
@@ -582,48 +785,72 @@ class AssistantServeur(QDialog):
         self.btn_connecter.setText("Test en cours...")
         QApplication.processEvents()
 
-        # Test de connectivite : on interroge une route simple
-        import httpx
-        try:
-            rep = httpx.get(adresse + "/annee_scolaire_active", timeout=3.0)
-            ok = rep.status_code < 500
-        except Exception:
-            ok = False
+        # Test de connectivite + lecture du code de l'ecole du serveur,
+        # hors du thread GUI (appel reseau synchrone).
+        from ui.workers import run_async
+        from services import connexion
 
-        if not ok:
-            self._feedback(
-                f"Impossible de joindre le serveur {adresse}.\n"
-                "Verifiez l'adresse et que le serveur est demarre.",
-                erreur=True)
+        def _revenir():
             self.btn_connecter.setText("Connecter")
             self.btn_connecter.setEnabled(True)
-            return
 
-        # Succes : on enregistre l'adresse et on active la synchro
-        from core import config
-        from core.config import ecrire_config_sync
-        ecrire_config_sync(
-            api_url=adresse, sync_active=True, serveur_auto=False, pid=None)
-        # Mettre a jour l'URL en memoire pour les appels immediats
-        config.API_BASE_URL = adresse
-        network.set_sync_active(True)
+        def _tache():
+            try:
+                return connexion.code_ecole_du_serveur(adresse)
+            except Exception as exc:
+                return exc
 
-        self._feedback(
-            f"Connecte au serveur {adresse}.\n"
-            "Les donnees (eleves, notes, paiements) seront synchronisees "
-            "automatiquement.")
-        self.btn_connecter.setText("Connecter")
-        self.btn_connecter.setEnabled(True)
-        self.rafraichir()
-        if self._apres_changement:
-            self._apres_changement()
+        def _fini(code_serveur):
+            if isinstance(code_serveur, Exception):
+                self._feedback(
+                    f"Impossible de joindre le serveur {adresse}.\n"
+                    "Verifiez l'adresse et que le serveur est demarre.",
+                    erreur=True)
+                _revenir()
+                return
+
+            # Cloisonnement : un poste d'une ecole ne rejoint JAMAIS le
+            # serveur d'une autre ecole (verification du code, meme logiciel).
+            code_local = connexion.code_ecole_local()
+            code_saisi = self.input_code.text().strip().upper()
+            if code_serveur and code_local and code_local != code_serveur:
+                self._feedback(
+                    f"Refus : ce serveur appartient a l'ecole {code_serveur}, "
+                    f"pas a la votre ({code_local}).\n"
+                    "Ne vous connectez pas : ce serait une autre ecole.",
+                    erreur=True)
+                _revenir()
+                return
+            if code_serveur and code_saisi and code_saisi != code_serveur:
+                self._feedback(
+                    f"Le code saisi ({code_saisi}) ne correspond pas au serveur "
+                    f"({code_serveur}).\n"
+                    "Ouvrez l'assistant sur le PC hote pour verifier le code.",
+                    erreur=True)
+                _revenir()
+                return
+
+            # Succes : ce poste adopte le code de SA ecole et se connecte.
+            code_retenu = code_saisi or code_serveur or code_local
+            adresse_fin = connexion.connecter_a(adresse, code=code_retenu)
+            if code_serveur and not code_saisi:
+                self.input_code.setText(code_serveur)
+
+            self._feedback(
+                f"Connecte au serveur {adresse_fin}.\n"
+                "Les donnees (eleves, notes, paiements) seront synchronisees "
+                "automatiquement.")
+            _revenir()
+            self.rafraichir()
+            if self._apres_changement:
+                self._apres_changement()
+
+        run_async(_tache, _fini)
 
     def _deconnecter_client(self):
         """Deconnecte ce poste du serveur distant et revient en mode autonome."""
-        from core import config
-        from core.config import ecrire_config_sync
-        ecrire_config_sync(sync_active=False, serveur_auto=False, pid=None)
-        network.set_sync_active(False)
+        from services import connexion
+        connexion.deconnecter()
         self._feedback("Deconnecte du serveur. Ce poste fonctionne en mode autonome.")
         self.rafraichir()
         if self._apres_changement:
@@ -669,13 +896,35 @@ class AssistantServeur(QDialog):
         srv = resultats[0]
         adresse = f"http://{srv['ip']}:{srv['port']}"
         self.input_adresse_serveur.setText(adresse)
-        self._feedback(
-            f"Serveur trouve : {adresse}\n"
-            "Cliquez sur Connecter pour vous y connecter.")
+        code_trouve = (srv.get("ecole") or "").strip()
+        from services import connexion
+        if code_trouve:
+            self.input_code.setText(code_trouve)
+            local = connexion.code_ecole_local()
+            if local and local != code_trouve:
+                self._feedback(
+                    f"Serveur trouve : {adresse}\n"
+                    f"ATTENTION : code {code_trouve} — different de votre "
+                    f"ecole ({local}). Ne vous connectez pas.",
+                    erreur=True)
+                return
+            self._feedback(
+                f"Serveur trouve : {adresse}\n"
+                f"Code de l'ecole : {code_trouve}\n"
+                "Cliquez sur Connecter pour vous y connecter.")
+        else:
+            self._feedback(
+                f"Serveur trouve : {adresse}\n"
+                "Cliquez sur Connecter pour vous y connecter.")
 
     def _on_serveur_auto_changed(self, state):
         from core.config import ecrire_config_sync
         ecrire_config_sync(serveur_auto=bool(state))
+
+    def _on_auto_connect_changed(self, state):
+        from core.config import ecrire_config_sync
+        ecrire_config_sync(auto_connect=bool(state))
+        self.rafraichir()
 
     def _on_app_auto_changed(self, state):
         from PyQt5.QtWidgets import QMessageBox

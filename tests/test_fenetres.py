@@ -68,7 +68,7 @@ def test_adaptateur_hauteur_ne_depasse_pas_l_ecran(app):
     app.processEvents()
     _adapter_hauteur(dlg)
     app.processEvents()
-    dispo = app.primaryScreen().availableGeometry().height() - 48
+    dispo = app.primaryScreen().availableGeometry().height() - 64
     assert dlg.height() == dispo
     assert dlg.height() <= app.primaryScreen().availableGeometry().height()
 

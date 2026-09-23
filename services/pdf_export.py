@@ -12,14 +12,32 @@ def echap(valeur):
     return html.escape(str(valeur if valeur is not None else ""))
 
 
-def _generate_pdf(html_content: str, filename: str) -> str:
+def _generate_pdf(html_content: str, filename: str, dossier=None) -> str:
     try:
         from weasyprint import HTML
-        path = DOCS_DIR / filename
+        # Path(...).name neutralise toute tentative de traversee (../)
+        # fournie via un nom de classe / matricule : le PDF reste toujours
+        # dans DOCS_DIR (audit injection fichiers).
+        nom = Path(filename).name or "document.pdf"
+        dest = Path(dossier) if dossier else DOCS_DIR
+        dest.mkdir(parents=True, exist_ok=True)
+        path = dest / nom
         HTML(string=html_content).write_pdf(str(path))
         return str(path)
     except ImportError:
         raise RuntimeError("weasyprint n'est pas installe. Installez-le avec : pip install weasyprint")
+
+
+def _ouvrir_pdf(path):
+    """Ouvre le PDF genere dans le lecteur par defaut de la machine."""
+    from PyQt5.QtCore import QUrl
+    from PyQt5.QtGui import QDesktopServices
+    ok = QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+    if not ok:
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(
+            None, "Document genere",
+            f"Le PDF est disponible ici :\n{path}")
 
 
 def _img_data_uri(path_str):
@@ -30,7 +48,10 @@ def _img_data_uri(path_str):
     if not p.exists():
         return ""
     ext = p.suffix.lower()
-    mime = {"png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(ext, "image/png")
+    mime = {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".bmp": "image/bmp", ".svg": "image/svg+xml",
+    }.get(ext, "image/png")
     data = p.read_bytes()
     b64 = base64.b64encode(data).decode("ascii")
     return f"data:{mime};base64,{b64}"
@@ -38,6 +59,7 @@ def _img_data_uri(path_str):
 
 def _entete_doc():
     params = repos.parametres()
+    nom_ecole = params.get("nom_ecole", "") or "Gestion Scolaire"
     pays = params.get("pays", "") or "Republique du Congo"
     ville = params.get("ville", "")
     now = datetime.datetime.now().strftime("%d/%m/%Y")
@@ -49,7 +71,7 @@ def _entete_doc():
     if bandeau_haut:
         entete += f"<div style='text-align:center;margin-bottom:8px;'><img src='{bandeau_haut}' style='max-width:100%;max-height:80px;'/></div>"
     entete += (f"<div style='display:flex;justify-content:space-between;'>"
-               f"<div><strong>Gestion Scolaire</strong>"
+               f"<div><strong>{echap(nom_ecole)}</strong>"
                f"<div style='color:#64748b;font-size:12px;'>{echap(pays)}{localite}</div></div>"
                f"<div style='color:#64748b;font-size:12px;'>Edite le {now}</div></div>")
     if bandeau_bas:
@@ -120,7 +142,9 @@ def bulletins_pdf(classe_id, periode):
             f"<p style='color:#64748b;font-size:12px;'>Appreciation : <strong>{appreciation}</strong></p>")
     html = f"<html><head><meta charset='utf-8'><title>Bulletins {echap(nom_classe)}</title><style>{STYLE}</style></head><body>{_entete_doc()}{''.join(corps)}</body></html>"
     filename = f"bulletins_{nom_classe.replace(' ', '_')}_{periode.split()[0]}.pdf"
-    return _generate_pdf(html, filename)
+    path = _generate_pdf(html, filename)
+    _ouvrir_pdf(path)
+    return path
 
 
 def recu_paiement_pdf(eleve, montant, mode, reference):
@@ -141,7 +165,9 @@ def recu_paiement_pdf(eleve, montant, mode, reference):
     """
     html = f"<html><head><meta charset='utf-8'><title>Recu de paiement</title><style>{STYLE}</style></head><body>{_entete_doc()}{corps}</body></html>"
     filename = f"recu_{eleve['matricule']}_{reference}.pdf"
-    return _generate_pdf(html, filename)
+    path = _generate_pdf(html, filename)
+    _ouvrir_pdf(path)
+    return path
 
 
 def certificat_scolarite_pdf(eleve, params):
@@ -152,7 +178,7 @@ def certificat_scolarite_pdf(eleve, params):
     corps = f"""
     <h2 style="text-align:center;">CERTIFICAT DE SCOLARITE</h2>
     <p>Nous, soussignes, certifions que l'eleve <strong>{echap(eleve['prenom'])} {echap(eleve['nom'])}</strong>,
-    matricule <strong>{echap(eleve['matricule'])}</strong>, ne le {eleve.get('date_naissance') or '-'}
+    matricule <strong>{echap(eleve['matricule'])}</strong>, ne le {echap(eleve.get('date_naissance') or '-')}
     a {echap(eleve.get('lieu_naissance') or '-')}, est regulierement inscrit(e) dans notre etablissement.</p>
     <table><tr><th>Classe</th><th>Statut</th><th>Date d'inscription</th></tr>
     <tr><td>{echap(eleve.get('classe_nom') or '-')}</td><td>{echap(eleve['statut'])}</td>
@@ -162,7 +188,9 @@ def certificat_scolarite_pdf(eleve, params):
     """
     html = f"<html><head><meta charset='utf-8'><title>Certificat de scolarite</title><style>{STYLE}</style></head><body>{_entete_doc()}{corps}</body></html>"
     filename = f"certificat_{eleve['matricule']}.pdf"
-    return _generate_pdf(html, filename)
+    path = _generate_pdf(html, filename)
+    _ouvrir_pdf(path)
+    return path
 
 
 def paie_pdf():
@@ -179,7 +207,9 @@ def paie_pdf():
         f"<td><strong>{fmt_money(masse)}</strong></td></tr></table>"
     )
     html = f"<html><head><meta charset='utf-8'><title>Paie</title><style>{STYLE}</style></head><body>{_entete_doc()}{corps}</body></html>"
-    return _generate_pdf(html, "paie.pdf")
+    path = _generate_pdf(html, "paie.pdf")
+    _ouvrir_pdf(path)
+    return path
 
 
 def planning_pdf(classe):
@@ -201,4 +231,6 @@ def planning_pdf(classe):
             f"<table><tr>{entetes}</tr>{lignes}</table>"
     html = f"<html><head><meta charset='utf-8'><title>Emploi du temps</title><style>{STYLE}</style></head><body>{_entete_doc()}{corps}</body></html>"
     filename = f"planning_{classe['nom'].replace(' ', '_')}.pdf"
-    return _generate_pdf(html, filename)
+    path = _generate_pdf(html, filename)
+    _ouvrir_pdf(path)
+    return path

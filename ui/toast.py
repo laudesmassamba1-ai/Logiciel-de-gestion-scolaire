@@ -21,7 +21,10 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from core.config import C_RED, C_RED_BG, C_GOLD_PRESSED, C_GOLD_LIGHT
+from core.config import (
+    C_RED, C_RED_BG, C_GREEN, C_GREEN_BG, C_PRIMARY_PRESSED, C_PRIMARY_LIGHT,
+    C_TEXT, C_BORDER,
+)
 
 _MARGE_X = 18
 _MARGE_Y = 16
@@ -31,8 +34,8 @@ _TAILLE_MIN = 300
 _TAILLE_MAX = 400
 
 _TYPES = {
-    "succes": ("#17A34A", "#E8F7EE"),
-    "info": (C_GOLD_PRESSED, C_GOLD_LIGHT),
+    "succes": (C_GREEN, C_GREEN_BG),
+    "info": (C_PRIMARY_PRESSED, C_PRIMARY_LIGHT),
     "erreur": (C_RED, C_RED_BG),
 }
 
@@ -132,7 +135,7 @@ class _Toast(QFrame):
         label.setWordWrap(True)
         label.setMinimumWidth(240)
         label.setStyleSheet(
-            "color: #23272F; font-size: 13px; font-weight: 600;"
+            f"color: {C_TEXT}; font-size: 13px; font-weight: 600;"
             " background: transparent; border: none; padding: 2px;")
 
         h = QHBoxLayout(self)
@@ -141,8 +144,8 @@ class _Toast(QFrame):
         h.addWidget(pastille, 0, Qt.AlignTop)
         h.addWidget(label, 1)
         self.setStyleSheet(
-            f"QFrame {{ background-color: {bg}; border: 1px solid"
-            f" rgba(35,39,47,0.10); border-radius: 14px; }}")
+            f"QFrame {{ background-color: {bg}; border: 1px solid {C_BORDER};"
+            " border-radius: 12px; }}")
 
         self.adjustSize()
         self.setMinimumWidth(_TAILLE_MIN)

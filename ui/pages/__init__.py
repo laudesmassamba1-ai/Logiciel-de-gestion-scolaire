@@ -78,11 +78,26 @@ from ui.pages.paiements_page import (
     open_paiement_dialog,
 )
 
+from ui.pages.bloc_notes_page import (
+    bloc_notes,
+    open_note_dialog,
+)
+
+from ui.pages.calendrier_page import (
+    calendrier,
+    open_evenement_dialog,
+)
+
 from ui.pages.programmes_page import (
     programmes,
     open_matiere_dialog,
 )
 
 from ui.pages.statistiques_page import statistiques
+
+from ui.pages.documents_page import documents
+
+from ui.pages.reseau_page import reseau
+from ui.pages.rapports_page import rapports_page as rapports
 
 from ui.pages.certificat_dialog import open_certificat_dialog

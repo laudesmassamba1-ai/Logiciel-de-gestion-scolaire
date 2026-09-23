@@ -18,11 +18,9 @@ from PyQt5.QtWidgets import (
 )
 
 from core.config import (
-    C_INK, C_PRIMARY_LIGHT, C_PRIMARY_BG, C_TEXT_MUTED, C_BORDER,
+    C_INK, C_GRAD_TOP, C_GRAD_BOTTOM, C_PRIMARY_LIGHT, C_PRIMARY_BG,
+    C_TEXT_MUTED, C_BORDER, C_BG_SOFT, C_CARD, C_SIDEBAR_ACTIVE_TEXT,
 )
-
-_SEPARATEUR = "#1F2A44"
-_GOLD = "#C8960C"
 
 
 def _normaliser(texte):
@@ -84,8 +82,8 @@ class Palette(QFrame):
         carte = QFrame()
         carte.setObjectName("paletteCarte")
         carte.setStyleSheet(
-            f"QFrame#paletteCarte {{ background-color: #FFFFFF;"
-            f" border: 2px solid #C7CFDD; border-radius: 16px; }}")
+            f"QFrame#paletteCarte {{ background-color: {C_CARD};"
+            f" border: 1px solid {C_BORDER}; border-radius: 16px; }}")
 
         v = QVBoxLayout(carte)
         v.setContentsMargins(6, 6, 6, 10)
@@ -97,7 +95,7 @@ class Palette(QFrame):
         glow.setFixedSize(10, 10)
         glow.setStyleSheet(
             f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            f" stop:0 #EAB43B, stop:1 #C28C0C); border: none;"
+            f" stop:0 {C_GRAD_TOP}, stop:1 {C_GRAD_BOTTOM}); border: none;"
             f" border-radius: 5px;")
         self.saisie = _Saisie(self)
         self.saisie.setPlaceholderText("Rechercher une section ou une action…")
@@ -109,7 +107,7 @@ class Palette(QFrame):
         raccourci = QLabel("Ctrl+K")
         raccourci.setStyleSheet(
             f"color: {C_TEXT_MUTED}; font-size: 11px; font-weight: 700;"
-            f" background: #EEF2F8; border: 1px solid #DDE3ED;"
+            f" background: {C_BG_SOFT}; border: 1px solid {C_BORDER};"
             f" border-radius: 12px; padding: 3px 8px;")
         ligne.addWidget(glow)
         ligne.addWidget(self.saisie, 1)
@@ -120,7 +118,7 @@ class Palette(QFrame):
         trait.setFixedHeight(1)
         trait.setStyleSheet(
             f"background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            f" stop:0 #00000000, stop:0.5 {_GOLD}, stop:1 #00000000);")
+            f" stop:0 #00000000, stop:0.5 {C_GRAD_TOP}, stop:1 #00000000);")
         v.addWidget(trait)
 
         self.liste = QListWidget()
@@ -130,7 +128,7 @@ class Palette(QFrame):
             f"QListWidget::item {{ padding: 10px 16px; border-radius: 12px;"
             f" margin: 2px 4px; }}"
             f"QListWidget::item:selected {{ background: {C_PRIMARY_BG};"
-            f" color: #7A5A00; border: 3px solid {_GOLD};"
+            f" color: {C_SIDEBAR_ACTIVE_TEXT}; border: 1px solid {C_GRAD_TOP};"
             f" padding-left: 13px; }}")
         self.liste.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.liste.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)

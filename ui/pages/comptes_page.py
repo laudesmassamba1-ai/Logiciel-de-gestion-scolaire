@@ -6,14 +6,16 @@ from PyQt5.QtWidgets import (
     QMessageBox, QPushButton, QVBoxLayout, QComboBox, QFormLayout, QWidget,
 )
 
-from core.config import (ROLE_LABELS, C_GOLD, C_GOLD_BG, C_GOLD_PRESSED, C_GOLD_BORDER, C_RED, C_RED_BG, C_RED_BORDER, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY)
+from core.config import (ROLE_LABELS, C_PRIMARY, C_PRIMARY_LIGHT, C_PRIMARY_PRESSED, C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY)
 from database.db import hash_password
 from repositories import repos
 from services import auth_service as auth
+from services import rapports
 from ui import toast
 from ui.loader import apply_ui
 from ui.pages.helpers import (
     _btn, _simple_btn_style, _actions_cell, _adapter_hauteur,
+    _fond_aurora_dialog,
 )
 from ui.widgets import KPICard
 from ui.widgets.page_templates import ListPageTemplate
@@ -49,10 +51,22 @@ def comptes(page, ctx):
 
     def _ouvrir_dialog():
         open_compte_dialog(page, ctx)
-        fill()
+        refresh()
 
     btn_add = _btn("+ Nouveau Compte", _ouvrir_dialog, STYLE_BTN_PRIMARY)
     tpl.header.ajouter_action(btn_add)
+
+    def _exporter_pdf():
+        lignes = [[u["nom_complet"], u["email"] or "-",
+                   ROLE_LABELS.get(u["role"], u["role"])]
+                  for u in repos.utilisateurs()]
+        rapports.export_table_pdf(
+            "Comptes utilisateurs",
+            "Utilisateurs, roles et statuts",
+            ["Nom complet", "Email", "Role"], lignes, "rapport_comptes.pdf")
+
+    tpl.header.ajouter_action(
+        _btn("Exporter PDF", lambda: _exporter_pdf(), STYLE_BTN_SECONDARY))
 
     def refresh():
         role = combo_role.currentText()
@@ -71,9 +85,9 @@ def comptes(page, ctx):
                 tpl.table.setCellWidget(i, 5, _actions_cell(
                     _btn("Activer" if not u["actif"] else "Desactiver",
                          partial(_toggle, page, ctx, u),
-                         _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD, border=C_GOLD_BORDER)),
+                         _simple_btn_style(bg=C_PRIMARY_LIGHT, fg=C_PRIMARY, border=C_BLUE_BORDER)),
                     _btn("Mdp", partial(_reset_pwd, page, ctx, u),
-                         _simple_btn_style(bg=C_GOLD_BG, fg=C_GOLD_PRESSED, border=C_GOLD_BORDER)),
+                         _simple_btn_style(bg=C_PRIMARY_LIGHT, fg=C_PRIMARY_PRESSED, border=C_BLUE_BORDER)),
                     _btn("Supprimer", partial(_delete_compte, page, ctx, u),
                          _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER))))
 
@@ -154,6 +168,11 @@ def open_compte_dialog(parent, ctx, compte=None):
     dlg.resize(440, 560)
     dlg.setMinimumSize(380, 460)
     apply_ui("comptes/compte_dialog.ui", dlg)
+    # Boutons themes par les tokens (le .ui garde des hex figes) :
+    # le theme personnalise du configurateur s'applique aussi ici.
+    dlg.btn_save.setStyleSheet(STYLE_BTN_PRIMARY)
+    dlg.btn_cancel.setStyleSheet(STYLE_BTN_SECONDARY)
+    _fond_aurora_dialog(dlg)
     dlg.combo_role_compte.clear()
     dlg.combo_role_compte.addItems(["Directeur", "Gestionnaire"])
     if compte:

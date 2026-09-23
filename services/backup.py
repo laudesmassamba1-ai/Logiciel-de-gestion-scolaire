@@ -5,6 +5,8 @@ from pathlib import Path
 
 from core.config import DB_PATH, DOCS_DIR
 
+MAX_BACKUPS = 20
+
 
 def backup_database(backup_path: str = None) -> str:
     if not backup_path:
@@ -27,7 +29,22 @@ def backup_database(backup_path: str = None) -> str:
             destination.close()
     finally:
         source.close()
+    _pivoter_doubles(backup_path)
     return backup_path
+
+
+def _pivoter_doubles(retenu):
+    """Supprime les sauvegardes en trop (les plus anciennes) pour que la
+    liste reste finie sur le disque (audit rotation)."""
+    try:
+        fichiers = sorted(
+            (DOCS_DIR / "backups").glob("ecole_backup_*.db"),
+            key=lambda f: f.stat().st_mtime, reverse=True)
+        for f in fichiers[int(MAX_BACKUPS):]:
+            if str(f) != str(retenu):
+                f.unlink(missing_ok=True)
+    except (OSError, ValueError):
+        pass
 
 
 def restore_database(backup_path: str) -> bool:

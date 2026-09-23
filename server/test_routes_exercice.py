@@ -91,7 +91,7 @@ GETS = [
     "/tarifs-scolarite/classe/1", "/inscriptions/1/solde",
     "/inscriptions/1/suivi-mensuel", "/utilisateurs", "/ping", "/audit",
     "/lister_toutes_les_inscriptions", "/toutes_presence", "/tous_les_programme",
-    "/paiement-syndication", "/note-syndication",
+    "/paiement-syndication", "/note-syndication", "/postes",
 ]
 
 
@@ -237,3 +237,40 @@ def test_login_puis_audit_protege(app_client, base, ecritures):
 
 def test_ping_ok(app_client, base):
     assert app_client[1].get("/ping").status_code == 200
+
+
+def test_presence_poste_enregistre_et_liste(app_client, base):
+    serveur, c = app_client
+    payload = {
+        "uuid_poste": "test-poste-1",
+        "nom_poste": "PC-Bureau",
+        "adresse_ip": "192.168.1.12",
+        "version_app": "1.6.0",
+        "systeme": "Linux-6.8-test",
+        "est_hote": True,
+    }
+    r = c.post("/present", json=payload)
+    assert r.status_code == 200, r.text
+    assert r.json()["uuid_poste"] == "test-poste-1"
+
+    r = c.get("/postes")
+    assert r.status_code == 200, r.text
+    postes = r.json()["postes"]
+    ligne = next((p for p in postes if p["uuid_poste"] == "test-poste-1"), None)
+    assert ligne is not None, postes
+    assert ligne["nom_poste"] == "PC-Bureau"
+    assert ligne["est_hote"] == 1
+    assert ligne["age_secondes"] is not None
+
+    # Un second battement met a jour la fiche (pas de doublon).
+    c.post("/present", json={**payload,
+                             "nom_poste": "PC-Bureau (renomme)",
+                             "est_hote": False})
+    r = c.get("/postes")
+    lignes = [p for p in r.json()["postes"] if p["uuid_poste"] == "test-poste-1"]
+    assert len(lignes) == 1, lignes
+    assert lignes[0]["nom_poste"] == "PC-Bureau (renomme)"
+    assert lignes[0]["est_hote"] == 0
+
+    # uuid vide = refus.
+    assert c.post("/present", json={**payload, "uuid_poste": ""}).status_code == 400

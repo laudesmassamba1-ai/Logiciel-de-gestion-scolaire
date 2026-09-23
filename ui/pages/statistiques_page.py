@@ -2,25 +2,45 @@ import datetime
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QFrame, QGridLayout, QLabel, QScrollArea, QSizePolicy,
-    QVBoxLayout, QWidget,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QScrollArea,
+    QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from repositories import repos
-from core.config import STYLE_SCROLL, STYLE_CHART_CARD
-from ui.pages.helpers import _page_header
+from core.config import (
+    C_AURORA, C_PRIMARY, C_TEXT_SECONDARY,
+    STYLE_SCROLL, STYLE_CHART_CARD, STYLE_BTN_SECONDARY,
+)
+from ui import toast
+from ui.pages.helpers import _btn, _page_header
 from ui.widgets import SimpleBarChart, SimpleLineChart, SimplePieChart
 
 
 def statistiques(page, ctx):
     if page.layout() is not None:
         return
-    page.setStyleSheet("")
+    page.setStyleSheet(C_AURORA)
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
     _page_header(lay, "Statistiques de l'ecole",
                  "Scolarite, finances et presences en un coup d'oeil")
+
+    def _exporter_pdf():
+        from services import rapports
+        try:
+            rapports.rapport_statistiques()
+        except Exception as exc:
+            QMessageBox.warning(page, "Statistiques",
+                                f"Erreur pendant l'export : {exc}")
+            return
+        toast.succes(page, "Statistiques exportees en PDF.")
+
+    barre = QHBoxLayout()
+    barre.addStretch(1)
+    barre.addWidget(_btn("Exporter PDF", _exporter_pdf,
+                         STYLE_BTN_SECONDARY))
+    lay.addLayout(barre)
 
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)

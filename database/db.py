@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS eleves (
     check_acte         INTEGER NOT NULL DEFAULT 0,
     check_photos       INTEGER NOT NULL DEFAULT 0,
     check_bulletin     INTEGER NOT NULL DEFAULT 0,
+    photo              TEXT,
     statut             TEXT NOT NULL DEFAULT 'Inscrit',
     date_inscription   TEXT NOT NULL DEFAULT (date('now', 'localtime')),
     FOREIGN KEY (classe_id) REFERENCES classes (id)
@@ -188,7 +189,8 @@ CREATE TABLE IF NOT EXISTS file_attente_synchro (
     method       TEXT NOT NULL,
     payload      TEXT NOT NULL,
     created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-    status       TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'FAILED')),
+    status       TEXT NOT NULL DEFAULT 'PENDING'
+                 CHECK (status IN ('PENDING', 'FAILED', 'EVINCEE')),
     uuid_client  TEXT
 );
 
@@ -202,6 +204,29 @@ CREATE TABLE IF NOT EXISTS ia_memoire (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ia_memoire_question ON ia_memoire (question);
+
+CREATE TABLE IF NOT EXISTS bloc_notes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    utilisateur_id INTEGER NOT NULL DEFAULT 0,
+    titre        TEXT NOT NULL,
+    contenu      TEXT NOT NULL DEFAULT '',
+    cree_le      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    modifie_le   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS calendrier_evenements (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    utilisateur_id INTEGER NOT NULL DEFAULT 0,
+    titre         TEXT NOT NULL,
+    jour          TEXT NOT NULL,
+    heure         TEXT NOT NULL DEFAULT '',
+    note          TEXT NOT NULL DEFAULT '',
+    alarme        INTEGER NOT NULL DEFAULT 0,
+    alarme_signalee INTEGER NOT NULL DEFAULT 0,
+    cree_le       TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendrier_jour ON calendrier_evenements (jour);
 """
 
 
@@ -230,6 +255,12 @@ class Database:
         return cls._instance
 
     def __init__(self):
+        # Singleton : __init__ re-tourne a chaque instantiation. On ne
+        # reinitialise l'etat qu'une seule fois (sinon un simple
+        # Database() relancerait migrations et seed a tort).
+        if getattr(self, "_init_done", False):
+            return
+        self._init_done = True
         DOCS_DIR.mkdir(parents=True, exist_ok=True)
         self._initialized = False
 
@@ -267,10 +298,43 @@ class Database:
             conn.execute("ALTER TABLE eleves ADD COLUMN uuid_client TEXT")
         if "redoublant" not in eleve_cols:
             conn.execute("ALTER TABLE eleves ADD COLUMN redoublant INTEGER NOT NULL DEFAULT 0")
+        if "photo" not in eleve_cols:
+            conn.execute("ALTER TABLE eleves ADD COLUMN photo TEXT")
 
         queue_cols = [r[1] for r in conn.execute("PRAGMA table_info(file_attente_synchro)")]
         if "uuid_client" not in queue_cols:
             conn.execute("ALTER TABLE file_attente_synchro ADD COLUMN uuid_client TEXT")
+        if "tentative" not in queue_cols:
+            conn.execute(
+                "ALTER TABLE file_attente_synchro ADD COLUMN tentative INTEGER NOT NULL DEFAULT 0")
+
+        # Anciennes bases : le CHECK initial interdisait le statut 'EVINCEE'
+        # (abandon explicite apres tentative_max) et faisait echouer l'update.
+        # SQLite ne permet pas de stetsdropper un CHECK : on reconstruit la table.
+        sql_table = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='file_attente_synchro'"
+        ).fetchone()
+        if sql_table and "EVINCEE" not in (sql_table[0] or ""):
+            conn.execute(
+                "ALTER TABLE file_attente_synchro RENAME TO file_attente_synchro_ancien")
+            conn.execute(
+                """CREATE TABLE file_attente_synchro (
+                       id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                       endpoint     TEXT NOT NULL,
+                       method       TEXT NOT NULL,
+                       payload      TEXT NOT NULL,
+                       created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                       status       TEXT NOT NULL DEFAULT 'PENDING'
+                                     CHECK (status IN ('PENDING','FAILED','EVINCEE')),
+                       uuid_client  TEXT,
+                       tentative    INTEGER NOT NULL DEFAULT 0)""")
+            conn.execute(
+                """INSERT INTO file_attente_synchro
+                       (id, endpoint, method, payload, created_at, status,
+                        uuid_client, tentative)
+                   SELECT id, endpoint, method, payload, created_at, status,
+                          uuid_client, tentative FROM file_attente_synchro_ancien""")
+            conn.execute("DROP TABLE file_attente_synchro_ancien")
 
         # Chaque ecriture de caisse est rattachee a l'annee scolaire active :
         # indispensable a la coherence comptable quand l'annee change.
@@ -278,7 +342,7 @@ class Database:
         if "annee_scolaire" not in trans_cols:
             conn.execute("ALTER TABLE transactions ADD COLUMN annee_scolaire TEXT")
 
-        # Chaque paiement d'eleve cree desormais une ecriture de caisse
+# Chaque paiement d'eleve cree desormais une ecriture de caisse
         # (type 'entree') liee par paiement_id. La Caisse ne lit que la table
         # transactions : sans ce rattachement, un encaissement enregistre
         # dans Paiements n'apparait jamais en Caisse. Cette migration cree
@@ -290,20 +354,39 @@ class Database:
                 """INSERT INTO transactions
                        (date, reference, beneficiaire, motif, categorie, montant,
                         type, mode_reglement, annee_scolaire, paiement_id)
-                   SELECT COALESCE(p.date_paiement, date('now', 'localtime')),
-                          'REC-' || upper(hex(randomblob(4))),
-                          TRIM(e.prenom || ' ' || e.nom),
-                          COALESCE(p.type_frais, 'Paiement'),
-                          COALESCE(p.type_frais, 'Autres'),
-                          p.montant,
-                          'entree',
-                          p.mode_reglement,
-                          p.annee_scolaire,
-                          p.id
-                     FROM paiements p
-                     JOIN eleves e ON e.id = p.eleve_id
-                     WHERE NOT EXISTS (
-                         SELECT 1 FROM transactions t WHERE t.paiement_id = p.id)""")
+                  SELECT COALESCE(p.date_paiement, date('now', 'localtime')),
+                         'REC-' || upper(hex(randomblob(4))),
+                         TRIM(e.prenom || ' ' || e.nom),
+                         COALESCE(p.type_frais, 'Paiement'),
+                         COALESCE(p.type_frais, 'Autres'),
+                         p.montant,
+                         'entree',
+                         p.mode_reglement,
+                         p.annee_scolaire,
+                         p.id
+                    FROM paiements p
+                    JOIN eleves e ON e.id = p.eleve_id
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM transactions t WHERE t.paiement_id = p.id)""")
+
+        # Sync V2 : uuid_client sur tables mouvement pour sync idempotente
+        for table, col in [("notes", "uuid_client"), ("presences", "uuid_client"),
+                           ("paiements", "uuid_client"), ("transactions", "uuid_client"),
+                           ("planning", "uuid_client")]:
+            cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+            if col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+
+        # Tombstones locaux pour suppressions serveur -> client
+        for table in ["notes", "paiements", "presences"]:
+            cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+            if "est_supprime" not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN est_supprime INTEGER DEFAULT 0")
+
+        # Fermer l'année : colonne archivee sur annees_scolaires
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(annees_scolaires)")]
+        if "archivee" not in cols:
+            conn.execute("ALTER TABLE annees_scolaires ADD COLUMN archivee INTEGER DEFAULT 0")
 
 
     def _seed(self, conn):
@@ -434,6 +517,13 @@ class Database:
             conn.close()
 
 
+    # Une erreur DEFINITIVE (ex. 409 sur un telephone en double) ne doit
+    # pas empoisonner la file indefiniment : au-dela d'un plafond de
+    # tentatives, l'operation est marquee 'EVINCEE' (abandon explicite,
+    # conservee pour audit, jamais rejouee) plutot que re-jouee sans fin.
+    TENTATIVE_MAX = 6
+
+
     def enqueue(self, method, endpoint, payload, uuid_client=None):
         # Dédoublonnage : un double-clic ou une revalidation ne doit pas
         # empiler deux fois la meme operation en attente.
@@ -453,11 +543,13 @@ class Database:
     def dequeue_pending(self, limit=50):
         # PENDING *et* FAILED : un echec temporaire (serveur injoignable le
         # temps de la resolution, reference pas encore arrivee) est rejoue
-        # au cycle suivant, sans jamais rester bloque silencieusement.
+        # au cycle suivant, sans jamais rester bloque silencieusement. Les
+        # lignes 'EVINCEE' (plafond de tentatives atteint) ne sont plus
+        # rejouees.
         return self.query(
             """SELECT * FROM file_attente_synchro
-               WHERE status IN ('PENDING', 'FAILED')
-               ORDER BY id LIMIT ?""", (limit,))
+               WHERE status IN ('PENDING', 'FAILED') AND tentative < ?
+               ORDER BY id LIMIT ?""", (self.TENTATIVE_MAX, limit))
 
 
     def mark_queue_done(self, queue_id):
@@ -466,5 +558,12 @@ class Database:
 
     def mark_queue_failed(self, queue_id):
         self.execute(
-            "UPDATE file_attente_synchro SET status = 'FAILED' WHERE id = ?",
-            (queue_id,))
+            """UPDATE file_attente_synchro
+               SET status = 'FAILED', tentative = tentative + 1
+               WHERE id = ?""", (queue_id,))
+        row = self.query_one("SELECT tentative FROM file_attente_synchro WHERE id = ?",
+                             (queue_id,))
+        if row and row["tentative"] >= self.TENTATIVE_MAX:
+            self.execute(
+                "UPDATE file_attente_synchro SET status = 'EVINCEE' WHERE id = ?",
+                (queue_id,))

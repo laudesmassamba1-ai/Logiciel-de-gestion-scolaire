@@ -7,46 +7,80 @@ table ne peut donc retrouver un vide sous ses lignes.
 """
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QHeaderView, QTableWidgetItem
+from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import (
+    QGraphicsDropShadowEffect, QHeaderView, QTableWidgetItem,
+)
 
 from qfluentwidgets import TableWidget
 
-from resources.design_tokens import Colors, FontSize
+from resources.design_tokens import FontSize
+from core.config import (
+    C_BG_SOFT, C_BORDER_STRONG, C_CARD, C_CONTOUR, C_GRID, C_TEXT_SECONDARY,
+    C_PRIMARY_LIGHT, C_SIDEBAR_ACTIVE_TEXT,
+    T_RAYON_TABLE, T_TABLE_FONT, T_TABLE_PAD_Y, T_TABLE_PAD_X,
+    T_TABLE_HEADER_FONT, T_TABLE_HEADER_PAD_Y, T_TABLE_HEADER_PAD_X,
+)
 
 
 class DataTable(TableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setBorderVisible(False)
-        self.setWordWrap(False)
+        self.setWordWrap(True)
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(TableWidget.SelectRows)
         self.setSelectionMode(TableWidget.SingleSelection)
         self.setEditTriggers(TableWidget.NoEditTriggers)
-        self.verticalHeader().setDefaultSectionSize(40)
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setDefaultAlignment(
             Qt.AlignLeft | Qt.AlignVCenter)
         self.horizontalHeader().setHighlightSections(False)
+        self.horizontalHeader().setStyleSheet(
+            f"QHeaderView {{ background: {C_BG_SOFT}; }}"
+            "QHeaderView::section {"
+            f" background: {C_BG_SOFT}; color: {C_TEXT_SECONDARY};"
+            f" font-weight: 700; font-size: {T_TABLE_HEADER_FONT}px;"
+            " letter-spacing: 0.6px;"
+            " text-transform: uppercase; border: none;"
+            f" border-bottom: 2px solid {C_CONTOUR};"
+            f" padding: {T_TABLE_HEADER_PAD_Y}px {T_TABLE_HEADER_PAD_X}px; }}"
+        )
         self.setStyleSheet(self._qss())
         self.refresh_height()
+
+        # Ombre portee NETTE (blur 0) : effet « sticker » cartoon mesuré.
+        ombre = QGraphicsDropShadowEffect(self)
+        ombre.setBlurRadius(0)
+        ombre.setOffset(0, 4)
+        ombre.setColor(QColor(31, 45, 80, 40))  # rgba ~16 %
+        self.setGraphicsEffect(ombre)
 
     @staticmethod
     def _qss():
         return (
-            "QTableWidget { background-color: #FFFFFF; alternate-background-color: #F6F8FB;"
-            " border: 1px solid #DAE0EA; border-radius: 14px;"
-            " gridline-color: #E7EBF3; padding: 2px; }"
-            "QHeaderView::section { background-color: #F1F3F6; color: #3A3A40;"
-            " font-weight: 700; font-size: 12px; border: none;"
-            " border-bottom: 2px solid #C8960C; padding: 8px; }"
-            "QTableWidget::item { padding: 6px 8px; }"
-            "QTableWidget::item:selected { background-color: #FEF3C7; color: #1D1D1F; }"
-            f"QTableWidget::item:hover {{ background-color: {Colors.PRIMARY_LIGHT}; }}"
-            "QScrollBar:vertical { width: 10px; background: #F1F3F6;"
+            "QTableWidget {"
+            f" background-color: {C_CARD}; alternate-background-color: {C_BG_SOFT};"
+            f" border: 1px solid {C_CONTOUR}; border-radius: {T_RAYON_TABLE}px;"
+            f" gridline-color: {C_GRID}; padding: 2px; }}"
+            "QHeaderView::section {"
+            f" background: {C_BG_SOFT}; color: {C_TEXT_SECONDARY};"
+            f" font-weight: 700; font-size: {T_TABLE_HEADER_FONT}px;"
+            " letter-spacing: 0.6px;"
+            " text-transform: uppercase; border: none;"
+            f" border-bottom: 2px solid {C_CONTOUR};"
+            f" padding: {T_TABLE_HEADER_PAD_Y}px {T_TABLE_HEADER_PAD_X}px; }}"
+            f"QTableWidget::item {{ padding: {T_TABLE_PAD_Y}px {T_TABLE_PAD_X}px;"
+            f" border-bottom: 1px solid {C_GRID}; }}"
+            "QTableWidget::item:selected {"
+            f" background-color: {C_PRIMARY_LIGHT}; color: {C_SIDEBAR_ACTIVE_TEXT}; }}"
+            "QTableWidget::item:hover {"
+            f" background-color: {C_BG_SOFT}; }}"
+            "QScrollBar:vertical { width: 10px; background: transparent;"
             " border-radius: 5px; margin: 2px; }"
-            "QScrollBar::handle:vertical { background: #C4CCDA; border-radius: 5px; }"
+            "QScrollBar::handle:vertical {"
+            f" background: {C_BORDER_STRONG}; border-radius: 5px; }}"
         )
 
     def refresh_height(self, max_visible_rows=10):
@@ -68,10 +102,17 @@ class DataTable(TableWidget):
             return self
         lignes = list(valeurs)
         colonnes = len(lignes[0])
+        # Ne jamais REDUIRE le nombre de colonnes : certaines tables posent
+        # leur header (4, 7, 9 colonnes...) puis remplissent moins de valeurs
+        # par ligne ; setColumnCount plus petit detruirait les colonnes
+        # restantes (ex. onglet "Programme par Classe" reduit a 1 colonne).
+        colonnes = max(colonnes, self.columnCount())
         self.setColumnCount(colonnes)
         self.setRowCount(len(lignes))
         for i, ligne in enumerate(lignes):
             for j, val in enumerate(ligne):
+                if j >= colonnes:
+                    break
                 item = QTableWidgetItem("" if val is None else str(val))
                 self.setItem(i, j, item)
         if largeurs:

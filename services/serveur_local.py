@@ -35,7 +35,8 @@ def _debuter_annonce(port: int):
         return
     try:
         from services.discovery import AnnonceurServeur
-        _annonceur = AnnonceurServeur(port_api=port)
+        from core.config import code_ecole
+        _annonceur = AnnonceurServeur(port_api=port, code_ecole=code_ecole())
         _annonceur.start()
     except Exception:
         _annonceur = None
@@ -173,6 +174,16 @@ def demarrer_serveur(port: int = None, serveur_auto: bool = True):
         env["GS_SQLITE_DIR"] = str(data_dir() / "serveur")
         env.pop("GS_DB_HOST", None)
 
+    # Code de l'ecole : le serveur ne repondra qu'aux postes de CETTE ecole
+    # (cloisonnement entre etablissements). Genere au premier demarrage.
+    try:
+        from core.config import code_ecole
+        code = code_ecole()
+        if code:
+            env["GS_ECOLE_CODE"] = code
+    except Exception:
+        pass
+
     options = {}
     if os.name == "nt":
         creation_no_console = 0x08000000          # CREATE_NO_WINDOW
@@ -180,6 +191,7 @@ def demarrer_serveur(port: int = None, serveur_auto: bool = True):
     else:
         options["start_new_session"] = True
 
+    journal = None
     try:
         journal = open(journal_serveur(), "a", encoding="utf-8")
         processus = subprocess.Popen(
@@ -190,7 +202,19 @@ def demarrer_serveur(port: int = None, serveur_auto: bool = True):
             **options,
         )
     except Exception as exc:
+        if journal is not None:
+            try:
+                journal.close()
+            except Exception:
+                pass
         return False, f"Impossible de lancer le serveur : {exc}"
+    # Le processus fils garde son propre descripteur : on ferme la copie
+    # du parent pour ne pas empecher la rotation/etc. (audit fuites).
+    if journal is not None:
+        try:
+            journal.close()
+        except Exception:
+            pass
 
     ecrire_config_sync(pid=processus.pid, port=port, sync_active=True,
                        api_url=f"http://127.0.0.1:{port}",
@@ -235,15 +259,22 @@ def api_joignable(port: int = None, delai: float = _DELAI_ATTENTE_S) -> bool:
         port = port_configure()
     fin = time.monotonic() + delai
     url = f"http://127.0.0.1:{port}/annee_scolaire_active"
-    while time.monotonic() < fin:
-        try:
-            rep = httpx.get(url, timeout=1.5)
-            if rep.status_code < 500:
-                return True
-        except Exception:
-            pass
-        time.sleep(0.4)
-    return False
+    try:
+        client = httpx.Client(timeout=1.5)
+    except Exception:
+        return False
+    try:
+        while time.monotonic() < fin:
+            try:
+                rep = client.get(url)
+                if rep.status_code < 500:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.4)
+        return False
+    finally:
+        client.close()
 
 
 def _est_processus_actif(pid: int) -> bool:

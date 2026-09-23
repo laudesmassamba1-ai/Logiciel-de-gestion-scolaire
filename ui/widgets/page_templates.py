@@ -122,10 +122,11 @@ class FormPageTemplate(_BaseTemplate):
 
     def _monter_contenu(self, lay):
         self.champs = QVBoxLayout()
-        self.champs.setSpacing(Spacing.MD)
+        self.champs.setSpacing(Spacing.LG)
         lay.addLayout(self.champs)
 
         self._boutons = QHBoxLayout()
+        self._boutons.setSpacing(Spacing.SM)
         self._boutons.addStretch(1)
         lay.addLayout(self._boutons)
 
@@ -133,11 +134,11 @@ class FormPageTemplate(_BaseTemplate):
         self.btn_enregistrer = QPushButton("Enregistrer")
         self.btn_annuler.setStyleSheet(
             f"QPushButton {{ background-color: {Colors.BG_SOFT};"
-            f" color: {Colors.TEXT_SECONDARY}; border: 1px solid {Colors.BORDER};"
-            f" border-radius: {Radius.MD}px; padding: 8px 18px; font-weight: 600; }}")
+            f" color: {Colors.TEXT_SECONDARY}; border: 1px solid {Colors.CONTOUR};"
+            f" border-radius: {Radius.MD}px; padding: 10px 20px; font-weight: 600; }}")
         self.btn_enregistrer.setStyleSheet(
-            f"QPushButton {{ background-color: {Colors.PRIMARY}; color: #FFFFFF;"
-            " border: none; border-radius: " + str(Radius.MD) + "px; padding: 8px 18px;"
+            f"QPushButton {{ background-color: {Colors.PRIMARY}; color: {Colors.BG_CARD};"
+            f" border: 1px solid {Colors.CONTOUR}; border-radius: {Radius.MD}px; padding: 10px 20px;"
             " font-weight: 700; }"
             f" QPushButton:hover {{ background-color: {Colors.PRIMARY_HOVER}; }}"
             f" QPushButton:pressed {{ background-color: {Colors.PRIMARY_PRESSED}; }}")

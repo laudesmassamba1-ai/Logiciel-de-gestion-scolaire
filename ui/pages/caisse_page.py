@@ -73,15 +73,34 @@ def caisse(page, ctx):
                                                        on_created=refresh),
                        STYLE_BTN_DANGER)
     btn_export = _btn("Exporter CSV", lambda: export_csv(), STYLE_BTN_SECONDARY)
+    btn_export_pdf = _btn("Exporter PDF", lambda: _exporter_pdf(), STYLE_BTN_SECONDARY)
     if peut_editer:
         tpl.header.ajouter_action(btn_recette)
         tpl.header.ajouter_action(btn_depense)
     tpl.header.ajouter_action(btn_export)
+    tpl.header.ajouter_action(btn_export_pdf)
+
+    def _exporter_pdf():
+        from services import rapports
+        rows = getattr(page, "_caisse_rows", [])
+        lignes = [[r["date"], r["reference"], r["beneficiaire"] or "-",
+                   r["motif"] or "-", r["categorie"] or "-",
+                   r["type"] == "entree" and "Recette" or "Depense",
+                   fmt_money(r["montant"])] for r in rows]
+        if not rapports.export_table_pdf(
+                "Caisse : operations",
+                f"Periode {filtre_courant['debut']} au "
+                f"{filtre_courant['fin']} - le {rapports._date_pdf()}",
+                ["Date", "Reference", "Beneficiaire", "Motif", "Categorie",
+                 "Type", "Montant"], lignes,
+                "rapport_caisse.pdf"):
+            toast.info(page, "Rien a exporter : aucune operation sur cette periode.")
 
     filtre_courant = {"t": None, "recherche": "", "debut": None, "fin": None,
                       "annee": "active"}
 
     def refresh():
+        repos.reconcilier_caisse()
         type_filtre = combo_type.currentText()
         recherche = search.text().strip()
         if type_filtre == "Recettes uniquement":
@@ -130,6 +149,7 @@ def caisse(page, ctx):
         kpi[0].set_value(fmt_money(total_entrees))
         kpi[1].set_value(fmt_money(total_sorties))
         kpi[2].set_value(fmt_money(total_entrees - total_sorties))
+        page._caisse_rows = rows
 
     def _delete_transaction(parent, ctx, t):
         from ui.pages.helpers import confirmer

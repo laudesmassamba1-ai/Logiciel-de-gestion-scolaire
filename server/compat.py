@@ -141,6 +141,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
     INDEX idx_audit_action (action),
     INDEX idx_audit_date (horodatage)
 );
+
+CREATE TABLE IF NOT EXISTS poste_presence (
+    uuid_poste VARCHAR(64) PRIMARY KEY,
+    nom_poste VARCHAR(120) NOT NULL,
+    adresse_ip VARCHAR(45),
+    version_app VARCHAR(20),
+    systeme VARCHAR(80),
+    est_hote TINYINT DEFAULT 0,
+    derniere_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    premiere_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -315,6 +326,20 @@ def _id_entier(valeur):
         return None
 
 
+def _safe_float(valeur, defaut=0.0):
+    """Convertit en float de maniere sure ; renvoie defaut sur erreur."""
+    if valeur is None:
+        return defaut
+    if isinstance(valeur, (int, float)):
+        return float(valeur)
+    if isinstance(valeur, str):
+        try:
+            return float(valeur.replace(",", ".").replace(" ", ""))
+        except ValueError:
+            return defaut
+    return defaut
+
+
 def _annee_scolaire_active(cursor):
     cursor.execute("SELECT id FROM annee_scolaire WHERE est_active = TRUE LIMIT 1")
     ligne = cursor.fetchone()
@@ -395,11 +420,21 @@ def _creer_eleve_complet(payload_brut: dict):
                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                         (inscription_id,
                          _type_frais(brut_paiement.get("type_frais")),
-                         float(brut_paiement.get("montant") or 0),
+                         _safe_float(brut_paiement.get("montant")),
                          _mode_paiement(brut_paiement.get("mode_paiement")),
                          _trimestre(brut_paiement.get("trimestre")),
                          _chaine(brut_paiement.get("mois")) or None,
                          _chaine(brut_paiement.get("uuid_client")) or None))
+            elif brut_paiement:
+                conn.commit()
+                raise HTTPException(
+                    status_code=409,
+                    detail="Paiement ignore : aucune annee scolaire active pour l'inscription")
+        elif brut_paiement:
+            conn.commit()
+            raise HTTPException(
+                status_code=409,
+                detail="Paiement ignore : classe non renseignee pour l'inscription")
 
         conn.commit()
         reponse = {"message": "Élève enregistré avec succès", "eleve_id": eleve_id}
@@ -581,8 +616,9 @@ def _supprimer_classe(ref: str):
         curseur.execute("DELETE FROM tarif_scolarite WHERE classe_id = %s", (id_classe,))
         curseur.execute("DELETE FROM inscription WHERE classe_id = %s", (id_classe,))
         curseur.execute("DELETE FROM planning WHERE classe_id = %s", (id_classe,))
-        curseur.execute("UPDATE eleve JOIN inscription i ON i.eleve_id = eleve.id"
-                        " SET eleve.est_supprime = TRUE WHERE i.classe_id = %s", (id_classe,))
+        curseur.execute(
+            "UPDATE eleve SET est_supprime = TRUE WHERE id IN "
+            "(SELECT eleve_id FROM inscription WHERE classe_id = %s)", (id_classe,))
         curseur.execute("DELETE FROM classe WHERE id = %s", (id_classe,))
         enregistrer_audit(curseur, None, "suppression_classe",
                           f"classe_id={id_classe} ref={ref}")
@@ -907,15 +943,16 @@ def _ajouter_paiement(payload: dict):
         try:
             curseur.execute(
                 """INSERT INTO caisse_transaction (reference, beneficiaire, motif,
-                   categorie, montant, type, mode_reglement)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                   categorie, montant, type, mode_reglement, uuid_client)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                 (_chaine(payload.get("reference")) or None,
                  _chaine(payload.get("beneficiaire"), "-"),
                  _chaine(payload.get("motif")),
                  _chaine(payload.get("categorie")),
-                 float(payload.get("montant") or 0),
+                 _safe_float(payload.get("montant")),
                  genre,
-                 _chaine(payload.get("mode_reglement"))))
+                 _chaine(payload.get("mode_reglement")) or "espece",
+                 _chaine(payload.get("uuid_client")) or None))
             nouvel_id = curseur.lastrowid
             conn.commit()
             return {"message": "Transaction enregistrée avec succès", "id": nouvel_id}
@@ -1035,14 +1072,14 @@ def _creer_tarif(payload: dict):
 def _modifier_tarif(tarif_id: int, payload: dict):
     champs = {}
     if payload.get("frais_inscription") is not None:
-        champs["frais_inscription"] = float(payload["frais_inscription"])
+        champs["frais_inscription"] = _safe_float(payload["frais_inscription"])
     if payload.get("montant_pension") is not None:
-        champs["montant_pension"] = float(payload["montant_pension"])
+        champs["montant_pension"] = _safe_float(payload["montant_pension"])
     if payload.get("montant") is not None:
         colonne = ("frais_inscription"
                    if _type_frais(payload.get("type_frais")) == "Inscription"
                    else "montant_pension")
-        champs[colonne] = float(payload["montant"])
+        champs[colonne] = _safe_float(payload["montant"])
     if payload.get("classe_id") is not None:
         champs["classe_id"] = _id_entier(payload.get("classe_id"))
     if not champs:
@@ -1113,7 +1150,7 @@ def _ajouter_note(payload: dict):
                    note_sur, date_evaluation, trimestre, uuid_client)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                 (inscription_id, matiere_id, type_evaluation,
-                 float(valeur), 20, jour, trimestre,
+                 _safe_float(valeur), 20, jour, trimestre,
                  _chaine(payload.get("uuid_client")) or None))
         enregistrer_audit(curseur, None, "saisie_notes",
                           f"eleve_id={eleve_id} matiere_id={matiere_id} "
@@ -1647,6 +1684,8 @@ def enregistrer_routes_compat(app):
         try:
             curseur.execute("SELECT * FROM enseignant WHERE id = %s", (enseignant_id,))
             ligne = curseur.fetchone()
+            if ligne is None:
+                raise HTTPException(status_code=404, detail="Enseignant non trouvé")
             return {"enseignant": ligne}
         finally:
             curseur.close()

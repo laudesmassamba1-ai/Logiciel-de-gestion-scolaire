@@ -7,9 +7,9 @@ from PyQt5.QtGui import QColor
 
 from core.config import (
     APP_NAME, APP_VERSION, ROLE_LABELS,
-    C_INK, C_TEXT, C_TEXT_MUTED, C_TEXT_SECONDARY, C_CARD, C_BG,
-    C_BORDER_STRONG, C_PRIMARY, C_PRIMARY_HOVER,
-    C_FOCUS_RING, C_RED,
+    C_INK, C_TEXT, C_TEXT_MUTED, C_TEXT_SECONDARY, C_TEXT_LIGHT, C_CARD,
+    C_BG_SOFT, C_BORDER, C_BORDER_STRONG, C_PRIMARY, C_PRIMARY_HOVER,
+    C_FOCUS_RING, C_RED, C_GREEN, C_GREEN_BG, C_AURORA,
     STYLE_AUTH_EMBLEME, STYLE_AUTH_BTN, STYLE_AUTH_FIELD_LABEL,
 )
 from database.db import hash_password
@@ -132,7 +132,7 @@ class _EcranAuth(QDialog):
         self._construire()
         self.card.setStyleSheet(
             f"QFrame#authCarte {{ background: {C_CARD};"
-            f" border: 2px solid #C7CFDD; border-radius: 18px; }}")
+            f" border: 1px solid {C_BORDER}; border-radius: 16px; }}")
 
     def _hauteur(self):
         raise NotImplementedError
@@ -141,7 +141,7 @@ class _EcranAuth(QDialog):
         racine = QVBoxLayout(self)
         racine.setContentsMargins(0, 0, 0, 0)
         racine.setSpacing(0)
-        self.setStyleSheet(f"QDialog {{ background-color: {C_BG}; }}")
+        self.setStyleSheet(f"QDialog {{ {C_AURORA} }}")
 
         fond = QVBoxLayout()
         fond.setContentsMargins(0, 28, 0, 20)
@@ -227,7 +227,7 @@ class _EcranAuth(QDialog):
         ligne.setSpacing(8)
 
         version = QLabel(f"v{APP_VERSION}")
-        version.setStyleSheet("color: #8A8A93; font-size: 11px;")
+        version.setStyleSheet(f"color: {C_TEXT_LIGHT}; font-size: 11px;")
         ligne.addWidget(version)
         ligne.addStretch(1)
 
@@ -253,8 +253,8 @@ class _EcranAuth(QDialog):
     def _mode_couleurs():
         from core import network
         if network.sync_active():
-            return ("#E4F6E9", "#1B7A3D")
-        return ("#F1F1F5", "#8A8A93")
+            return (C_GREEN_BG, C_GREEN)
+        return (C_BG_SOFT, C_TEXT_LIGHT)
 
     def _animer(self):
         if self._anime:
