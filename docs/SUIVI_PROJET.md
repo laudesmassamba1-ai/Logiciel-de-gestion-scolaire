@@ -3230,3 +3230,46 @@ Remis à l'utilisateur dans la conversation OpenCode (session QA, branche `ci/re
   - `ui/widgets_core.py` : graphiques (SimpleBar/Line/Pie) lisent `statistiques` via `_BaseChart._couleur(i, premiere)` et `grille_col` — aucune dependance ajoutée, rendu inchangé si thème par défaut.
 - **Compatibilité thèmes existants** : `theme_config.json` sans section `composants` → valeurs par défaut ; `_theme_brut` initialisé `{}` avant le try (plus de NameError si fichier absent).
 - **Vérifications** : `py_compile` 7 fichiers ; imports offscreen OK (pages + widgets + configurateur) ; round-trip JSON composants OK ; tests desktop **313/313 verts** ; tests API **96/96 verts** ; app + serveur relancés via `lancer_synchronise.sh` (log sans erreur, mode En Ligne, POST /present OK). Reste : validation visuelle utilisateur (onglet Composants, couleurs des listes/planning/statuts/graphiques).
+
+### Builds GitHub Actions Windows + Linux (exécutables 1.6.0 à jour)
+- **Demande utilisateur** : compiler l'exécutable Windows (GitHub Action) ET l'exécutable Linux, sans exposer le code source. Choix confirmé : push sur une branche temporaire supprimée dès la fin.
+- **Préparation** : branche locale `ci/build-executables` (depuis `ci/rebuild-v1`), 1 commit regroupant les 127 fichiers modifiés (+ .gitignore étendu : `opencode.json`, `docs/captures/`, `AGENTS.md` — jamais poussés), scan anti-secret avant push (aucun token/clé détecté).
+- **Build Windows** (`build_windows.yml`, workflow_dispatch, run 35836024243) : **SUCCESS** → `GestionScolaire-Setup-1.6.0.exe` (42 Mo, Inno Setup) + `GestionScolaire.exe` (8,1 Mo, PE32+ x86-64).
+- **Build Linux** (`build_linux.yml`, run 35836030392 puis 35836179870) : premier échec au garde-fou des tests — `ImportError: libpulse-mainloop-glib.so.0 cannot open shared object file` (calendrier_page importe `PyQt5.QtMultimedia.QSoundEffect`). Correctif : ajout de `libpulse0 libpulse-mainloop-glib0 libasound2` au step « Install system dependencies » → **SUCCESS** → `gestion-scolaire_1.6.0_amd64.deb` (74 Mo).
+- **Divergences workflows locaux vs origin/main** : le local ajoute un job « Tests (garde-fou anti regression) » (`pytest tests server -q`) aux deux workflows + les libs audio Linux (correction du jour).
+- **Nettoyage complet** : 3 exécutables copiés dans `executables/` (124 Mo, dossier gitignoré, jamais versionné) ; branche `ci/build-executables` supprimée en local ET sur le remote (verif `git ls-remote` : 0 occurrence) ; travail fusionné en fast-forward dans `ci/rebuild-v1` local (aucune perte) ; le remote n'a reçu AUCUN nouveau commit sur les branches permanentes (`origin/ci/rebuild-v1` inchangé à `1ad9a50`).
+- **À noter** : le dépôt reste PUBLIC — pendant la durée des builds (~10 min), le contenu de la branche temporaire était visible ; si vous voulez éviter ça la prochaine fois, pensez à passer le dépôt en privé (`gh repo edit --visibility private`).
+- **Tests** : les deux pipelines ont exécuté le garde-fou `pytest` complet sans échec (313 desktop + API) sur leurs runners respectifs.
+
+### Correction serveur embarqué : synchro cassée dans les exécutables (rebuild 1.6.0)
+- **Bug utilisateur** : sur le binaire compilé, « uvicorn et fastapi ne sont pas installés » — la synchro/connexion serveur est impossible, alors que tout doit démarrer directement.
+- **Cause racine** : le bundle PyInstaller n'embarque ni `uvicorn`, ni `fastapi`, ni le package `server/` (référencé par chaîne `"server.main:app"` dans `services/serveur_local.py`, invisible à l'analyse statique) ; et `demarrer_serveur()` lançait `[sys.executable, "-m", "uvicorn", ...]` en sous-processus — impossible dans un binaire gelé (sys.executable = le binaire compilé). `server/` sans `__init__.py` (namespace package) n'était pas résolvable par PyInstaller.
+- **Correctifs code** :
+  - `services/serveur_local.py` : nouveau mode embarqué — quand `sys.frozen`/`_MEIPASS`, uvicorn tourne **dans un thread** (`uvicorn.Server` + threading), config `pid=0` dans sync.json (pid falsy → `demarrer_si_auto` retombe sur `api_joignable`), arrêt par `server.should_exit` ; le mode source (sous-processus) est conservé.
+  - `server/main.py` : `_dossier_serveur()` résout `sys._MEIPASS/server` en bundle pour lire `schema.sql` (sinon `__file__` pointe dans l'archive).
+  - `server/sqlite_backend.py` : `_chemin_schema()` via `sys._MEIPASS` pour `schema_sqlite.sql`.
+  - **`server/__init__.py` créé** : `server` devient un vrai package (PyInstaller ne résout pas les namespace packages) — vérifié `import server.main`, `server.securite`, `server.compat`, `server.sqlite_backend`.
+- **Correctifs specs PyInstaller** (`build_win.spec` + `build_linux.spec`, MÊMES changements) :
+  - `pathex` += `project_root/server` → les imports top-level (`import securite`, `import compat`, `from sqlite_backend import connexion_sqlite`) se résolvent dans le bundle ;
+  - `datas` += `server/schema.sql` et `server/schema_sqlite.sql` → dossier `server` ;
+  - `hiddenimports` += `uvicorn` (+ sous-modules loops/lifespan/protocols), `fastapi`, `server.main`, `server.securite`, `server.compat`, `server.sqlite_backend`, `securite`, `compat`, `sqlite_backend`, `services.discovery`.
+- **Vérifications** (bundle Linux construit localement) : PYZ contient bien server.main/server.securite/server.compat/server.sqlite_backend/securite/compat/sqlite_backend/fastapi/uvicorn/starlette/mysql.connector (+ sous-modules fastapi complets) ; warnings `missing module named securite/compat/sqlite_backend` disparus ; **test réel** : binaire lancé avec `GS_DATA_DIR` isolé + sync.json `serveur_auto=true` → `/ping` répond `{"status":"online"}`, `/annee_scolaire_active` OK, le poste s'annonce (`/postes` → uuid, version_app 1.6.0, est_hote 1, age_secondes < 120).
+- **Tests** : `py_compile` OK ; **tests desktop 313/313 verts** ; **tests API 96/96 verts**.
+- **Rebuild des exécutables** : à relancer sur une branche temporaire (workflow_dispatch Windows + Linux) puis remplacer les binaires dans `executables/` et supprimer la branche.
+
+### Correction bug `C_VIOLET_LIGHT` (NameError inscription élève) + chasse aux noms indéfinis
+- **Bug utilisateur** (signalé en plein rebuild) : cliquer « + Nouvel Eleve » plantait avec `NameError: name 'C_VIOLET_LIGHT' is not defined` dans `ui/pages/eleves.py` (l. 1054, `_STYLE_CHIP_IA` des chips « Apprendre à Charo »).
+- **Cause** : `eleves.py` utilisait `C_VIOLET_LIGHT`, `C_VIOLET_PRESSED`, `C_ACCENT_VIOLET` sans les importer de `core.config` (ajoutés au fichier lors d'un chantier précédent sans mettre à jour l'import).
+- **Correctif** : ajout des 3 constantes à l'import `from core.config import (...)`.
+- **Chasse systématique aux bugs du même type** :
+  - Script AST maison sur tout le code (`ui/`, `services/`, `core/`, `repositories/`, `api/`) : constantes `C_*` / `Colors.*` utilisées sans import → seul `eleves.py` était en cause (corrigé) ; aucune `Colors.*` inexistante.
+  - **pyflakes 3.4.0** sur `ui services core repositories api database main.py` : une seule `undefined name` restante = annotation de type en chaîne `-> "uvicorn.Server | None"` dans `serveur_local.py` (faux positif, jamais évaluée) → **annotations nettoyées** pour la propreté.
+  - pyflakes sur `server` + `tests` : **aucune** `undefined name`.
+- **Correction au passage dans `services/serveur_local.py`** : le rollback d'environnement du mode embarqué copiait `env` (déjà modifié) au lieu de `os.environ` avant `os.environ.update(env)` → restauration inexacte en cas d'échec. Corrigé : sauvegarde de `os.environ.copy()`, restauration des valeurs + suppression des clés ajoutées.
+- **Vérifications** :
+  - `py_compile` OK ; pyflakes sans `undefined name` sur les fichiers touchés.
+  - **Test fonctionnel** : `open_inscription_dialog()` (le chemin exact qui plantait) exécuté offscreen → dialogue s'ouvre, aucune NameError.
+  - **Test de charge des 21 pages** (dashboards directeur/gestionnaire + 19 BUILDERS) via le vrai `PageContext` : **21/21 OK**.
+  - Suite complète : **313 tests desktop verts** + **96 tests API verts**.
+  - **Bundle Linux PyInstaller reconstruit** avec cette version finale : `/ping` → `{"status":"online"}`, poste annoncé dans `/postes` (version_app 1.6.0, est_hote 1, age < 120 s), `sync.json` avec `pid: 0` (mode embarqué) — serveur embarqué + synchro fonctionnels dans le binaire.
+- **État rebuild** : exécutables à reconstruire (workflow_dispatch Windows + Linux sur branche temporaire) avec tous les correctifs (serveur embarqué + fix C_VIOLET_LIGHT).

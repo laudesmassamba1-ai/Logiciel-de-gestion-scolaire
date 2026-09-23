@@ -16,6 +16,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 import httpx
@@ -25,6 +26,30 @@ from core.config import PROJECT_ROOT, data_dir, lire_config_sync, ecrire_config_
 _DELAI_ATTENTE_S = 15
 
 _annonceur = None
+
+# Serveur embarqué (mode exécutable PyInstaller) : uvicorn tourne dans un
+# thread du processus courant au lieu d'un sous-processus `python -m uvicorn`
+# (impossible dans un binaire figé : sys.executable ne comprend pas -m).
+_serveur_embarque = None      # instance uvicorn.Server
+_thread_embarque = None       # thread qui exécute server.run()
+
+
+def _mode_embarque() -> bool:
+    """True quand l'application tourne depuis un exécutable PyInstaller."""
+    return getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
+
+
+def _chemin_donnees(nom: str):
+    """Résout un fichier de données du package server (schémas SQL).
+
+    En mode source : à côté du module. En exécutable PyInstaller : dans le
+    dossier "server" des datas embarquées (sys._MEIPASS).
+    """
+    if _mode_embarque():
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "server", nom)
 
 
 def _debuter_annonce(port: int):
@@ -133,8 +158,50 @@ def _config_mysql_presente(environ_fichier) -> bool:
     return bool(environ_fichier.get("GS_DB_PASSWORD"))
 
 
+def _lancer_uvicorn_thread(port: int, env: dict):
+    """Lance uvicorn dans un thread du processus courant (mode exe PyInstaller).
+
+    Retourne l'objet uvicorn.Server en cas de succes, ou l'exception sinon.
+    """
+    global _serveur_embarque, _thread_embarque
+    try:
+        import uvicorn
+        config = uvicorn.Config(
+            "server.main:app", host="0.0.0.0", port=port, log_level="warning")
+        _serveur_embarque = uvicorn.Server(config)
+        _thread_embarque = threading.Thread(
+            target=_serveur_embarque.run, name="serveur-gs-embarque", daemon=True)
+        _thread_embarque.start()
+        return _serveur_embarque
+    except Exception as exc:
+        _serveur_embarque = None
+        _thread_embarque = None
+        return exc
+
+
+def _arreter_uvicorn_thread() -> None:
+    """Arrête proprement le serveur uvicorn embarqué (should_exit)."""
+    global _serveur_embarque, _thread_embarque
+    server = _serveur_embarque
+    if server is not None:
+        try:
+            server.should_exit = True
+        except Exception:
+            pass
+        try:
+            if _thread_embarque is not None and _thread_embarque.is_alive():
+                _thread_embarque.join(timeout=8.0)
+        except Exception:
+            pass
+    _serveur_embarque = None
+    _thread_embarque = None
+
+
 def demarrer_serveur(port: int = None, serveur_auto: bool = True):
     """Demarre uvicorn en tache de fond. Retourne (ok, message).
+
+    Mode source : sous-processus `python -m uvicorn` (venv).
+    Mode exe (PyInstaller) : thread uvicorn dans le processus courant.
 
     serveur_auto : si True, le drapeau est persiste dans sync.json pour
     un demarrage automatique au prochain lancement de l'application.
@@ -184,6 +251,35 @@ def demarrer_serveur(port: int = None, serveur_auto: bool = True):
     except Exception:
         pass
 
+    if _mode_embarque():
+        # Serveur EMBARQUE : uvicorn dans un thread du processus courant.
+        # L'environnement construit ci-dessus doit etre visible du module
+        # server.main (importe par uvicorn dans ce processus) : on le
+        # fusionne dans os.environ avant de lancer le thread.
+        _ancien_env = os.environ.copy()
+        os.environ.update(env)
+        resultat = _lancer_uvicorn_thread(port, env)
+        if isinstance(resultat, Exception):
+            # Restauration exacte de l'environnement precedent (valeurs
+            # modifiees + cles ajoutees).
+            for cle, valeur in _ancien_env.items():
+                os.environ[cle] = valeur
+            for cle in set(os.environ) - set(_ancien_env):
+                os.environ.pop(cle, None)
+            return False, f"Impossible de lancer le serveur : {resultat}"
+        # Pas de PID fils : on marque pid=0 (mode embarqué) et la config
+        # indique qu'un serveur tourne dans ce processus.
+        ecrire_config_sync(pid=0, port=port, sync_active=True,
+                           api_url=f"http://127.0.0.1:{port}",
+                           serveur_auto=serveur_auto)
+        if api_joignable(port):
+            _debuter_annonce(port)
+            return True, ("Serveur demarre (embarque) ! Sur les AUTRES "
+                          f"postes, saisissez : {adresse_locale(port)}")
+        _arreter_uvicorn_thread()
+        return False, ("Le serveur embarqué met du temps a demarrer. "
+                       f"Consultez le journal : {journal_serveur()}")
+
     options = {}
     if os.name == "nt":
         creation_no_console = 0x08000000          # CREATE_NO_WINDOW
@@ -231,9 +327,25 @@ def demarrer_serveur(port: int = None, serveur_auto: bool = True):
 def arreter_serveur():
     """Coupe le serveur lance par l'assistant et repasse en autonome.
 
+    Mode embarque (exe PyInstaller) : arrete le thread uvicorn interne.
+    Mode source : termine le processus fils enregistre.
+
     Retourne (ok, message).
     """
     pid = pid_enregistre()
+    if _mode_embarque():
+        # Serveur dans CE processus : arret du thread uvicorn.
+        if _serveur_embarque is not None:
+            _arreter_uvicorn_thread()
+            message = "Serveur arrete. L'application repasse en mode autonome."
+        elif pid:
+            # PID=0 marqueur d'un serveur embarque qui n'est plus actif.
+            message = "Le serveur n'etait plus actif."
+        else:
+            message = "Aucun serveur n'a ete lance depuis cet ordinateur."
+        ecrire_config_sync(pid=None, serveur_auto=False)
+        _stopper_annonce()
+        return True, message
     if not pid:
         ecrire_config_sync(pid=None, serveur_auto=False)
         _stopper_annonce()

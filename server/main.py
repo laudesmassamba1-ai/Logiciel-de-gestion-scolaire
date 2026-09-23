@@ -17,6 +17,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Charge le fichier .env AVANT toute lecture des variables d'environnement
 import securite
 
+
+def _dossier_serveur() -> str:
+    """Dossier des donnees du serveur (schema.sql, .env).
+
+    Mode source : a cote de ce module. Exe PyInstaller : sous sys._MEIPASS
+    (les schemas sont embarques en datas dans le dossier "server").
+    """
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, "server")
+    return os.path.dirname(os.path.abspath(__file__))
+
 DB_HOST = os.environ.get("GS_DB_HOST", "localhost")
 DB_USER = os.environ.get("GS_DB_USER", "root")
 # Aucun mot de passe par defaut : definir GS_DB_PASSWORD dans .env ou l'environnement
@@ -38,7 +49,7 @@ async def _startup_shutdown(app: FastAPI):
     cursor = conn.cursor()
     cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
     cursor.execute(f"USE {DB_NAME}")
-    chemin_schema = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+    chemin_schema = os.path.join(_dossier_serveur(), "schema.sql")
     with open(chemin_schema, "r", encoding="utf-8") as f:
         script_sql = f.read()
     instructions = [req.strip() for req in script_sql.split(";") if req.strip()]

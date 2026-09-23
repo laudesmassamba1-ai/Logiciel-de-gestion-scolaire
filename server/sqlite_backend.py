@@ -11,6 +11,7 @@ Active avec GS_DB_MODE=sqlite (c'est ce que fait l'assistant graphique).
 
 import os
 import sqlite3
+import sys
 import threading
 from datetime import date, datetime
 from pathlib import Path
@@ -52,12 +53,20 @@ def chemin_base() -> Path:
     return dossier / "serveur_gs.db"
 
 
+def _chemin_schema() -> Path:
+    """Schema SQLite embarque : a cote du module (source) ou dans les datas
+    du bundle PyInstaller (sys._MEIPASS/server)."""
+    if hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "server" / "schema_sqlite.sql"
+    return Path(__file__).resolve().parent / "schema_sqlite.sql"
+
+
 def _appliquer_schema(conn):
     global _SCHEMA_APPLIQUE
     with _VERROU:
         if _SCHEMA_APPLIQUE:
             return
-        schema = Path(__file__).resolve().parent / "schema_sqlite.sql"
+        schema = _chemin_schema()
         conn.executescript(schema.read_text(encoding="utf-8"))
         conn.commit()
         _SCHEMA_APPLIQUE = True
