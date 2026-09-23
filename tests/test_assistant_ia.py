@@ -123,11 +123,20 @@ class TestCalculLibre:
 
 class TestSalutationsEtAide:
     def test_bonjour(self, base_vierge):
+        from services.assistant_ia import PersonaliteCharo
         ia = _assistant()
         rep = ia.traiter("bonjour")
-        # Check for greeting (may or may not include "Charo" depending on random choice)
         texte = rep["texte"].lower()
-        assert "bonjour" in texte or "salut" in texte or "coucou" in texte or "charo" in texte
+        # Salutation selon le moment reel de la journee (bonjour / bon apres-midi / bonsoir)
+        # + alternatives de base (salut / coucou) et personnalite (charo, choix aleatoire)
+        moment_attendu = PersonaliteCharo._moment_jour().lower()
+        assert (
+            moment_attendu in texte
+            or "salut" in texte
+            or "coucou" in texte
+            or "charo" in texte
+            or "bonjour" in texte
+        )
 
     def test_aide_liste_capacites(self, base_vierge):
         ia = _assistant()
