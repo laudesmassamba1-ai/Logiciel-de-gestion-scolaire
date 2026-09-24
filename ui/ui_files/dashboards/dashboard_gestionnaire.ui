@@ -13,7 +13,9 @@
   <property name="windowTitle">
    <string>Espace Gestionnaire</string>
   </property>
-<property name="styleSheet"><string>QWidget#PageGestionnaire { background: transparent; }</string></property>
+<property name="styleSheet"><string>QWidget#PageGestionnaire { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #EAF2FF, stop:0.45 #F2EEFF, stop:1 #FBF4E6); }
+/* Fond explicite (degrade aurora) : un fond 'transparent' posait la feuille
+   de style sur la fenetre contenant la page -> fenetre non peinte -> noir. */</string></property>
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
     <number>20</number>
