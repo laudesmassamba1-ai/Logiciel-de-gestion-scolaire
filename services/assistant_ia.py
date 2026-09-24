@@ -649,6 +649,27 @@ MANUEL = [
                "(ELEVES), fiches de paie (PERSONNEL), releves caisse, "
                "plannings.\nChaque export reprend les parametres de l'ecole "
                "(logo, signatures, ville) definis dans PARAMETRES.")},
+    {"titre": "Espace Documents et rapports PDF",
+     "clefs": ["document", "documents", "espace documents", "pdf generes",
+               "rapport", "rapports", "centre de rapports", "mes pdf"],
+     "texte": ("ESPACE DOCUMENTS : tous les PDF generes (bulletins, recus, "
+               "certificats, plannings, paie, rapports) sont classes au meme "
+               "endroit : ouverture, renommage, affectation a un eleve, "
+               "deplacement dans des sous-dossiers, export, suppression.\n"
+               "RAPPORTS PDF : centre de syntheses structurees de toute la "
+               "base (effectifs, eleves, finance, presences, moyennes, "
+               "personnel) avec exports uniformes.\n"
+               "Dites : « ouvre les documents » ou « va dans les rapports ».")},
+    {"titre": "Bloc notes, calendrier et reseau",
+     "clefs": ["bloc note", "bloc notes", "notes personnelles", "calendrier",
+               "agenda", "reseau", "postes", "synchroniser maintenant"],
+     "texte": ("Outils de la colonne de gauche :\n"
+               "- BLOC NOTES : notes personnelles rapides (local).\n"
+               "- CALENDRIER : vue mensuelle / agenda.\n"
+               "- RESEAU DES POSTES : etat des postes connectes au serveur "
+               "de l'ecole et lancement de la synchronisation.\n"
+               "Dites : « ouvre le bloc notes », « va au calendrier » ou "
+               "« montre le reseau ».")},
     {"titre": "Presences",
      "clefs": ["presence", "presences", "absent", "absence", "absents",
                "retard", "retards", "appel"],
@@ -760,8 +781,10 @@ MANUEL = [
                  "- « qui est absent aujourd'hui ? »\n"
                  "- « creer une matiere Histoire coefficient 2 »\n"
                  "- « enregistrer une sortie de 3000 pour carburant »\n"
-                 "- « ouvre les paiements »\n"
-                 "- « etat du serveur » / « synchronise maintenant »\n"
+"- « ouvre les paiements »\n"
+                  "- « ouvre les documents » / « va dans les rapports » / "
+                  "« montre le reseau »\n"
+                  "- « etat du serveur » / « synchronise maintenant »\n"
                  "- Apprenez-moi : « retiens que la reunion est le samedi » ; "
                  "« quand je dis code reponds 1234 » ; « montre ta memoire » ; "
                  "« oublie ... »\n"
@@ -787,6 +810,8 @@ _PAGES_NAV = [
     ("classe", "classes"),
     ("cycle", "cycles"),
     ("annee scolaire", "cycles"),
+    ("bloc note", "bloc_notes"),
+    ("notes personnelles", "bloc_notes"),
     ("note", "notes"),
     ("bulletin", "notes"),
     ("presence", "presences"),
@@ -802,6 +827,15 @@ _PAGES_NAV = [
     ("matiere", "programmes"),
     ("parametre", "parametres"),
     ("compte", "comptes"),
+    ("document", "documents"),
+    ("pdf", "documents"),
+    ("rapport", "rapports"),
+    ("bloc notes", "bloc_notes"),
+    ("calendrier", "calendrier"),
+    ("agenda", "calendrier"),
+    ("reseau", "reseau"),
+    ("synchronisation", "reseau"),
+    ("sync", "reseau"),
 ]
 
 _PAGES_TITRES = {
@@ -810,7 +844,9 @@ _PAGES_TITRES = {
     "presences": "Presences", "planning": "Planning", "caisse": "Caisse",
     "tarifs": "Tarifs", "paiements": "Paiements", "personnel": "Personnel",
     "programmes": "Programmes", "parametres": "Parametres",
-    "comptes": "Comptes",
+    "comptes": "Comptes", "documents": "Espace Documents",
+    "rapports": "Rapports PDF", "bloc_notes": "Bloc Notes",
+    "calendrier": "Calendrier", "reseau": "Reseau des postes",
 }
 
 _GENRE_NOM = {"cycle": "un cycle", "matiere": "une matiere",
@@ -2034,8 +2070,8 @@ class AssistantIA:
 
     def _essayer_navigation(self, t):
         if not _contient_un(t, "ouvre", "ouvrir", "affiche", "afficher",
-                            "montre moi", "aller", "va a", "va aux", "vais",
-                            "amene", "emmene"):
+                        "montre moi", "aller", "va a", "va aux", "va dans",
+                        "vais", "amene", "emmene"):
             return None
         for mot_clef, page in _PAGES_NAV:
             if mot_clef in t:

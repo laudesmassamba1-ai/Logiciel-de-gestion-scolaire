@@ -31,6 +31,7 @@ from core.config import (
     STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY,
 )
 from repositories import repos
+from services.pdf_export import _ouvrir_pdf
 from ui import toast
 from ui.pages.helpers import (
     _btn, _actions_cell, _simple_btn_style, confirmer,
@@ -339,10 +340,7 @@ def documents(page, ctx):
         d = _document_selectionne("Ouvrir")
         if d is None:
             return
-        ok = QDesktopServices.openUrl(QUrl.fromLocalFile(d["path"]))
-        if not ok:
-            QMessageBox.warning(page, "Ouvrir",
-                                f"Impossible d'ouvrir {d['nom']} (fichier introuvable ?)")
+        _ouvrir_pdf(d["path"])
 
     def _renommer():
         d = _document_selectionne("Renommer")

@@ -1088,7 +1088,7 @@ class FenetreModeles(QDialog):
             chemin = modele_svc.generer_pdf(
                 self._selection, eleve_id=eleve_id, classe_id=classe_id,
                 cible=cible, ouvrir=False)
-        except (ValueError, FileNotFoundError) as exc:
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
             QMessageBox.warning(self, "Generation", str(exc))
             return
         toast.succes(self, "PDF genere dans l'Espace Documents.")

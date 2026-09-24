@@ -19,6 +19,7 @@ from resources.design_tokens import Colors
 from core.config import (
     STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, STYLE_BTN_DANGER,
     C_RED_BG, C_RED, C_RED_BORDER,
+    MODES_PAIEMENT, MODES_SORTIE,
 )
 
 
@@ -196,12 +197,12 @@ def open_transaction_dialog(parent, ctx, type_trans, on_created=None):
         categorie = QComboBox()
         categorie.addItems(["Scolarite", "Inscription", "Tenues", "Autres"])
         mode = QComboBox()
-        mode.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"])
+        mode.addItems(list(MODES_PAIEMENT))
     else:
         categorie = QComboBox()
         categorie.addItems(["Fournitures", "Salaires", "Entretien", "Transport", "Autres"])
         mode = QComboBox()
-        mode.addItems(["Especes", "Virement", "Cheque"])
+        mode.addItems(list(MODES_SORTIE))
 
     form.addRow("Motif :", motif)
     form.addRow("Beneficiaire :", beneficiaire)

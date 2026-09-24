@@ -1,9 +1,29 @@
 import csv
+import unicodedata
 import uuid
 from urllib.parse import quote
 
 from database import db
 from repositories.base import RepositoryBase, _gen_reference
+
+
+def _canoniser_mode(mode):
+    """Ramene un libelle de mode de reglement vers sa forme canonique
+    (listes MODES_PAIEMENT de core.config), en tolerant les anciennes
+    saisies : casse variable, accents absents/absents-inverses, et l'ancien
+    « Mobile Money (MTN / Moov) » retabli en Airtel. Retourne le libelle
+    canonique, ou la valeur d'origine si elle ne correspond a rien."""
+    if not mode:
+        return mode
+    n = unicodedata.normalize("NFD", str(mode).strip())
+    n = "".join(c for c in n if unicodedata.category(c) != "Mn").lower()
+    if "mobile money" in n or "mtn" in n or "airtel" in n or "moov" in n:
+        return "Mobile Money (MTN / Airtel)"
+    if "cheque" in n or "virement" in n:
+        return "Cheque / Virement"
+    if "espece" in n:
+        return "Especes"
+    return str(mode).strip()
 
 
 class FinanceRepository(RepositoryBase):
@@ -164,9 +184,6 @@ class FinanceRepository(RepositoryBase):
         if annee_scolaire:
             sql += " AND p.annee_scolaire = ?"
             params.append(annee_scolaire)
-        if mode:
-            sql += " AND p.mode_reglement = ?"
-            params.append(mode)
         if trimestre:
             sql += " AND p.trimestre = ?"
             params.append(trimestre)
@@ -177,6 +194,13 @@ class FinanceRepository(RepositoryBase):
             sql += " AND e.prenom = ?"
             params.append(prenom)
         sql += " ORDER BY p.date_paiement DESC, p.id DESC"
+        if mode:
+            # Filtre tolerant (casse, accents, anciens libelles Moov) :
+            # les volumes scolaires restent modestes, le tri s'applique en SQL.
+            rows = db.query(sql, params)
+            mode_canon = _canoniser_mode(mode)
+            return [r for r in rows
+                    if _canoniser_mode(r["mode_reglement"]) == mode_canon]
         return db.query(sql, params)
 
     def _ecriture_existe(self, paiement_id):
@@ -260,6 +284,7 @@ class FinanceRepository(RepositoryBase):
 
     def add_paiement(self, eleve_id, montant, mode_reglement, type_frais,
                      annee_scolaire="", trimestre=""):
+        mode_reglement = _canoniser_mode(mode_reglement)
         eleve = db.query_one(
             """SELECT e.uuid_client, e.nom, e.prenom, c.nom AS classe_nom
                FROM eleves e LEFT JOIN classes c ON c.id = e.classe_id

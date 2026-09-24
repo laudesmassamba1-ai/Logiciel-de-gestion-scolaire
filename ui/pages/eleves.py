@@ -670,7 +670,7 @@ def eleves(page, ctx):
                 actions_layout.setContentsMargins(4, 2, 4, 2)
                 actions_layout.setSpacing(4)
                 
-                btn_ouvrir = _btn("Ouvrir", lambda _, path=str(p): QDesktopServices.openUrl(QUrl.fromLocalFile(path)),
+                btn_ouvrir = _btn("Ouvrir", lambda _, path=str(p): pdf_export._ouvrir_pdf(path),
                                  _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER, compact=True))
                 actions_layout.addWidget(btn_ouvrir)
                 
@@ -958,6 +958,11 @@ def open_inscription_dialog(parent, ctx, eleve=None):
     apply_ui("eleves/inscription.ui", dlg)
     dlg.btn_save.setStyleSheet(STYLE_BTN_PRIMARY)
     dlg.btn_cancel.setStyleSheet(STYLE_BTN_SECONDARY)
+
+    # Fond transparent du scroll : selon le theme sombre du systeme, le
+    # viewport du QScrollArea est sinon peint en noir et masque la lecture.
+    dlg.scrollArea.viewport().setAutoFillBackground(False)
+    dlg.scrollContent.setAutoFillBackground(False)
 
     lbl_matricule = QLabel()
     lbl_matricule.setStyleSheet(

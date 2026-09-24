@@ -6,7 +6,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QHBoxLayout, QLabel, QLabel as QLbl, QLineEdit, QListWidget, QMessageBox, QPushButton,
     QVBoxLayout, QWidget, QSplitter, QSpacerItem, QGroupBox, QSpinBox,
-    QScrollArea, QFileDialog, QTabWidget,
+    QScrollArea, QFileDialog, QTabWidget, QComboBox,
 )
 from PyQt5.QtGui import QPixmap, QFont
 
@@ -296,6 +296,52 @@ def parametres(page, ctx):
     img_host.setLayout(img_lay)
     _ajouter_au_scroll(img_host)
 
+    # ── Emplacement des emblemes dans les documents PDF ────────────────
+    # Alignement horizontal + hauteur max pour chaque embleme ; stockes
+    # dans la table parametres ({key}_align / {key}_hauteur) et appliques
+    # par services/pdf_export._entete_doc.
+    EMBLEMES = [
+        ("bandeau_haut", "Bandeau haut", "centre", 80),
+        ("bandeau_bas", "Bandeau bas", "centre", 80),
+        ("signature", "Signature", "droite", 50),
+    ]
+    _defauts_emblemes = {key: (align, haut)
+                         for key, _lbl, align, haut in EMBLEMES}
+    embleme_widgets = {}
+    embleme_group = QGroupBox("Emplacement des emblemes (documents PDF)")
+    embleme_group.setStyleSheet(STYLE_GROUP_BOX)
+    embleme_lay = QVBoxLayout(embleme_group)
+    embleme_lay.setContentsMargins(10, 10, 10, 10)
+    embleme_lay.setSpacing(8)
+    lbl_embleme_help = QLbl(
+        "Position et taille de chaque image dans l'entete des PDF generes "
+        "(bulletins, recus, certificats, rapports).")
+    lbl_embleme_help.setStyleSheet(STYLE_HELP_MUTED)
+    lbl_embleme_help.setWordWrap(True)
+    embleme_lay.addWidget(lbl_embleme_help)
+    for key, label_text, align_defaut, haut_defaut in EMBLEMES:
+        row = QHBoxLayout()
+        lbl_em = QLbl(label_text)
+        lbl_em.setStyleSheet(STYLE_LABEL_BOLD_MUTED)
+        lbl_em.setFixedWidth(150)
+        combo_align = QComboBox()
+        combo_align.addItems(["centre", "gauche", "droite"])
+        combo_align.setCurrentText(align_defaut)
+        spin_haut = QSpinBox()
+        spin_haut.setRange(30, 400)
+        spin_haut.setValue(haut_defaut)
+        spin_haut.setSuffix(" px")
+        row.addWidget(lbl_em)
+        row.addWidget(QLbl("Alignement :"))
+        row.addWidget(combo_align)
+        row.addSpacing(16)
+        row.addWidget(QLbl("Hauteur max :"))
+        row.addWidget(spin_haut)
+        row.addStretch(1)
+        embleme_lay.addLayout(row)
+        embleme_widgets[key] = (combo_align, spin_haut)
+    _ajouter_au_scroll(embleme_group)
+
     images = {"bandeau_haut": None, "bandeau_bas": None, "signature": None}
     upload_map = {"bandeau_haut": page.btn_upload1,
                   "bandeau_bas": page.btn_upload2,
@@ -314,6 +360,15 @@ def parametres(page, ctx):
         page.lbl_progression.setText(
             f"Configuration : {round(remplis / len(cles_config) * 100)}%")
         _display_images(params)
+        for key, (combo, spin) in embleme_widgets.items():
+            align_def, haut_def = _defauts_emblemes[key]
+            val_align = str(params.get(f"{key}_align", "") or "")
+            combo.setCurrentText(val_align if val_align in (
+                "gauche", "centre", "droite") else align_def)
+            try:
+                spin.setValue(int(params.get(f"{key}_hauteur", "") or haut_def))
+            except (TypeError, ValueError):
+                spin.setValue(haut_def)
         _load_appreciations()
 
     def _display_images(params):
@@ -446,6 +501,9 @@ def parametres(page, ctx):
                 dest = DOCS_DIR / f"{key}_{datetime.date.today():%Y%m%d}{Path(path).suffix}"
                 shutil.copy2(path, dest)
                 repos.set_parametre(key, str(dest))
+        for key, (combo, spin) in embleme_widgets.items():
+            repos.set_parametre(f"{key}_align", combo.currentText())
+            repos.set_parametre(f"{key}_hauteur", str(spin.value()))
         page.lbl_status.setText("Configuration mise a jour.")
         _save_appreciations()
         toast.succes(page, "Configuration enregistree.")

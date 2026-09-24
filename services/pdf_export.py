@@ -1,6 +1,7 @@
 import base64
 import datetime
 import html
+import os
 from pathlib import Path
 
 from core.config import DOCS_DIR, CRENEAUX, JOURS, VILLE_DEFAUT
@@ -26,18 +27,78 @@ def _generate_pdf(html_content: str, filename: str, dossier=None) -> str:
         return str(path)
     except ImportError:
         raise RuntimeError("weasyprint n'est pas installe. Installez-le avec : pip install weasyprint")
+    except Exception as exc:
+        # Toute erreur weasyprint (police, rendu, memoire...) doit arriver
+        # a l'ecran : on la convertit en RuntimeError avec un message clair.
+        raise RuntimeError(f"La generation du PDF a echoue : {exc}") from exc
 
 
 def _ouvrir_pdf(path):
-    """Ouvre le PDF genere dans le lecteur par defaut de la machine."""
+    """Ouvre le PDF genere dans le lecteur par defaut de la machine.
+
+    Strategie multi-OS, robuste meme quand le gestionnaire de fichiers est
+    lent ou absent :
+    - Windows : os.startfile (fiable) ;
+    - macOS : `open` en sous-processus detache ;
+    - Linux : QDesktopServices d'abord, puis xdg-open detache (2 s max,
+      il ne fige jamais l'interface), et en dernier recours ouverture du
+      dossier Documents avec le chemin affiche a l'ecran.
+    """
+    import subprocess
+    import sys
+
     from PyQt5.QtCore import QUrl
     from PyQt5.QtGui import QDesktopServices
-    ok = QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-    if not ok:
-        from PyQt5.QtWidgets import QMessageBox
+    from PyQt5.QtWidgets import QMessageBox
+
+    p = Path(path)
+    if not p.exists() or p.stat().st_size == 0:
+        QMessageBox.warning(
+            None, "Document",
+            "Le document n'a pas pu etre cree (fichier introuvable ou "
+            f"vide).\n{p}")
+        return
+
+    def _montrer_chemin():
         QMessageBox.information(
             None, "Document genere",
-            f"Le PDF est disponible ici :\n{path}")
+            "Aucun lecteur PDF n'a pu ouvrir le document sur ce poste.\n"
+            f"Le fichier est disponible ici :\n{p}")
+
+    if sys.platform == "win32":
+        try:
+            os.startfile(str(p))
+            return
+        except OSError:
+            _montrer_chemin()
+            return
+
+    if sys.platform == "darwin":
+        try:
+            subprocess.Popen(["open", str(p)], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return
+        except OSError:
+            pass
+
+    if QDesktopServices.openUrl(QUrl.fromLocalFile(str(p))):
+        return
+    try:
+        proc = subprocess.Popen(["xdg-open", str(p)],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True)
+        try:
+            code = proc.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            return  # xdg-open toujours actif = lecteur en cours d'ouverture
+        if code in (0, 3):
+            return
+    except OSError:
+        pass
+    _montrer_chemin()
+    QDesktopServices.openUrl(QUrl.fromLocalFile(str(p.parent)))
 
 
 def _img_data_uri(path_str):
@@ -57,6 +118,21 @@ def _img_data_uri(path_str):
     return f"data:{mime};base64,{b64}"
 
 
+def _reglage_embleme(params, key, align_defaut, hauteur_defaut):
+    """Alignement et hauteur maximale d'un embleme, reglables dans
+    Parametres : cles doctypes `{key}_align` (gauche/centre/droite) et
+    `{key}_hauteur` (pixels, borne 30..400)."""
+    align = str(params.get(f"{key}_align", "") or "").strip().lower()
+    if align not in ("gauche", "centre", "droite"):
+        align = align_defaut
+    try:
+        hauteur = int(params.get(f"{key}_hauteur", "") or hauteur_defaut)
+    except (TypeError, ValueError):
+        hauteur = hauteur_defaut
+    hauteur = max(30, min(hauteur, 400))
+    return {"gauche": "left", "centre": "center", "droite": "right"}[align], hauteur
+
+
 def _entete_doc():
     params = repos.parametres()
     nom_ecole = params.get("nom_ecole", "") or "Gestion Scolaire"
@@ -67,17 +143,25 @@ def _entete_doc():
     bandeau_haut = _img_data_uri(params.get("bandeau_haut", ""))
     bandeau_bas = _img_data_uri(params.get("bandeau_bas", ""))
     signature = _img_data_uri(params.get("signature", ""))
+    align_haut, haut_h = _reglage_embleme(params, "bandeau_haut", "centre", 80)
+    align_bas, haut_b = _reglage_embleme(params, "bandeau_bas", "centre", 80)
+    align_sig, haut_s = _reglage_embleme(params, "signature", "droite", 50)
     entete = "<div style='border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:20px;'>"
     if bandeau_haut:
-        entete += f"<div style='text-align:center;margin-bottom:8px;'><img src='{bandeau_haut}' style='max-width:100%;max-height:80px;'/></div>"
+        entete += (f"<div style='text-align:{align_haut};margin-bottom:8px;'>"
+                   f"<img src='{bandeau_haut}' style='max-width:100%;"
+                   f"max-height:{haut_h}px;'/></div>")
     entete += (f"<div style='display:flex;justify-content:space-between;'>"
                f"<div><strong>{echap(nom_ecole)}</strong>"
                f"<div style='color:#64748b;font-size:12px;'>{echap(pays)}{localite}</div></div>"
                f"<div style='color:#64748b;font-size:12px;'>Edite le {now}</div></div>")
     if bandeau_bas:
-        entete += f"<div style='text-align:center;margin-top:8px;'><img src='{bandeau_bas}' style='max-width:100%;max-height:80px;'/></div>"
+        entete += (f"<div style='text-align:{align_bas};margin-top:8px;'>"
+                   f"<img src='{bandeau_bas}' style='max-width:100%;"
+                   f"max-height:{haut_b}px;'/></div>")
     if signature:
-        entete += f"<div style='text-align:right;margin-top:16px;'><img src='{signature}' style='max-height:50px;'/></div>"
+        entete += (f"<div style='text-align:{align_sig};margin-top:16px;'>"
+                   f"<img src='{signature}' style='max-height:{haut_s}px;'/></div>")
     entete += "</div>"
     return entete
 

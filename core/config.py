@@ -63,6 +63,12 @@ VILLE_DEFAUT = "Brazzaville"
 INDICATIF_TEL = "+242"
 DEVISE = "FCFA"
 
+# Modes de reglement acceptes par l'etablissement (source unique) :
+# partage entre la caisse, les paiements et le dossier d'inscription.
+MODES_PAIEMENT = ("Especes", "Mobile Money (MTN / Airtel)",
+                  "Cheque / Virement")
+MODES_SORTIE = ("Especes", "Virement", "Cheque")
+
 
 # --- Theme « Liquid Glass clair » (refonte Session, 2026)
 # Fond aurora (bleu glace -> lavande -> ambre) porte par APP_STYLESHEET,

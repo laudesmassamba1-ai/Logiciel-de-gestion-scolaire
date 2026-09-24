@@ -82,7 +82,8 @@
    </item>
    <item>
     <widget class="QScrollArea" name="scrollArea">
-<property name="styleSheet"><string>QScrollArea#scrollArea { border: none; background: transparent; }</string></property>
+<property name="styleSheet"><string>QScrollArea#scrollArea { border: none; background: transparent; }
+QScrollArea#scrollArea &gt; QWidget &gt; QWidget { background: transparent; }</string></property>
      <property name="widgetResizable">
       <bool>true</bool>
      </property>
@@ -95,6 +96,7 @@
         <height>680</height>
        </rect>
       </property>
+      <property name="styleSheet"><string>QWidget#scrollContent { background: transparent; color: #1E2430; }</string></property>
       <layout class="QVBoxLayout" name="verticalLayout_Scroll">
        <property name="spacing">
         <number>15</number>
@@ -356,7 +358,7 @@
               </item>
               <item>
                <property name="text">
-                <string>Mode : Mobile Money (MTN / Moov)</string>
+                <string>Mode : Mobile Money (MTN / Airtel)</string>
                </property>
               </item>
               <item>

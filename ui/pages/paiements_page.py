@@ -20,6 +20,7 @@ from resources.design_tokens import Colors
 from core.config import (
     PERIODES, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, C_BLUE, C_BLUE_LIGHT,
     C_BLUE_BORDER, C_RED, C_RED_BG, C_RED_BORDER, lire_composant,
+    MODES_PAIEMENT,
 )
 
 
@@ -45,7 +46,7 @@ def paiements(page, ctx):
             combo.addItem(a["libelle"], a["libelle"])
 
     TYPES_FRAIS = ["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"]
-    MODES = ["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"]
+    MODES = list(MODES_PAIEMENT)
 
     def _mode_options(combo):
         combo.clear()
@@ -342,7 +343,7 @@ def open_paiement_dialog(parent, ctx, on_created):
     combo_type = QComboBox()
     combo_type.addItems(["Scolarite", "Inscription", "Tenues", "Transport", "Cantine", "Autres"])
     combo_mode = QComboBox()
-    combo_mode.addItems(["Especes", "Mobile Money (MTN / Moov)", "Cheque / Virement"])
+    combo_mode.addItems(list(MODES_PAIEMENT))
     combo_trimestre = QComboBox()
     combo_trimestre.addItem("-- Aucun --", "")
     for p in PERIODES:
