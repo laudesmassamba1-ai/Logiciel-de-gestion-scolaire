@@ -3280,3 +3280,18 @@ Remis à l'utilisateur dans la conversation OpenCode (session QA, branche `ci/re
   - `GestionScolaire-Setup-1.6.0.exe` (48,8 Mo) — SHA-256 `666b0567d0819269977f7966593bf1b0f6cd9e66c20a2a8027f63f8a5d27d6ad`
 - **Validation réelle du serveur embarqué dans le .deb extrait** : `/ping` → `{"status":"online"}`, poste annoncé `/postes` (uuid, version 1.6.0, est_hote 1), schémas `schema.sql`/`schema_sqlite.sql` présents dans `_internal/server/`.
 - **Nettoyage** : branche `ci/build-fix-serveur` supprimée local + remote ; remote inchangé sur les branches permanentes (`origin/ci/rebuild-v1` toujours `1ad9a50`).
+
+### Rebuild définitif 1.6.0 : weasyprint en PDF réconcilié (binaires finaux) — branche temporaire `ci/build-1.6.0-weasy`
+- **Problème** : les binaires 1.6.0 rebuilds faisaient tous échouer l'export PDF — `weasyprint` n'était **jamais installé sur les runners** (absent de `requirements.txt`) donc jamais embarqué ; les exécutables Windows n'avaient pas non plus le runtime GTK3 (papalo ni les DLL natives) et `test_bonjour` rendait le garde-fou CI **rouge le soir**.
+- **Correctifs code/CI** :
+  - `requirements.txt` : ajout de `weasyprint==69.0` + ses dépendances (pydyf, cssselect2, tinycss2, tinyhtml5, Pyphen, fonttools[woff], Pillow, zopfli) → le hook weasyprint s'exécute enfin sur le runner et embarque les libs natives (pango/harfbuzz/fontconfig) dans le bundle.
+  - Specs `build_linux.spec` + `build_win.spec` : hiddenimports weasyprint/cffi + datas CSS/ICC ; tous les `.ui` sont trackés (embarqués via datas) — `data/alarm.wav` était **gitignoré** (`data/` entier) → PyInstaller « Unable to find data/alarm.wav » sur le runner.
+  - `.gitignore` : exception `!data/alarm.wav` + `git add -f` (alarm.wav est une ressource **seed** à embarquer, tout le reste de `data/` reste ignoré).
+  - Workflows : apt `libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1 librsvg2-2` (Linux) ; runtime GTK3 Windows d'abord via installateur NSIS `/S` (bloquait indéfiniment sur le runner) puis **7z + dossier `$_63_`→`bin` + GITHUB_PATH** (fiable) + cache `actions/cache` + contrôle de taille exacte (49 004 024 o) + `--max-time` fail-fast.
+  - `tests/test_assistant_ia.py::test_bonjour` : calcul déterministe du moment attendu via `PersonaliteCharo._moment_jour()` (accepte « bonsoir le soir ») — le garde-fou ne doit jamais dépendre de l'heure UTC du runner.
+- **Builds CI verts** (branche `ci/build-1.6.0-weasy`) : Linux run `35927132246` SUCCESS ; Windows run `35957871886` SUCCESS (runtime GTK3 extrait par 7z, DLL libfontconfig/libglib/libgobject/libharfbuzz/libpango/libpangoft2 embarquées — vérifié dans les logs PyInstaller).
+- **Nouveaux binaires finaux** dans `executables/` (gitignoré) :
+  - `gestion-scolaire_1.6.0_amd64.deb` (100,9 Mo) — weasyprint 69 + libs natives embarquées, PDF généré testé OK via LD_LIBRARY_PATH du bundle ; `_internal/data/alarm.wav` présent ; schémas SQL + `.ui` présents.
+  - `GestionScolaire.exe` onefile (15,1 Mo) — DLL GTK3 embarquées confirmées dans le log PyInstaller.
+  - `GestionScolaire-Setup-1.6.0.exe` (60,7 Mo) — installateur Inno Setup final.
+- **Livraison** : branche distante `installers` **vidée et remplacée** par un commit orphelin ne contenant que les exécutables (`d63077a` « Executables 1.6.0 (bibliotheque weasyprint + serveur embarqué + alarm + theme) », 176 Mo) ; branche temp `ci/build-1.6.0-weasy` supprimée du remote (conservée en local pour fusion future dans `main` : correctifs workflows, test, alarm.wav, gitignore) ; `ci/rebuild-v1` locale supprimée ; code source intact sur `main`/`test`.
