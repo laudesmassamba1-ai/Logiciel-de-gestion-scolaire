@@ -26,33 +26,47 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller pytest
 
-      - name: Install GTK3 runtime (WeasyPrint/Pango)
+      - name: Cache GTK3 runtime installer
+        # Le CDN release-assets de GitHub est aleatoire sur les runners
+        # heberges : on ne telecharge le runtime (~49 Mo) qu'une seule fois,
+        # puis chaque run le restaure depuis le cache interne GitHub
+        # (rapide et fiable) au lieu de retaper le CDN externe.
+        uses: actions/cache@v4
+        id: cache-gtk3
+        with:
+          path: C:\gtk3-runtime.exe
+          key: gtk3-runtime-3.24.31-2022-01-04
+
+      - name: Download GTK3 runtime installer
+        if: steps.cache-gtk3.outputs.cache-hit != 'true'
         # Le paquet choco "gtk-runtime" fournit du GTK2 de 2012 (trop ancien
-        # pour weasyprint 69). On installe le runtime GTK3 64 bits officiel de
-        # tschoonj (pango 1.50.3, harfbuzz 3.1.2, fontconfig 2.13.94) : le hook
-        # PyInstaller hook-weasyprint resolve ces DLL via find_library pour
-        # les embarquer dans le bundle.
-        # NB : le CDN release-assets de GitHub est parfois lent/instable sur les
-        # runners heberges : on force le retry + reprise (-C -) + verification
-        # de taille (sinon un exe tronque se lance en silence et casse le hook).
+        # pour weasyprint 69). Le runtime GTK3 64 bits officiel de tschoonj
+        # (pango 1.50.3, harfbuzz 3.1.2, fontconfig 2.13.94) permet au hook
+        # PyInstaller hook-weasyprint de resoudre les DLL via find_library
+        # pour les embarquer dans le bundle.
         shell: bash
         run: |
           URL_GTK="https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases/download/2022-01-04/gtk3-runtime-3.24.31-2022-01-04-ts-win64.exe"
-          curl --fail --location --retry 8 --retry-all-errors --retry-delay 10 \
-               --connect-timeout 60 -C - -o /tmp/gtk3-runtime.exe "$URL_GTK"
+          # --max-time : fail-fast (un CDN lent ne doit jamais bloquer le build).
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 10 \
+               --connect-timeout 60 --max-time 420 -C - \
+               -o C:\\gtk3-runtime.exe "$URL_GTK" || exit 1
           SIZE_ATTENDU=$(curl -sIL --max-time 60 "$URL_GTK" \
             | tr -d '\r' | grep -i '^content-length:' | tail -1 | awk '{print $2}')
-          SIZE_OBTENU=$(stat -c %s /tmp/gtk3-runtime.exe 2>/dev/null || echo 0)
+          SIZE_OBTENU=$(stat -c %s C:\\gtk3-runtime.exe 2>/dev/null || echo 0)
           echo "GTK3 runtime téléchargé : ${SIZE_OBTENU} octets (attendu : ${SIZE_ATTENDU})"
-          # Le runtime GTK3 fait ~49 Mo : on accepte tout fichier dont la taille
-          # correspond exactement au Content-Length annonce par le serveur
-          # (troncature = taille differente ; le seuil absolu evite un 404/HTML).
+          # Taille correspondant exactement au Content-Length (troncature =
+          # taille differente ; seuil absolu pour eviter un 404/HTML).
           if [ -z "$SIZE_ATTENDU" ] || [ "$SIZE_OBTENU" -lt 40000000 ] \
              || [ "$SIZE_OBTENU" != "$SIZE_ATTENDU" ]; then
             echo "::error::Téléchargement GTK3 invalide (${SIZE_OBTENU} octets) — abort"
             exit 1
           fi
-          /tmp/gtk3-runtime.exe /S
+
+      - name: Install GTK3 runtime (WeasyPrint/Pango)
+        shell: bash
+        run: |
+          C:\\gtk3-runtime.exe /S
           # Le PATH machine modifie par l'installeur n'est pas transmis au
           # processus courant : on l'exporte pour les etapes suivantes
           # (necessaire au hook weasyprint qui resout les DLL via find_library).
