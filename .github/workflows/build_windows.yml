@@ -64,14 +64,27 @@ jobs:
           fi
 
       - name: Install GTK3 runtime (WeasyPrint/Pango)
+        # L'installateur NSIS /S se bloque parfois (UAC/fenetre invisible sur
+        # les runners heberges) : on prefere extraire l'archive avec 7-Zip
+        # (preinstalle) dans un dossier connu, sans executer l'installeur.
+        # Le dossier des DLL binaires s'appelle "$_63_" dans l'archive NSIS
+        # (renomme ici en "bin") : c'est lui qu'il faut dans le PATH pour que
+        # le hook PyInstaller hook-weasyprint resolve les DLL via find_library.
         shell: bash
         run: |
-          C:\\gtk3-runtime.exe /S
-          # Le PATH machine modifie par l'installeur n'est pas transmis au
-          # processus courant : on l'exporte pour les etapes suivantes
-          # (necessaire au hook weasyprint qui resout les DLL via find_library).
-          echo "C:\\Program Files\\GTK3-Runtime Win64\\bin" >> "$GITHUB_PATH"
-          echo "C:\\Program Files\\GTK3-Runtime\\bin" >> "$GITHUB_PATH"
+          rm -rf "C:\\GTK3_Runtime"
+          mkdir -p "C:\\GTK3_Runtime"
+          7z x -y C:\\gtk3-runtime.exe -o"C:\\GTK3_Runtime_tmp" >/dev/null
+          mv "C:\\GTK3_Runtime_tmp\\\$_63_" "C:\\GTK3_Runtime\\bin"
+          # Les autres repertoires (etc, lib, share...) gardent la structure
+          # minimale attendue par le runtime (fonts, modules, locales...).
+          for d in etc lib share ssl; do
+            [ -d "C:\\GTK3_Runtime_tmp\\$d" ] && mv "C:\\GTK3_Runtime_tmp\\$d" "C:\\GTK3_Runtime\\$d"
+          done
+          ls "C:\\GTK3_Runtime\\bin" | head -5
+          echo "bin GTK3 : $(ls "C:\\GTK3_Runtime\\bin" | grep -c '\.dll$') DLL"
+          # Export du PATH pour les etapes suivantes (hook weasyprint).
+          echo "C:\\GTK3_Runtime\\bin" >> "$GITHUB_PATH"
 
       - name: Tests (garde-fou anti regression)
         run: |
