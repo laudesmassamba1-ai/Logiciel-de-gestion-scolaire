@@ -13,7 +13,10 @@
   <property name="windowTitle">
    <string>Dossier d'Inscription Complet</string>
   </property>
-<property name="styleSheet"><string>QWidget#FormInscriptionEleve { background: transparent; }</string></property>
+<property name="styleSheet"><string>QWidget#FormInscriptionEleve { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #EAF2FF, stop:0.45 #F2EEFF, stop:1 #FBF4E6); }
+/* Fond explicite (degrade aurora) : un fond 'transparent' laissait les marges,
+   l'en-tete et les espacements NON PEINTS -> bandes noires. Le degrade en dur
+   garantit une peinture partout, meme dans les binaires compiles. */</string></property>
   <layout class="QVBoxLayout" name="verticalLayout_Main">
    <property name="spacing">
     <number>15</number>

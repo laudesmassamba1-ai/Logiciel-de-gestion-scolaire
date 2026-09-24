@@ -245,7 +245,7 @@ def test_presence_poste_enregistre_et_liste(app_client, base):
         "uuid_poste": "test-poste-1",
         "nom_poste": "PC-Bureau",
         "adresse_ip": "192.168.1.12",
-        "version_app": "1.6.0",
+        "version_app": "1.6.1",
         "systeme": "Linux-6.8-test",
         "est_hote": True,
     }

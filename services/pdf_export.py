@@ -40,12 +40,16 @@ def _ouvrir_pdf(path):
     lent ou absent :
     - Windows : os.startfile (fiable) ;
     - macOS : `open` en sous-processus detache ;
-    - Linux : QDesktopServices d'abord, puis xdg-open detache (2 s max,
-      il ne fige jamais l'interface), et en dernier recours ouverture du
-      dossier Documents avec le chemin affiche a l'ecran.
+    - Linux : xdg-open puis `gio open` avec VERIFICATION qu'un processus
+      lecteur nouveau est apparu ; en dernier recours on tente les lecteurs
+      PDF connus en direct (evince, okular...), puis on montre le chemin et
+      on ouvre le dossier Documents. On ne se fie jamais a la valeur de
+      retour de QDesktopServices.openUrl (il peut repondre vrai sans rien
+      ouvrir sur certains postes Wayland/X11).
     """
     import subprocess
     import sys
+    import time as _time
 
     from PyQt5.QtCore import QUrl
     from PyQt5.QtGui import QDesktopServices
@@ -82,21 +86,52 @@ def _ouvrir_pdf(path):
         except OSError:
             pass
 
-    if QDesktopServices.openUrl(QUrl.fromLocalFile(str(p))):
-        return
-    try:
-        proc = subprocess.Popen(["xdg-open", str(p)],
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                start_new_session=True)
+    # ---- Linux : filet complet, sans compter sur QDesktopServices ----
+    LECTEURS = ("evince", "okular", "qpdfview", "zathura", "mupdf",
+                "atril", "epdfview", "xreader")
+
+    def _pids_lecteurs():
+        """PID des processus lecteurs PDF deja presents a l'instant T."""
+        pids = set()
+        for nom in LECTEURS:
+            try:
+                r = subprocess.run(["pgrep", "-f", nom],
+                                   capture_output=True, text=True,
+                                   timeout=5)
+                if r.returncode == 0 and r.stdout.strip():
+                    pids |= {int(x) for x in r.stdout.split()}
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                continue
+        return pids
+
+    def _lancer(cmd):
         try:
-            code = proc.wait(timeout=2.0)
-        except subprocess.TimeoutExpired:
-            return  # xdg-open toujours actif = lecteur en cours d'ouverture
-        if code in (0, 3):
-            return
-    except OSError:
-        pass
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return True
+        except OSError:
+            return False
+
+    avant = _pids_lecteurs()
+
+    # 1) Outil generique du bureau : xdg-open, puis gio open.
+    for essai in (["xdg-open", str(p)], ["gio", "open", str(p)]):
+        if _lancer(essai):
+            _time.sleep(2.5)
+            if _pids_lecteurs() - avant:
+                return  # un lecteur est bien en train d'ouvrir le fichier
+            # certains environnements repondent "ok" sans rien lancer :
+            # on poursuit vers le filet suivant
+
+    # 2) Lecteurs PDF connus, en direct (ne depend d'aucun MIME/bureau).
+    for nom in LECTEURS:
+        if _lancer([nom, str(p)]):
+            _time.sleep(1.2)
+            if _pids_lecteurs() - avant:
+                return
+
+    # 3) Echec total : on montre ou trouver le fichier et on ouvre le dossier.
     _montrer_chemin()
     QDesktopServices.openUrl(QUrl.fromLocalFile(str(p.parent)))
 
