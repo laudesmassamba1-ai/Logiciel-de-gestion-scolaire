@@ -32,10 +32,22 @@ jobs:
         # tschoonj (pango 1.50.3, harfbuzz 3.1.2, fontconfig 2.13.94) : le hook
         # PyInstaller hook-weasyprint resolve ces DLL via find_library pour
         # les embarquer dans le bundle.
+        # NB : le CDN release-assets de GitHub est parfois lent/instable sur les
+        # runners heberges : on force le retry + reprise (-C -) + verification
+        # de taille (sinon un exe tronque se lance en silence et casse le hook).
         shell: bash
         run: |
-          curl -L -o /tmp/gtk3-runtime.exe \
-            "https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases/download/2022-01-04/gtk3-runtime-3.24.31-2022-01-04-ts-win64.exe"
+          URL_GTK="https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases/download/2022-01-04/gtk3-runtime-3.24.31-2022-01-04-ts-win64.exe"
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 10 \
+               --connect-timeout 60 -C - -o /tmp/gtk3-runtime.exe "$URL_GTK"
+          SIZE_ATTENDU=$(curl -sIL --max-time 60 "$URL_GTK" \
+            | tr -d '\r' | grep -i '^content-length:' | tail -1 | awk '{print $2}')
+          SIZE_OBTENU=$(stat -c %s /tmp/gtk3-runtime.exe 2>/dev/null || echo 0)
+          echo "GTK3 runtime téléchargé : ${SIZE_OBTENU} octets (attendu : ${SIZE_ATTENDU})"
+          if [ -z "$SIZE_ATTENDU" ] || [ "$SIZE_OBTENU" -lt 50000000 ]; then
+            echo "::error::Téléchargement GTK3 invalide (${SIZE_OBTENU} octets) — abort"
+            exit 1
+          fi
           /tmp/gtk3-runtime.exe /S
           # Le PATH machine modifie par l'installeur n'est pas transmis au
           # processus courant : on l'exporte pour les etapes suivantes
