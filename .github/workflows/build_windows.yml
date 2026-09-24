@@ -44,7 +44,11 @@ jobs:
             | tr -d '\r' | grep -i '^content-length:' | tail -1 | awk '{print $2}')
           SIZE_OBTENU=$(stat -c %s /tmp/gtk3-runtime.exe 2>/dev/null || echo 0)
           echo "GTK3 runtime téléchargé : ${SIZE_OBTENU} octets (attendu : ${SIZE_ATTENDU})"
-          if [ -z "$SIZE_ATTENDU" ] || [ "$SIZE_OBTENU" -lt 50000000 ]; then
+          # Le runtime GTK3 fait ~49 Mo : on accepte tout fichier dont la taille
+          # correspond exactement au Content-Length annonce par le serveur
+          # (troncature = taille differente ; le seuil absolu evite un 404/HTML).
+          if [ -z "$SIZE_ATTENDU" ] || [ "$SIZE_OBTENU" -lt 40000000 ] \
+             || [ "$SIZE_OBTENU" != "$SIZE_ATTENDU" ]; then
             echo "::error::Téléchargement GTK3 invalide (${SIZE_OBTENU} octets) — abort"
             exit 1
           fi
