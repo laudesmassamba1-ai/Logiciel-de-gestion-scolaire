@@ -153,8 +153,9 @@ def test_style_script_linux(monkeypatch):
     assert updater._style_script() == ("\n", "utf-8")
 
 
-def test_ecrire_script_linux_lf_executable(monkeypatch):
+def test_ecrire_script_linux_lf_executable(monkeypatch, tmp_path):
     monkeypatch.setattr(os, "name", "posix")
+    monkeypatch.setattr(updater, "dossier_mises_a_jour", lambda: tmp_path)
     chemin = updater._ecrire_script("maj.sh", ["#!/bin/sh", "true"], shell=True)
     assert chemin.read_bytes() == b"#!/bin/sh\ntrue\n"
     assert os.access(chemin, os.X_OK)
@@ -288,11 +289,16 @@ def test_cible_github_hors_ligne(monkeypatch):
 
 def test_cible_serveur_active(monkeypatch):
     monkeypatch.setattr(updater, "SYNC_ACTIVE", True)
+    nom_paquet = (
+        "GestionScolaire-Setup-9.9.9.exe"
+        if (sys.platform or "").lower().startswith("win")
+        else "gestion-scolaire_9.9.9_amd64.deb"
+    )
     infos = {
         "actif": True, "version": "9.9.9", "obligatoire": True,
         "paquet_linux": "gestion-scolaire_9.9.9_amd64.deb",
         "paquet_windows": "GestionScolaire-Setup-9.9.9.exe",
-        "sha256": {"gestion-scolaire_9.9.9_amd64.deb": "abc"},
+        "sha256": {nom_paquet: "abc"},
     }
     monkeypatch.setattr(_api_client_module, "_request",
                         lambda method, path, **k: (infos, None))
@@ -301,7 +307,7 @@ def test_cible_serveur_active(monkeypatch):
     assert cible["source"] == "serveur"
     assert cible["version_texte"] == "9.9.9"
     assert cible["obligatoire"] is True
-    assert cible["url"].endswith("/mise-a-jour/paquet/gestion-scolaire_9.9.9_amd64.deb")
+    assert cible["url"].endswith("/mise-a-jour/paquet/" + nom_paquet)
 
 
 def test_cible_serveur_inactive(monkeypatch):
