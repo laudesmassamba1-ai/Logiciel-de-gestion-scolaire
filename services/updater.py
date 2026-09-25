@@ -37,8 +37,13 @@ from core.config import APP_VERSION, SYNC_ACTIVE, API_BASE_URL, data_dir
 
 REPO = "laudesmassamba1-ai/Logiciel-de-gestion-scolaire"
 API_GITHUB = f"https://api.github.com/repos/{REPO}/releases/latest"
-_DELAI_NET = 5.0
-_DELAI_TELECHARGEMENT = 90.0
+# Les petits appels (metadonnees JSON) deverts un delai court ; le
+# TELEchargement des paquets (plusieurs dizaines de Mo) doit tolerer les
+# connexions lentes : on n'abandonne qu'apres a peu pres 15 minutes sans
+# aucun octet recu (ReadTimeout), avec une ouverture a 30 s.
+_DELAI_NET = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
+_DELAI_CONNEXION = 30.0
+_DELAI_LECTURE = 900.0
 
 
 # ---------------------------------------------------------------- versions
@@ -237,7 +242,10 @@ def telecharger(infos: dict, progression=None):
     destination = dossier / nom
     tmp = destination.with_suffix(destination.suffix + ".part")
     try:
-        with httpx.stream("GET", infos["url"], timeout=_DELAI_TELECHARGEMENT,
+        with httpx.stream("GET", infos["url"],
+                          timeout=httpx.Timeout(
+                              connect=_DELAI_CONNEXION, read=_DELAI_LECTURE,
+                              write=_DELAI_CONNEXION, pool=_DELAI_CONNEXION),
                           follow_redirects=True,
                           headers={"User-Agent": "GestionScolaire-Updater"}) as rep:
             rep.raise_for_status()
@@ -253,6 +261,13 @@ def telecharger(infos: dict, progression=None):
                         except Exception:
                             pass
         os.replace(tmp, destination)
+    except httpx.ReadTimeout:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return None, ("Telechargement interrompu : la connexion est trop lente "
+                      "ou coupee. Verifiez votre Internet puis reessayez.")
     except Exception as exc:
         try:
             tmp.unlink()
