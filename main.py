@@ -149,6 +149,27 @@ def main():
     _timer_sauvegarde.start()
     app.aboutToQuit.connect(_sauvegarder_fermeture)
 
+    # Mise a jour : une seule verification silencieuse par lancement de
+    # l'application (apres la connexion et l'affichage de la fenetre). Si
+    # une nouvelle version existe, ui/updater_ui propose de la telecharger
+    # et de l'installer, sans jamais bloquer le demarrage.
+    _mj_verifiee = False
+
+    def _check_mise_a_jour(window):
+        nonlocal _mj_verifiee
+        if _mj_verifiee:
+            return
+        _mj_verifiee = True
+        # La fenetre a pu etre fermee avant le declenchement du minuteur
+        # (deconnexion rapide) : ne pas proposer de mise a jour dans ce cas.
+        try:
+            if not window.isVisible():
+                return
+        except RuntimeError:
+            return
+        from ui.updater_ui import verifier_au_demarrage
+        verifier_au_demarrage(window)
+
     # Boucle de session : apres une deconnexion, on revient a l'ecran de
     # connexion au lieu de quitter l'application.
     while True:
@@ -171,6 +192,9 @@ def main():
             window.showMaximized()
         else:
             window.show()
+        # Check silencieux de mise a jour, quelques instants apres
+        # l'affichage pour ne pas concurrencer le demarrage.
+        QTimer.singleShot(3000, lambda w=window: _check_mise_a_jour(w))
         app.exec_()
 
         # Fenetre fermee : si la session a ete effacee, c'est une

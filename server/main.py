@@ -2956,6 +2956,66 @@ def declarer_poste(request: Request, donnees: BatimentPoste):
     return {"ok": True, "uuid_poste": uuid}
 
 
+@app.get("/mise-a-jour/etat")
+def etat_mise_a_jour(request: Request):
+    """Consigne de mise a jour du serveur central (option B).
+
+    Le directeur peut imposer/diffuser une version aux postes en ecrivant
+    `data_dir()/mise_a_jour.json` (via services.updater.ecrire_consigne) et
+    en deposant les paquets dans `data_dir()/mises_a_jour_paquets/`. Chaque
+    poste interroge cet endpoint avant GitHub et se met a jour depuis le LAN
+    (fonctionne sans Internet).
+
+    Json attendu (ecrit par l'app sur le poste hote) :
+        {"actif": true, "version": "1.6.2", "obligatoire": false,
+         "paquet_linux": "gestion-scolaire_1.6.2_amd64.deb",
+         "paquet_windows": "GestionScolaire-Setup-1.6.2.exe",
+         "sha256": {"<nom>": "<hex>"}}
+    """
+    secret = request.headers.get("x-sync-secret", "")
+    if not securite.sync_autorisee(secret):
+        raise HTTPException(status_code=403, detail="Secret de syndication invalide")
+    try:
+        from core.config import data_dir
+        fichier = data_dir() / "mise_a_jour.json"
+        import json as _json_maj
+        consigne = _json_maj.loads(fichier.read_text(encoding="utf-8"))
+        if not isinstance(consigne, dict):
+            consigne = {}
+    except Exception:
+        consigne = {}
+    actif = bool(consigne.get("actif")) and bool(consigne.get("version"))
+    if not actif:
+        return {"actif": False}
+    return {
+        "actif": True,
+        "version": str(consigne.get("version")),
+        "obligatoire": bool(consigne.get("obligatoire")),
+        "paquet_linux": str(consigne.get("paquet_linux") or ""),
+        "paquet_windows": str(consigne.get("paquet_windows") or ""),
+        "sha256": consigne.get("sha256") if isinstance(consigne.get("sha256"), dict) else {},
+    }
+
+
+@app.get("/mise-a-jour/paquet/{nom_paquet}")
+def telecharger_paquet_serveur(nom_paquet: str, request: Request):
+    """Sert un paquet d'installation du depot central (LAN)."""
+    secret = request.headers.get("x-sync-secret", "")
+    if not securite.sync_autorisee(secret):
+        raise HTTPException(status_code=403, detail="Secret de syndication invalide")
+    from fastapi.responses import FileResponse
+    from pathlib import Path as _Path
+    try:
+        from core.config import data_dir
+        dossier = data_dir() / "mises_a_jour_paquets"
+    except Exception:
+        raise HTTPException(status_code=500, detail="Depot indisponible")
+    chemin = dossier / _Path(nom_paquet).name   # anti traversee de repertoire
+    if not chemin.is_file():
+        raise HTTPException(status_code=404, detail="Paquet introuvable sur le depot")
+    return FileResponse(str(chemin), filename=chemin.name)
+
+
 def _age_presence(horodatage):
     """Age en secondes d'un « derniere_seen » recu du serveur (UTC)."""
     if not horodatage:

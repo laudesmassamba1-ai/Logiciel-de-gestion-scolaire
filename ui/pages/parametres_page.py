@@ -6,15 +6,15 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QHBoxLayout, QLabel, QLabel as QLbl, QLineEdit, QListWidget, QMessageBox, QPushButton,
     QVBoxLayout, QWidget, QSplitter, QSpacerItem, QGroupBox, QSpinBox,
-    QScrollArea, QFileDialog, QTabWidget, QComboBox,
+    QFileDialog, QTabWidget, QComboBox,
 )
-from PyQt5.QtGui import QPixmap, QFont
+from PyQt5.QtGui import QPixmap
 
 from repositories import repos
 from ui import toast
 from ui.loader import apply_ui
 from ui.pages.helpers import (
-    _btn, _simple_btn_style, _styler_carte, confirmer,
+    _simple_btn_style, _styler_carte, confirmer,
 )
 from core.config import (
     STYLE_BTN_PRIMARY, STYLE_BTN_DANGER, STYLE_BTN_SECONDARY,
@@ -26,7 +26,7 @@ from core.config import (
     C_RED_BG, C_RED, C_RED_BORDER,
     C_AURORA, C_GREEN,
     C_BORDER,
-    API_BASE_URL, est_hote, code_ecole,
+    API_BASE_URL, est_hote, code_ecole, APP_VERSION,
 )
 from core import network
 from api.client import api_disponible
@@ -35,6 +35,8 @@ from services.serveur_local import port_configure, adresse_locale
 from ui.assistant_serveur import ouvrir_assistant
 from services.appreciations import lire_config, enregistrer_config
 from services.backup import backup_database, restore_database, list_backups, delete_backup
+from services import updater
+from ui.updater_ui import verifier_manuel as verifier_maj_manuelle
 from ui.workers import run_async
 
 
@@ -274,6 +276,137 @@ def parametres(page, ctx):
 
     btn_reseau.clicked.connect(ouvrir_reseau)
     _refresh_reseau()
+
+    # ── Mises a jour (distantes : serveur central puis GitHub) ─────────
+    maj_group = QGroupBox("Mises a jour")
+    maj_group.setStyleSheet(STYLE_GROUP_BOX)
+    maj_group.setObjectName("maj_group")
+    maj_lay = QVBoxLayout(maj_group)
+    maj_lay.setContentsMargins(10, 10, 10, 10)
+    maj_lay.setSpacing(8)
+
+    lbl_maj_help = QLbl(
+        f"Version installee : v{APP_VERSION}. Au demarrage, l'application "
+        "verifie automatiquement si une version plus recente est disponible "
+        "(serveur de l'ecole, puis releases GitHub) et propose de la "
+        "telecharger et de l'installer.")
+    lbl_maj_help.setStyleSheet(STYLE_HELP_MUTED)
+    lbl_maj_help.setWordWrap(True)
+    maj_lay.addWidget(lbl_maj_help)
+
+    btn_maj = QPushButton("Verifier les mises a jour maintenant")
+    btn_maj.setCursor(Qt.PointingHandCursor)
+    btn_maj.setStyleSheet(STYLE_BTN_SECONDARY)
+    maj_lay.addWidget(btn_maj)
+
+    # Serveur central (poste hote uniquement) : le directeur impose une
+    # version aux postes de l'ecole et diffuse les paquets en LAN.
+    if est_hote():
+        lbl_maj_cible = QLbl("Depot central du serveur (option pour plusieurs postes)")
+        lbl_maj_cible.setStyleSheet(STYLE_LABEL_BOLD_MUTED)
+        maj_lay.addWidget(lbl_maj_cible)
+        lbl_maj_help_depot = QLbl(
+            "Deposez un paquet (fichier .deb, .exe ou .AppImage) puis "
+            "indiquez la version a imposer aux postes : ils la telechargeront "
+            "depuis ce serveur, meme sans Internet.")
+        lbl_maj_help_depot.setStyleSheet(STYLE_HELP_MUTED)
+        lbl_maj_help_depot.setWordWrap(True)
+        maj_lay.addWidget(lbl_maj_help_depot)
+
+        row_depot = QHBoxLayout()
+        input_maj_version = QLineEdit()
+        input_maj_version.setPlaceholderText("Version cible, ex. 1.6.2")
+        btn_deposer = QPushButton("Deposer un paquet...")
+        btn_deposer.setCursor(Qt.PointingHandCursor)
+        btn_deposer.setStyleSheet(STYLE_BTN_SECONDARY)
+        row_depot.addWidget(input_maj_version)
+        row_depot.addWidget(btn_deposer)
+        maj_lay.addLayout(row_depot)
+
+        lbl_maj_depot = QLbl("Aucun paquet depose.")
+        lbl_maj_depot.setStyleSheet(STYLE_HELP_MUTED)
+        lbl_maj_depot.setWordWrap(True)
+        maj_lay.addWidget(lbl_maj_depot)
+
+        row_consigne = QHBoxLayout()
+        btn_activer_maj = QPushButton("Activer cette version")
+        btn_activer_maj.setCursor(Qt.PointingHandCursor)
+        btn_activer_maj.setStyleSheet(STYLE_BTN_PRIMARY)
+        btn_desactiver_maj = QPushButton("Desactiver le depot")
+        btn_desactiver_maj.setCursor(Qt.PointingHandCursor)
+        btn_desactiver_maj.setStyleSheet(_simple_btn_style(
+            bg=C_WARN_BG, fg=C_WARN_TEXT, border=C_BORDER))
+        row_consigne.addWidget(btn_activer_maj)
+        row_consigne.addWidget(btn_desactiver_maj)
+        row_consigne.addStretch(1)
+        maj_lay.addLayout(row_consigne)
+
+        _nom_depose = {}
+
+        def _deposer():
+            chemin, _ = QFileDialog.getOpenFileName(
+                page, "Deposer le paquet d'installation",
+                "", "Paquets (*.deb *.exe *.AppImage)")
+            if not chemin:
+                return
+            try:
+                info = updater.deposer_paquet(chemin)
+            except Exception as exc:
+                QMessageBox.warning(page, "Depot",
+                                    f"Echec du depot :\n{exc}")
+                return
+            _nom_depose["nom"] = info["nom"]
+            _nom_depose["sha256"] = info["sha256"]
+            lbl_maj_depot.setText(
+                f"Depot : {info['nom']}  |  SHA-256 "
+                f"{info['sha256'][:16]}...")
+
+        def _activer():
+            version = input_maj_version.text().strip()
+            if not version:
+                QMessageBox.warning(
+                    page, "Depot central",
+                    "Indiquez d'abord la version cible (ex. 1.6.2).")
+                return
+            if not updater.version_cle(version):
+                QMessageBox.warning(
+                    page, "Depot central",
+                    f"Version invalide : {version!r}. Utilisez le format "
+                    "semver x.y.z (ex. 1.6.2).")
+                return
+            if not _nom_depose.get("nom"):
+                QMessageBox.warning(
+                    page, "Depot central",
+                    "Deposez d'abord un paquet : sans paquet dans le depot, "
+                    "les postes ne pourraient pas le telecharger.")
+                return
+            try:
+                updater.ecrire_consigne(
+                    version, nom_paquet=_nom_depose["nom"],
+                    sha256={_nom_depose["nom"]: _nom_depose["sha256"]})
+            except Exception as exc:
+                QMessageBox.warning(page, "Depot central",
+                                    f"Echec :\n{exc}")
+                return
+            toast.succes(
+                page,
+                f"Version {version} activee pour tous les postes.")
+
+        def _desactiver():
+            try:
+                updater.desactiver_consigne()
+            except Exception as exc:
+                QMessageBox.warning(page, "Depot central",
+                                    f"Echec :\n{exc}")
+                return
+            toast.succes(page, "Depot central desactive.")
+
+        btn_deposer.clicked.connect(_deposer)
+        btn_activer_maj.clicked.connect(_activer)
+        btn_desactiver_maj.clicked.connect(_desactiver)
+
+    btn_maj.clicked.connect(lambda: verifier_maj_manuelle(page))
+    _ajouter_au_scroll(maj_group)
 
     img_lay = QHBoxLayout()
     for key, label_text in [("bandeau_haut", "Bandeau haut"), ("bandeau_bas", "Bandeau bas"), ("signature", "Signature")]:
@@ -575,6 +708,7 @@ def parametres(page, ctx):
         page.reseau_group = reseau_group
         page.image_host = img_host
         page.appreciations_group = app_group
+        page.maj_group = maj_group
 
         def _appartenance(w):
             nom = w.objectName() or ""
@@ -583,7 +717,8 @@ def parametres(page, ctx):
                 return (0, "Etablissement")
             if nom == "appreciations_group":
                 return (1, "Appreciations")
-            if nom in ("backup_group", "sync_group", "reseau_group"):
+            if nom in ("backup_group", "sync_group", "reseau_group",
+                       "maj_group"):
                 return (2, "Systeme")
             return None
 
