@@ -3384,3 +3384,12 @@ Remis à l'utilisateur dans la conversation OpenCode (session QA, branche `ci/re
 - **Version** : `APP_VERSION = "1.6.3"` (`core/config.py`) + alignement `server/test_routes_exercice.py` (`version_app`).
 - **Vérifications** : suite complète **`pytest tests/ server/ -q` → 446 passed** en 3 min 08 ; re-test ciblé `tests/test_updater.py` + `server/test_routes_exercice.py` → 94 passed.
 - **Commit** : `21f4ae1` « Release 1.6.3 » sur `ci/build-1.6.2` (31 fichiers, +76/−321) — en attente de build CI puis livraison (deb + AppImage + exe) et installation sur le poste (la machine tourne actuellement sur la **1.6.2** installée depuis les artefacts de la CI).
+- **Build 1.6.3 (CI)** : `build.yml` run `36129028743` SUCCESS (5 min 22), `build_windows.yml` run `36129031866` SUCCESS (6 min 42).
+- **Livraison 1.6.3** : branche distante `installers` re-poussée en force avec un nouveau commit orphelin (`718ba47`, uniquement `executables/` : deb 1.6.3, Setup 1.6.3, exe onefile) ; tag **`v1.6.3`** → **release publique sans note** https://github.com/laudesmassamba1-ai/Logiciel-de-gestion-scolaire/releases/tag/v1.6.3 avec **5 assets** et leurs SHA-256 :
+  - `gestion-scolaire_1.6.3_amd64.deb` (97 Mo) — `6e52c741e45031a508685a516637b742b7b5e1f3ed5bd81623a482537c4c5c3a`
+  - `GestionScolaire-1.6.3.AppImage` (87 Mo) — `7e4a71df238ce744a1e47a6d75f62a1501522a4747450624012637a50464e6d2`
+  - `GestionScolaire-Portable-1.6.3.zip` (75 Mo) — `f1962391775e1167ac3311c9dadb535849bb94a18b89554fbb564c4e2db47e95`
+  - `GestionScolaire-Setup-1.6.3.exe` (61 Mo) — `013aee57fa48a9a0344ac9659982f42d6dd005a4c540a9047e512cc160cef015`
+  - `GestionScolaire.exe` (15 Mo, onefile) — `22ccb0be82101861e493f4a9485f17e3c863ef52cd77e6c92e93b7c06dd3d34c`
+  - Copies locales : `~/Téléchargements/Gestion_Scolaire_1.6.3/`. Installation sur le poste NON faite (consigne utilisateur).
+- Rappel : le vérificateur de mises à jour de l'app (1.6.2 installée) consultant les releases GitHub, il proposera désormais la 1.6.3 aux postes connectés à Internet — la mise à jour du poste utilisateur peut passer par ce canal ou par un `sudo dpkg -i` manuel.
