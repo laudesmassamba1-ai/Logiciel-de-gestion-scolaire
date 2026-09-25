@@ -354,7 +354,7 @@ def _ecrire_script(nom: str, lignes, shell: bool) -> Path:
     chemin = dossier / nom
     fin, encodage = _style_script()
     texte = fin.join(lignes) + fin
-    chemin.write_text(texte, encoding=encodage)
+    chemin.write_bytes(texte.encode(encodage))
     if shell and os.name != "nt":
         chemin.chmod(0o755)
     return chemin
