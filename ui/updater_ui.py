@@ -4,7 +4,7 @@ Reutilisable depuis le check automatique au lancement (main.py) et depuis
 le bouton manuel de la page Parametres.
 """
 
-from PyQt5.QtWidgets import QMessageBox, QProgressDialog
+from PyQt5.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from core.config import APP_VERSION
 from services import updater
@@ -78,6 +78,13 @@ def _lancer_telechargement(parent, infos, progression):
                     f"{message}\n\nUne fois l'installation terminee, la "
                     "nouvelle version sera active.")
                 parent.close()
+                # Sortie forcee : meme si une notification systeme (icone
+                # de zone de notification) maintient l'application vivante,
+                # le script d'installation doit voir le processus terminer
+                # pour lancer dpkg/pkexec puis relancer l'application.
+                app = QApplication.instance()
+                if app is not None:
+                    app.quit()
             elif action == "fait":
                 QMessageBox.information(parent, "Mise a jour", message)
             else:
