@@ -29,8 +29,7 @@ def programmes(page, ctx):
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
     header = PageHeader(
-        "Matieres & Programmes",
-        "Matieres enseignees et affectations par classe")
+        "Matieres & Programmes")
     lay.addWidget(header)
 
     def _exporter_pdf():
@@ -66,8 +65,7 @@ def programmes(page, ctx):
     table_m.setColumnCount(3)
     table_m.setHorizontalHeaderLabels(["Nom", "Coefficient", "Actions"])
     vide_m = EmptyState(
-        "Aucune matiere enregistree",
-        "Ajoutez une matiere via le bouton ci-dessus.")
+        "Aucune matiere enregistree")
     pile_m = QStackedWidget()
     pile_m.addWidget(table_m)
     pile_m.addWidget(vide_m)
@@ -145,8 +143,7 @@ def programmes(page, ctx):
     table_a.setHorizontalHeaderLabels(["", "Matiere", "Coefficient", "Enseignant"])
     table_a.setColumnWidth(0, 40)
     vide_a = EmptyState(
-        "Aucune matiere enregistree",
-        "Ajoutez d'abord des matieres.", icone="fa5s.book")
+        "Aucune matiere enregistree", icone="fa5s.book")
     pile_a = QStackedWidget()
     pile_a.addWidget(table_a)
     pile_a.addWidget(vide_a)

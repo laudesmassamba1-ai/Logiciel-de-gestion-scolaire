@@ -45,8 +45,7 @@ def eleves(page, ctx):
     if page.layout() is not None:
         return
     tpl = ListPageTemplate(
-        page, "Eleves",
-        "Effectifs de toute l'ecole - filtrez par classe pour plus de lisibilite")
+        page, "Eleves")
 
     search = QLineEdit()
     search.setPlaceholderText("Rechercher (nom, prenom, matricule)...")
@@ -852,8 +851,7 @@ def eleves(page, ctx):
                     e["statut"], ""] for e in rows]
         tpl.remplir(
             valeurs,
-            message_vide="Aucun eleve trouve",
-            sous_titre_vide="Modifiez votre recherche ou changez de filtre.")
+            message_vide="Aucun eleve trouve")
         # Composant themable "eleves_table" : QSS cible du tableau.
         comp_tab = lire_composant("eleves_table")
         tpl.table.setStyleSheet(
@@ -893,14 +891,7 @@ def eleves(page, ctx):
         kpi[2].set_value(len([e for e in eleves_all if e["statut"] == "Inscrit"]))
         kpi[3].set_value(len([e for e in eleves_all if e["statut"] == "Inactif"]))
 
-        if classe_id:
-            tpl.header.set_sous_titre(
-                f"Effectifs et suivis scolaires - classe {combo_classe.currentText()}")
-        else:
-            tpl.header.set_sous_titre(
-                "Effectifs de toute l'école - filtrez par classe pour plus de lisibilite")
-
-    btn_add = _btn("+ Nouvel Eleve", lambda: _ouvrir_inscription(), STYLE_BTN_PRIMARY)
+        btn_add = _btn("+ Nouvel Eleve", lambda: _ouvrir_inscription(), STYLE_BTN_PRIMARY)
     tpl.header.ajouter_action(btn_add)
     btn_export = _btn("Exporter CSV",
                       lambda: reports.export_eleves_csv(getattr(page, "_rows", [])),

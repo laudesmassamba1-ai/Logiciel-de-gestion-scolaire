@@ -23,22 +23,14 @@ from ui.pages.helpers import _btn, _page_header, _simple_btn_style
 
 
 RAPPORTS = [
-    ("rapport_synthese", "Synthese generale de l'etablissement",
-     "Effectifs, finances, presences et masse salariale en un seul PDF."),
-    ("rapport_effectifs", "Effectifs par classe",
-     "Repartition des eleves, capacite et taux de remplissage par classe."),
-    ("rapport_eleves", "Etat des eleves",
-     "Matricule, nom, sexe, naissance, classe, statut et telephone tuteur."),
-    ("rapport_finance", "Bilan financier",
-     "Total encaisse, recettes/depenses de caisse et detail des paiements."),
-    ("rapport_presences", "Feuille de presence",
-     "Repartition globale, ou feuille de presence d'une classe a une date."),
-    ("rapport_moyennes", "Moyennes par classe",
-     "Moyennes par matiere et moyenne generale pour la periode choisie."),
-    ("rapport_personnel", "Personnel et salaires",
-     "Liste du personnel, fonctions, salaires et masse salariale."),
-    ("rapport_statistiques", "Chiffres des statistiques",
-     "Replique de la page Statistiques dans un PDF (flux 12 mois inclus)."),
+    ("rapport_synthese", "Synthese generale de l'etablissement"),
+    ("rapport_effectifs", "Effectifs par classe"),
+    ("rapport_eleves", "Etat des eleves"),
+    ("rapport_finance", "Bilan financier"),
+    ("rapport_presences", "Feuille de presence"),
+    ("rapport_moyennes", "Moyennes par classe"),
+    ("rapport_personnel", "Personnel et salaires"),
+    ("rapport_statistiques", "Chiffres des statistiques"),
 ]
 
 
@@ -49,9 +41,7 @@ def rapports_page(page, ctx):
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    _page_header(lay, "Rapports PDF",
-                 "Exports en PDF avec le logo de l'ecole - chaque rapport "
-                 "arrive dans l'Espace Documents")
+    _page_header(lay, "Rapports PDF")
 
     # ---------- Filtres communs ----------
     cadre_filtres = QFrame()
@@ -119,7 +109,7 @@ def rapports_page(page, ctx):
             QMessageBox.warning(page, "Rapport",
                                 f"Erreur pendant la generation : {exc}")
 
-    for nom, titre, desc in RAPPORTS:
+    for nom, titre in RAPPORTS:
         cadre = QFrame()
         cadre.setStyleSheet(STYLE_CHART_CARD)
         cl = QHBoxLayout(cadre)
@@ -129,11 +119,7 @@ def rapports_page(page, ctx):
         texte.setSpacing(2)
         t = QLabel(titre)
         t.setStyleSheet("font-size:14px;font-weight:600;")
-        d = QLabel(desc)
-        d.setStyleSheet(f"font-size:12px;color:{C_TEXT_SECONDARY};")
-        d.setWordWrap(True)
         texte.addWidget(t)
-        texte.addWidget(d)
         cl.addLayout(texte, 1)
         cl.addWidget(_btn("Generer PDF", lambda *_, n=nom: _generer(n),
                           _simple_btn_style(bg=C_PRIMARY_LIGHT, fg=C_PRIMARY,

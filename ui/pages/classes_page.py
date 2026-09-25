@@ -24,7 +24,7 @@ from resources.design_tokens import Colors
 def classes(page, ctx):
     if page.layout() is not None:
         return
-    tpl = ListPageTemplate(page, "Classes", "Organisation des classes et salles")
+    tpl = ListPageTemplate(page, "Classes")
 
     search = QLineEdit()
     search.setPlaceholderText("Rechercher une classe...")
@@ -83,8 +83,7 @@ def classes(page, ctx):
                             c["salle"] or "-", c.get("cycle_nom") or "-", ""])
         tpl.remplir(
             valeurs,
-            message_vide="Aucune classe",
-            sous_titre_vide="Modifiez votre recherche ou changez de filtre.")
+            message_vide="Aucune classe")
         for i, c in enumerate(rows):
             item = tpl.table.item(i, 2)
             if c["capacite"] and c["effectif"] >= c["capacite"]:

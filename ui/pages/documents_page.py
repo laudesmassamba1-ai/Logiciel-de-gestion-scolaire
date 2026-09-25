@@ -216,8 +216,7 @@ def documents(page, ctx):
     lay.setSpacing(14)
 
     titre = PageHeader(
-        "Espace Documents",
-        "Tous les PDF generes : bulletins, recus, certificats, plannings, paie.")
+        "Espace Documents")
     lay.addWidget(titre)
 
     barre = QHBoxLayout()
@@ -258,9 +257,7 @@ def documents(page, ctx):
     table.setColumnCount(6)
     table.setHorizontalHeaderLabels(
         ["Document", "Type", "Eleve / Classe", "Date", "Taille", "Actions"])
-    vide = EmptyState("Aucun document",
-                      "Les PDF generes (bulletins, recus, certificats...) "
-                      "apparaitront ici.")
+    vide = EmptyState("Aucun document")
     pile = QStackedWidget()
     pile.addWidget(table)
     pile.addWidget(vide)

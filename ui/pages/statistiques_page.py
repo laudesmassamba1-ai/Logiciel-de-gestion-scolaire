@@ -23,8 +23,7 @@ def statistiques(page, ctx):
     lay = QVBoxLayout(page)
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
-    _page_header(lay, "Statistiques de l'ecole",
-                 "Scolarite, finances et presences en un coup d'oeil")
+    _page_header(lay, "Statistiques de l'ecole")
 
     def _exporter_pdf():
         from services import rapports

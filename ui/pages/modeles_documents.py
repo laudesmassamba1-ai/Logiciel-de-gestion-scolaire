@@ -327,7 +327,7 @@ class FenetreModeles(QDialog):
     # ------------------------------------------------------------------
     def _actualiser_etat(self):
         if self._selection is None:
-            self.lbl_etat.setText("Aucun modele selectionne. Cliquez sur « Nouveau ».")
+            self.lbl_etat.setText("Aucun modele selectionne")
             self.editeur.setPlainText("")
             self.editeur.setEnabled(False)
         else:

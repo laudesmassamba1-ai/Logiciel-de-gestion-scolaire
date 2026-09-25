@@ -22,7 +22,7 @@ def personnel(page, ctx):
     if page.layout() is not None:
         return
     tpl = ListPageTemplate(
-        page, "Personnel & RH", "Enseignants, administration et salaires")
+        page, "Personnel & RH")
     peut_gerer = ctx.can_edit("personnel")
 
     search = QLineEdit()
@@ -52,9 +52,7 @@ def personnel(page, ctx):
                     p["email"] or "-", fmt_money(p["salaire"]), ""] for p in rows]
         tpl.remplir(
             valeurs,
-            message_vide="Aucun membre du personnel enregistre",
-            sous_titre_vide="Ajoutez les enseignants et l'administration "
-                            "pour suivre les salaires.")
+            message_vide="Aucun membre du personnel enregistre")
         for i, p in enumerate(rows):
             tpl.table.setCellWidget(i, 5, _actions_cell(*(
                 (

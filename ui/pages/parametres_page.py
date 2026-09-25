@@ -26,7 +26,7 @@ from core.config import (
     C_RED_BG, C_RED, C_RED_BORDER,
     C_AURORA, C_GREEN,
     C_BORDER,
-    API_BASE_URL, est_hote, code_ecole, APP_VERSION,
+    API_BASE_URL, est_hote, code_ecole,
 )
 from core import network
 from api.client import api_disponible
@@ -130,20 +130,12 @@ def parametres(page, ctx):
     sync_lay = QVBoxLayout(sync_group)
     sync_lay.setContentsMargins(10, 10, 10, 10)
     sync_lay.setSpacing(8)
-    lbl_sync = QLbl("Rapatrie du serveur la structure de l'ecole modifiee par "
-                    "le directeur : cycles, classes, matieres, annees "
-                    "scolaires et tarifs. La recuperation se fait aussi "
-                    "automatiquement toutes les minutes quand le serveur "
-                    "est joignable.")
-    lbl_sync.setStyleSheet(STYLE_HELP_MUTED)
-    lbl_sync.setWordWrap(True)
     btn_sync = QPushButton("Recuperer maintenant depuis le serveur")
     btn_sync.setCursor(Qt.PointingHandCursor)
     btn_sync.setStyleSheet(STYLE_BTN_SECONDARY)
     row_sync = QHBoxLayout()
     row_sync.addWidget(btn_sync)
     row_sync.addStretch(1)
-    sync_lay.addWidget(lbl_sync)
     sync_lay.addLayout(row_sync)
     _ajouter_au_scroll(sync_group)
 
@@ -193,17 +185,6 @@ def parametres(page, ctx):
     reseau_lay = QVBoxLayout(reseau_group)
     reseau_lay.setContentsMargins(10, 10, 10, 10)
     reseau_lay.setSpacing(8)
-
-    lbl_reseau_help = QLbl(
-        "La connexion entre les postes est AUTOMATIQUE : des qu'un autre "
-        "ordinateur de l'ecole est joignable (WiFi de l'ecole, Ethernet ou "
-        "Internet), il rejoint le serveur tout seul. Vous pouvez aussi "
-        "reprendre la main et tout configurer a la main dans la fenetre "
-        "de configuration (adresse, port, reseau WiFi de l'ecole, code de "
-        "l'ecole, hotspot, demarrage automatique).")
-    lbl_reseau_help.setStyleSheet(STYLE_HELP_MUTED)
-    lbl_reseau_help.setWordWrap(True)
-    reseau_lay.addWidget(lbl_reseau_help)
 
     lbl_reseau_statut = QLbl()
     lbl_reseau_statut.setWordWrap(True)
@@ -285,15 +266,6 @@ def parametres(page, ctx):
     maj_lay.setContentsMargins(10, 10, 10, 10)
     maj_lay.setSpacing(8)
 
-    lbl_maj_help = QLbl(
-        f"Version installee : v{APP_VERSION}. Au demarrage, l'application "
-        "verifie automatiquement si une version plus recente est disponible "
-        "(serveur de l'ecole, puis releases GitHub) et propose de la "
-        "telecharger et de l'installer.")
-    lbl_maj_help.setStyleSheet(STYLE_HELP_MUTED)
-    lbl_maj_help.setWordWrap(True)
-    maj_lay.addWidget(lbl_maj_help)
-
     btn_maj = QPushButton("Verifier les mises a jour maintenant")
     btn_maj.setCursor(Qt.PointingHandCursor)
     btn_maj.setStyleSheet(STYLE_BTN_SECONDARY)
@@ -305,13 +277,6 @@ def parametres(page, ctx):
         lbl_maj_cible = QLbl("Depot central du serveur (option pour plusieurs postes)")
         lbl_maj_cible.setStyleSheet(STYLE_LABEL_BOLD_MUTED)
         maj_lay.addWidget(lbl_maj_cible)
-        lbl_maj_help_depot = QLbl(
-            "Deposez un paquet (fichier .deb, .exe ou .AppImage) puis "
-            "indiquez la version a imposer aux postes : ils la telechargeront "
-            "depuis ce serveur, meme sans Internet.")
-        lbl_maj_help_depot.setStyleSheet(STYLE_HELP_MUTED)
-        lbl_maj_help_depot.setWordWrap(True)
-        maj_lay.addWidget(lbl_maj_help_depot)
 
         row_depot = QHBoxLayout()
         input_maj_version = QLineEdit()
@@ -446,12 +411,6 @@ def parametres(page, ctx):
     embleme_lay = QVBoxLayout(embleme_group)
     embleme_lay.setContentsMargins(10, 10, 10, 10)
     embleme_lay.setSpacing(8)
-    lbl_embleme_help = QLbl(
-        "Position et taille de chaque image dans l'entete des PDF generes "
-        "(bulletins, recus, certificats, rapports).")
-    lbl_embleme_help.setStyleSheet(STYLE_HELP_MUTED)
-    lbl_embleme_help.setWordWrap(True)
-    embleme_lay.addWidget(lbl_embleme_help)
     for key, label_text, align_defaut, haut_defaut in EMBLEMES:
         row = QHBoxLayout()
         lbl_em = QLbl(label_text)
@@ -553,11 +512,6 @@ def parametres(page, ctx):
     app_lay = QVBoxLayout(app_group)
     app_lay.setContentsMargins(10, 10, 10, 10)
     app_lay.setSpacing(8)
-    lbl_app_help = QLbl("Configurez les seuils et libelles des appreciations affichees pour les notes.")
-    lbl_app_help.setStyleSheet(STYLE_HELP_MUTED)
-    lbl_app_help.setWordWrap(True)
-    app_lay.addWidget(lbl_app_help)
-
     app_rows_layout = QVBoxLayout()
     app_lay.addLayout(app_rows_layout)
 

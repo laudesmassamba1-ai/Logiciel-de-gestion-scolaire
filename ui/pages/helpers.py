@@ -15,7 +15,7 @@ from core.config import (
     C_RED_BG, C_CARD, C_BG_SOFT, C_BLUE_BORDER, C_BLUE_LIGHT, C_GOLD, C_GOLD_BORDER,
     C_GOLD_LIGHT, C_GOLD_BG, C_GOLD_PRESSED, C_CONTOUR, APP_FONT_FAMILY, FONT_DISPLAY_FAMILY,
     FONT_EMOJI,
-    STYLE_BTN_PRIMARY, STYLE_TABLE, STYLE_HEADER_TITLE, STYLE_HEADER_SUBTITLE,
+    STYLE_BTN_PRIMARY, STYLE_TABLE, STYLE_HEADER_TITLE,
     STYLE_EMPTY_STATE, STYLE_STATUS, STYLE_CARD, STYLE_SELECTOR,
 )
 from repositories import repos
@@ -234,16 +234,13 @@ def _make_table(headers):
     return t
 
 
-def _page_header(parent_lay, titre, sous_titre):
+def _page_header(parent_lay, titre):
     header = QVBoxLayout()
     header.setSpacing(4)
     t = QLabel(titre)
     t.setStyleSheet(
         f"font-size: 24px; font-weight: 700; color: {C_TEXT}; margin: 0;")
-    s = QLabel(sous_titre)
-    s.setStyleSheet(STYLE_HEADER_SUBTITLE)
     header.addWidget(t)
-    header.addWidget(s)
 
     accent = QFrame()
     accent.setFixedSize(46, 3)

@@ -38,8 +38,7 @@ def calendrier(page, ctx):
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
     lay.addWidget(PageHeader(
-        "Calendrier",
-        "Evenements, marquage des dates et alarmes (ce poste)"))
+        "Calendrier"))
 
     corps = QHBoxLayout()
     corps.setSpacing(16)
@@ -61,8 +60,7 @@ def calendrier(page, ctx):
     table = DataTable()
     table.setColumnCount(4)
     table.setHorizontalHeaderLabels(["Heure", "Titre", "Alarme", "Actions"])
-    vide = EmptyState("Aucun evenement",
-                      "Ajoutez un evenement a cette date (bouton ci-dessous).")
+    vide = EmptyState("Aucun evenement")
     pile = QStackedWidget()
     pile.addWidget(table)
     pile.addWidget(vide)

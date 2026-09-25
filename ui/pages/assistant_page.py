@@ -947,11 +947,7 @@ class AssistantChatDialog(QDialog):
         police.setPointSize(md.POLICE_TITRE - 6)
         nom.setFont(police)
         nom.setStyleSheet(f"color: {C_TEXT};")
-        role = QLabel("Votre assistante de gestion scolaire")
-        role.setStyleSheet(
-            f"color: {C_TEXT_MUTED}; font-size: {md.POLICE_DETAIL}px;")
         col.addWidget(nom)
-        col.addWidget(role)
         haut.addLayout(col, 1)
         point = QLabel()
         point.setFixedSize(md.fib(5), md.fib(5))

@@ -111,8 +111,7 @@ def dashboard_directeur(page, ctx):
     from ui.widgets.page_templates import DashboardPageTemplate
 
     tpl = DashboardPageTemplate(
-        page, "Tableau de bord",
-        "Vue d'ensemble de l'etablissement (comptes, activite, connexions)")
+        page, "Tableau de bord")
 
     kpi = [
         tpl.ajouter_kpi(KPICard("Comptes actifs", "0", Colors.PRIMARY), 0),

@@ -788,10 +788,7 @@ class MainWindow(QMainWindow):
             self.lbl_api_status.setStyleSheet(
                 _style(C_PRIMARY_LIGHT, C_PRIMARY_PRESSED))
             self.lbl_api_status.setToolTip(
-                "Synchronisation entre postes desactivee.\n"
-                "Les donnees restent enregistrees sur ce poste.\n"
-                "Cliquez ici pour activer la connexion entre les\n"
-                "ordinateurs de l'ecole (assistant multi-postes).")
+                "Synchronisation entre postes desactivee. Clic : activer.")
             return
 
         if self._api_checking:
@@ -815,18 +812,14 @@ class MainWindow(QMainWindow):
                 self.lbl_api_status.setStyleSheet(
                     _style(C_GREEN_BG, C_GREEN))
                 self.lbl_api_status.setToolTip(
-                    "Connecte au serveur de l'ecole.\n"
-                    "Clic : synchroniser maintenant (pull + file).")
+                    "Connecte au serveur de l'ecole. Clic : synchroniser.")
                 motion.bounce_pulse(self.lbl_api_status, fois=2, duree=220)
             else:
                 self.lbl_api_status.setText("Serveur Injoignable")
                 self.lbl_api_status.setStyleSheet(_style(C_RED_BG, C_RED))
                 self.lbl_api_status.setToolTip(
-                    "Le logiciel ne rejoint pas le serveur de l'ecole\n"
-                    "(GS_API_URL, par defaut http://127.0.0.1:8000).\n"
-                    "Verifiez que le serveur est demarre :\n"
-                    "une connexion Internet normale ne suffit pas.\n"
-                    "Clic : reessayer la synchronisation.")
+                    "Le logiciel ne rejoint pas le serveur de l'ecole.\n"
+                    "Clic : reessayer.")
 
         run_async(_check, _on)
 

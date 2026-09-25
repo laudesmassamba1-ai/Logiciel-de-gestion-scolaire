@@ -99,9 +99,7 @@ def reseau(page, ctx):
     lay.setSpacing(14)
 
     titre = PageHeader(
-        "Reseau des postes",
-        "Postes connectes au serveur de l'ecole, etat des connexions "
-        "et affiliation de ce poste.")
+        "Reseau des postes")
     lay.addWidget(titre)
 
     kpi_en_ligne = _CarteData("Postes en ligne", "-", C_GREEN)
@@ -155,9 +153,7 @@ def reseau(page, ctx):
     table.setHorizontalHeaderLabels(
         ["Poste", "Adresse IP", "Version", "Systeme", "Statut",
          "Derniere activite"])
-    vide = EmptyState("Aucun poste connu",
-                      "Les postes de l'ecole apparaitront ici des qu'ils "
-                      "seront connectes.")
+    vide = EmptyState("Aucun poste connu")
     pile = QStackedWidget()
     pile.addWidget(table)
     pile.addWidget(vide)
@@ -179,9 +175,7 @@ def reseau(page, ctx):
             kpi_en_ligne.set_valeur("-")
             kpi_etat.set_valeur(macro)
             kpi_etat.set_couleur(C_RED)
-            vide.set_message("Serveur injoignable",
-                             "Le serveur de l'ecole ne repond pas "
-                             "(GS_API_URL).")
+            vide.set_message("Serveur injoignable")
             pile.setCurrentWidget(vide)
             rows.clear()
             return

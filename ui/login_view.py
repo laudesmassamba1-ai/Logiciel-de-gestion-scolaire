@@ -120,7 +120,7 @@ class _EcranAuth(QDialog):
 
     LARGEUR = 480
 
-    def __init__(self, titre, sous_titre, parent=None):
+    def __init__(self, titre, parent=None):
         super().__init__(parent)
         self._anime = False
         self.setWindowTitle(f"{APP_NAME} - {titre}")
@@ -128,7 +128,6 @@ class _EcranAuth(QDialog):
         self.resize(self.LARGEUR, self._hauteur())
         self.setSizeGripEnabled(True)
         self.titre = titre
-        self.sous_titre = sous_titre
         self._construire()
         self.card.setStyleSheet(
             f"QFrame#authCarte {{ background: {C_CARD};"
@@ -185,13 +184,6 @@ class _EcranAuth(QDialog):
         titre.setStyleSheet(
             f"color: {C_INK}; font-size: 24px; font-weight: 800;")
         v.addWidget(titre)
-
-        sous = QLabel(self.sous_titre)
-        sous.setAlignment(Qt.AlignCenter)
-        sous.setWordWrap(True)
-        sous.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 13px;")
-        v.addWidget(sous)
-        v.addSpacing(8)
 
         self._corps = QVBoxLayout()
         self._corps.setSpacing(8)
@@ -272,7 +264,7 @@ class LoginDialog(_EcranAuth):
     """Ecran de connexion : identifiant (username ou email) + mot de passe."""
 
     def __init__(self, parent=None):
-        super().__init__("Connexion", "Accedez a votre espace.", parent)
+        super().__init__("Connexion", parent)
         self.user = None
         self._construire_corps()
 
@@ -334,8 +326,7 @@ class FirstSetupDialog(_EcranAuth):
     """
 
     def __init__(self, parent=None):
-        super().__init__(
-            "Bienvenue", "Creez le premier compte pour commencer.", parent)
+        super().__init__("Bienvenue", parent)
         self.user = None
         self._construire_corps()
 

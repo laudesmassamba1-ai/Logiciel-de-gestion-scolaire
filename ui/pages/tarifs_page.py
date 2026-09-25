@@ -24,8 +24,7 @@ from core.config import (
 def tarifs(page, ctx):
     if page.layout() is not None:
         return
-    tpl = ListPageTemplate(page, "Tarifs & Scolarite",
-                           "Montants des frais par classe et par type")
+    tpl = ListPageTemplate(page, "Tarifs & Scolarite")
     peut_editer = ctx.can_edit("tarifs")
 
     combo_classe = QComboBox()
@@ -70,9 +69,7 @@ def tarifs(page, ctx):
                    for t in rows]
         tpl.remplir(
             valeurs,
-            message_vide="Aucun tarif enregistre",
-            sous_titre_vide="Creez le premier tarif de scolarite pour cette "
-                            "annee scolaire.")
+            message_vide="Aucun tarif enregistre")
         for i, t in enumerate(rows):
             tpl.table.setCellWidget(i, 4, _actions_cell(*(
                 (

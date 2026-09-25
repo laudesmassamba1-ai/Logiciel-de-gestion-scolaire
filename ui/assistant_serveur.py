@@ -117,14 +117,6 @@ class AssistantServeur(QDialog):
         ligne.addWidget(self.pilule)
         racine.addLayout(ligne)
 
-        sous = QLabel(
-            "Plusieurs ordinateurs de l'ecole partagent les memes donnees "
-            "(eleves, notes, paiements...). Tout est gere ici, sans "
-            "manipulation technique.")
-        sous.setWordWrap(True)
-        sous.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 12px;")
-        racine.addWidget(sous)
-
     def _construire_statut(self, racine):
         carte = _carte()
         lay = QVBoxLayout(carte)
@@ -203,15 +195,6 @@ class AssistantServeur(QDialog):
         ligne_code.addWidget(self.btn_regenerer_code)
         lay.addLayout(ligne_code)
 
-        self.lbl_code_explication = QLabel(
-            "Ce code identifie VOTRE ecole. Un poste ne se synchronise "
-            "qu'avec un serveur portant ce MEME code : deux ecoles voisines "
-            "qui utilisent le logiciel ne se melangent jamais.")
-        self.lbl_code_explication.setWordWrap(True)
-        self.lbl_code_explication.setStyleSheet(
-            f"color: {C_TEXT_MUTED}; font-size: 11px;")
-        lay.addWidget(self.lbl_code_explication)
-
         self._carte_adresse = carte
         racine.addWidget(carte)
 
@@ -222,14 +205,6 @@ class AssistantServeur(QDialog):
         lay.setContentsMargins(16, 14, 16, 14)
         lay.setSpacing(8)
         lay.addWidget(_titre_carte("Se connecter au PC serveur de l'ecole"))
-
-        self.lbl_client_mode = QLabel(
-            "Ce poste peut se connecter a un autre ordinateur qui "
-            "héberge les donnees partagees (eleves, notes, paiements...).")
-        self.lbl_client_mode.setStyleSheet(
-            f"color: {C_TEXT_MUTED}; font-size: 12px;")
-        self.lbl_client_mode.setWordWrap(True)
-        lay.addWidget(self.lbl_client_mode)
 
         ligne_adr = QHBoxLayout()
         ligne_adr.setSpacing(8)

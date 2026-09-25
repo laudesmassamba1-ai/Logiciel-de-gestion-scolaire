@@ -25,8 +25,7 @@ from core.config import (
 def presences(page, ctx):
     if page.layout() is not None:
         return
-    tpl = ListPageTemplate(page, "Presences",
-                           "Feuille de presence par classe et par jour")
+    tpl = ListPageTemplate(page, "Presences")
     peut_editer = ctx.can_edit("presences")
 
     combo_classe = QComboBox()

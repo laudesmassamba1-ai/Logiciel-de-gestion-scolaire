@@ -26,7 +26,7 @@ from core.config import (
 def caisse(page, ctx):
     if page.layout() is not None:
         return
-    tpl = ListPageTemplate(page, "Caisse", "Recettes, depenses et solde")
+    tpl = ListPageTemplate(page, "Caisse")
     peut_editer = ctx.can_edit("caisse")
 
     search = QLineEdit()
@@ -138,8 +138,7 @@ def caisse(page, ctx):
                             rec, dep, ""])
         tpl.remplir(
             valeurs,
-            message_vide="Aucune transaction sur la periode selectionnee",
-            sous_titre_vide="Elargissez les dates ou changez de filtre.")
+            message_vide="Aucune transaction sur la periode selectionnee")
         for i, r in enumerate(rows):
             tpl.table.setCellWidget(i, 7, _actions_cell(*(
                 (_btn("Supprimer", partial(_delete_transaction, page, ctx, r),

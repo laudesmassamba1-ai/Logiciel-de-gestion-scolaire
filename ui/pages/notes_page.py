@@ -49,9 +49,7 @@ def notes(page, ctx):
     lay1.setSpacing(12)
     tabs.addTab(tab_saisie, "Saisie par Matiere")
     h1 = PageHeader(
-        "Saisie par Matiere",
-        "Selectionnez une classe et une matiere pour saisir les notes "
-        "de tous les eleves")
+        "Saisie par Matiere")
     lay1.addWidget(h1)
 
     filtre1 = QHBoxLayout()
@@ -79,8 +77,7 @@ def notes(page, ctx):
         "Matricule", "Nom et Prenom", "Devoir 1 /20",
         "Devoir 2 /20", "Composition /20", "Moyenne", "Appreciation"])
     vide1 = EmptyState(
-        "Choisissez une classe et une matiere",
-        "Cliquez ensuite 'Charger les Eleves' pour voir la feuille de notes.")
+        "Choisissez une classe et une matiere")
     pile1 = QStackedWidget()
     pile1.addWidget(table_notes)
     pile1.addWidget(vide1)
@@ -275,8 +272,7 @@ def notes(page, ctx):
     lay2.setSpacing(12)
     tabs.addTab(tab_eleve, "Saisie par Eleve")
     lay2.addWidget(PageHeader(
-        "Saisie par Eleve",
-        "Selectionnez un eleve pour saisir ses notes dans toutes les matieres"))
+        "Saisie par Eleve"))
 
     filtre2 = QHBoxLayout()
     combo_ev_classe = QComboBox()
@@ -319,8 +315,7 @@ def notes(page, ctx):
         "Matiere", "Coefficient", "Devoir 1 /20",
         "Devoir 2 /20", "Composition /20", "Moyenne /20"])
     vide2 = EmptyState(
-        "Selectionnez un eleve et une periode",
-        "Cliquez ensuite 'Charger les Notes' pour saisir ses notes.")
+        "Selectionnez un eleve et une periode")
     pile2 = QStackedWidget()
     pile2.addWidget(table_ev)
     pile2.addWidget(vide2)
@@ -447,8 +442,7 @@ def notes(page, ctx):
     lay3.setSpacing(12)
     tabs.addTab(tab_moyennes, "Moyennes Generales")
     lay3.addWidget(PageHeader(
-        "Moyennes Generales de la Classe",
-        "Classement des eleves par moyenne generale sur la periode choisie"))
+        "Moyennes Generales de la Classe"))
 
     filtre3 = QHBoxLayout()
     combo_moy_classe = QComboBox()
@@ -478,9 +472,7 @@ def notes(page, ctx):
     table_moy.setShowGrid(False)
     table_moy.horizontalHeader().setMinimumSectionSize(80)
     vide3 = EmptyState(
-        "Aucune moyenne calculee",
-        "Choisissez une classe et une periode, puis cliquez "
-        "'Calculer les Moyennes'.")
+        "Aucune moyenne calculee")
     pile3 = QStackedWidget()
     pile3.addWidget(table_moy)
     pile3.addWidget(vide3)

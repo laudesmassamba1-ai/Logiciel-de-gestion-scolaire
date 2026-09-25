@@ -1,13 +1,12 @@
-"""PageHeader — titre + sous-titre + zone d'actions, meme agencement partout."""
+"""PageHeader — titre + zone d'actions, meme agencement partout."""
 
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 from resources.design_tokens import Colors, FontFamily, FontSize, Spacing
 
 
 class PageHeader(QFrame):
-    def __init__(self, titre, sous_titre="", parent=None):
+    def __init__(self, titre, parent=None):
         super().__init__(parent)
         self.setObjectName("entete_page")
         self.setStyleSheet("QFrame#entete_page { border: none; background: transparent; }")
@@ -23,16 +22,7 @@ class PageHeader(QFrame):
             f" font-size: {FontSize.PAGE_TITLE}px; font-weight: 800;"
             " letter-spacing: -0.4px;"
             f" color: {Colors.TEXT_PRIMARY}; border: none; background: transparent;")
-        self._accroche = None
-        accroche = QLabel(sous_titre) if sous_titre else QLabel()
-        if sous_titre:
-            accroche.setStyleSheet(
-                f"font-size: {FontSize.SUBTITLE}px; color: {Colors.TEXT_MUTED};"
-                " border: none; background: transparent;")
-        self._accroche = accroche
         colonne.addWidget(lbl_titre)
-        if sous_titre:
-            colonne.addWidget(accroche)
 
         accent = QFrame()
         accent.setFixedSize(46, 3)
@@ -51,8 +41,3 @@ class PageHeader(QFrame):
 
     def ajouter_action(self, widget):
         self.actions_zone.addWidget(widget)
-
-    def set_sous_titre(self, texte):
-        if self._accroche is not None:
-            self._accroche.setText(texte)
-            self._accroche.setVisible(bool(texte))

@@ -34,14 +34,12 @@ def bloc_notes(page, ctx):
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
     lay.addWidget(PageHeader(
-        "Bloc Notes",
-        "Notes personnelles conservees sur ce poste"))
+        "Bloc Notes"))
 
     table = DataTable()
     table.setColumnCount(4)
     table.setHorizontalHeaderLabels(["Titre", "Modifie le", "Extrait", "Actions"])
-    vide = EmptyState("Aucune note",
-                      "Ajoutez votre premiere note via le bouton ci-dessus.")
+    vide = EmptyState("Aucune note")
     pile = QStackedWidget()
     pile.addWidget(table)
     pile.addWidget(vide)

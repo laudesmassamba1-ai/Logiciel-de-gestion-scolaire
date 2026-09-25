@@ -30,8 +30,7 @@ def cycles_annees(page, ctx):
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
     header = PageHeader(
-        "Cycles & Annees Scolaires",
-        "Cycles pedagogiques et annees scolaires de l'établissement")
+        "Cycles & Annees Scolaires")
     lay.addWidget(header)
 
     def _exporter_cycles():
@@ -66,8 +65,7 @@ def cycles_annees(page, ctx):
     table_cycles = DataTable()
     table_cycles.setColumnCount(3)
     table_cycles.setHorizontalHeaderLabels(["Nom", "Description", "Actions"])
-    vide_cycles = EmptyState("Aucun cycle enregistre",
-                             "Ajoutez un cycle via le bouton ci-dessus.")
+    vide_cycles = EmptyState("Aucun cycle enregistre")
     pile_c = QStackedWidget()
     pile_c.addWidget(table_cycles)
     pile_c.addWidget(vide_cycles)
@@ -113,8 +111,7 @@ def cycles_annees(page, ctx):
     table_annees.setHorizontalHeaderLabels(
         ["Libelle", "Debut", "Fin", "Active", "Actions"])
     vide_annees = EmptyState(
-        "Aucune annee scolaire enregistree",
-        "Ajoutez une annee scolaire via le bouton ci-dessus.")
+        "Aucune annee scolaire enregistree")
     pile_a = QStackedWidget()
     pile_a.addWidget(table_annees)
     pile_a.addWidget(vide_annees)

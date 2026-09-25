@@ -19,17 +19,17 @@ from resources.design_tokens import Colors, FontSize, Radius, Spacing
 
 
 class _BaseTemplate:
-    def __init__(self, widget, titre, sous_titre=""):
+    def __init__(self, widget, titre):
         self.page = widget
         lay = QVBoxLayout(widget)
         lay.setContentsMargins(20, 20, 20, 20)
         lay.setSpacing(Spacing.MD)
-        self._monter_entete(lay, titre, sous_titre)
+        self._monter_entete(lay, titre)
         self._monter_contenu(lay)
 
-    def _monter_entete(self, lay, titre, sous_titre):
+    def _monter_entete(self, lay, titre):
         from .page_header import PageHeader
-        self.header = PageHeader(titre, sous_titre)
+        self.header = PageHeader(titre)
         lay.addWidget(self.header)
         self.entete = lay
 
@@ -79,13 +79,12 @@ class ListPageTemplate(_BaseTemplate):
         self.filtre.addStretch(1)
 
     def remplir(self, valeurs, largeurs=None, stretch_index=None,
-                message_vide="Aucune donnee a afficher",
-                sous_titre_vide=""):
+                message_vide="Aucune donnee a afficher"):
         self.table.remplir(valeurs, largeurs, stretch_index)
         vide = not valeurs
         self.pile.setCurrentWidget(self.vide if vide else self.table)
         if vide:
-            self.vide.set_message(message_vide, sous_titre_vide)
+            self.vide.set_message(message_vide)
         return self
 
 

@@ -245,14 +245,7 @@ class ConfigurateurTheme(QDialog):
 
         titre = QLabel("Configuration graphique")
         titre.setStyleSheet(STYLE_HEADER_TITLE)
-        sous_titre = QLabel(
-            "Outil avance cache (Ctrl+Shift+T) : theme global et reglages "
-            "locaux du poste. L'apercu a droite se met a jour en direct ; le "
-            "theme est applique au prochain demarrage.")
-        sous_titre.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 13px;")
-        sous_titre.setWordWrap(True)
         racine.addWidget(titre)
-        racine.addWidget(sous_titre)
 
         # Splitter : reglages a gauche, apercu en direct a droite.
         split = QSplitter(Qt.Horizontal)
@@ -402,11 +395,7 @@ class ConfigurateurTheme(QDialog):
             f" letter-spacing: -0.4px; color: {c('C_TEXT')};"
             " background: transparent; border: none;")
         self._apercu_body.addWidget(titre)
-        ss = QLabel("Apercu en direct : cartes, boutons, champs, tableaux")
-        ss.setStyleSheet(
-            f"font-size: {spinv('taille_sous_titre', 14)}px;"
-            f" color: {c('C_TEXT_MUTED')};")
-        self._apercu_body.addWidget(ss)
+        encart_couleur = QWidget()
 
         # --- Boutons ---
         boutons = QHBoxLayout()
@@ -459,12 +448,7 @@ class ConfigurateurTheme(QDialog):
         lbl_carte.setStyleSheet(
             f"color: {c('C_TEXT')}; font-weight: 700; font-size: 14px;"
             " background: transparent;")
-        lbl_carte2 = QLabel("Contenu de la carte : le rayon et le remplissage "
-                            "suivent vos reglages.")
-        lbl_carte2.setWordWrap(True)
-        lbl_carte2.setStyleSheet(f"color: {c('C_TEXT_MUTED')}; font-size: 12px;")
         carte_lay.addWidget(lbl_carte)
-        carte_lay.addWidget(lbl_carte2)
         self._apercu_body.addWidget(carte)
 
         # --- KPI reel ---
@@ -530,15 +514,6 @@ class ConfigurateurTheme(QDialog):
         lay = QVBoxLayout(page)
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(8)
-
-        intro = QLabel(
-            "Réglages ciblés par élément de l'application : la liste des "
-            "eleves, l'emploi du temps, les statuts des paiements/presences "
-            "et les graphiques ont leurs propres couleurs, independantes du "
-            "theme global. Appliques au prochain demarrage.")
-        intro.setWordWrap(True)
-        intro.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 13px;")
-        lay.addWidget(intro)
 
         defile = QScrollArea()
         defile.setWidgetResizable(True)
@@ -741,14 +716,6 @@ class ConfigurateurTheme(QDialog):
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(10)
 
-        intro = QLabel(
-            "Ordre de la sidebar : cochez pour afficher, decochez pour "
-            "masquer, fleches pour reordonner. L'icone (Font Awesome 5, "
-            "format fa5s.nom) remplace celle par defaut en cas de nom valide.")
-        intro.setWordWrap(True)
-        intro.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 13px;")
-        lay.addWidget(intro)
-
         self._lst_pages = QListWidget()
         self._lst_pages.setStyleSheet(
             f"QListWidget {{ background: {C_CARD}; border: 1px solid {C_BORDER};"
@@ -804,15 +771,6 @@ class ConfigurateurTheme(QDialog):
         lay_i.addWidget(self._edit_icone)
         lay.addWidget(ligne_icone)
         self._lst_pages.currentRowChanged.connect(self._maj_champ_icone)
-
-        expl = QLabel(
-            "Icônes Font Awesome 5 : format « fa5s.nom » (exemples : "
-            "fa5s.user-graduate, fa5s.money-bill-alt, fa5s.chart-line, "
-            "fa5s.book-open, fa5s.cog, fa5s.folder-open). Un nom invalide "
-            "laisse l'icone par defaut.")
-        expl.setWordWrap(True)
-        expl.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 12px;")
-        lay.addWidget(expl)
         return page
 
     def _maj_champ_icone(self, row):
@@ -879,13 +837,6 @@ class ConfigurateurTheme(QDialog):
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(12)
 
-        intro = QLabel(
-            "Reglages LOCAUX : propres a ce poste uniquement (non exportes "
-            "avec le theme partage). Appliques au demarrage de l'application.")
-        intro.setWordWrap(True)
-        intro.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 13px;")
-        lay.addWidget(intro)
-
         lay.addWidget(self._cadre_section("Fenetre principale"))
         self._ligne_spin("largeur_fenetre", "Largeur de la fenetre", 900, 2600, lay,
                          defaut=1280, suffixe=" px")
@@ -926,14 +877,6 @@ class ConfigurateurTheme(QDialog):
         self._combos["page_demarrage"] = combo_d
 
         lay.addWidget(self._cadre_section("Memo"))
-        note = QLabel(
-            "Couleurs, typographie, dimensions, pages et icones = theme "
-            "GLOBAL (partage entre postes via Export/Import).\n"
-            "Taille de fenetre, plein ecran et page de demarrage = LOCAL "
-            "a ce poste (sauvegardes dans le meme fichier, ignores ailleurs).")
-        note.setWordWrap(True)
-        note.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 12px;")
-        lay.addWidget(note)
         lay.addStretch(1)
         return page
 
@@ -961,18 +904,6 @@ class ConfigurateurTheme(QDialog):
         chemin.setWordWrap(True)
         lay.addWidget(expl)
         lay.addWidget(chemin)
-
-        txt = QLabel(
-            "Exporter : sauvegarde le theme actuel dans un fichier JSON a "
-            "partager entre postes (coller le fichier sur un autre poste puis "
-            "« Importer un theme »).\n\n"
-            "Copier : place le JSON dans le presse-papiers, a coller tel quel "
-            "(email, tchat) ailleurs.\n\n"
-            "Importer : charge un theme JSON precedent et remplit la fenetre "
-            "avec (pensez ensuite a « Enregistrer le theme »).")
-        txt.setWordWrap(True)
-        txt.setStyleSheet(f"color: {C_TEXT_MUTED}; font-size: 13px;")
-        lay.addWidget(txt)
 
         boutons = QHBoxLayout()
         boutons.setSpacing(10)

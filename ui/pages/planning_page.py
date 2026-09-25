@@ -76,8 +76,7 @@ def _jour(table, col):
 def planning(page, ctx):
     if page.layout() is not None:
         return
-    tpl = ListPageTemplate(page, "Planning",
-                           "Emploi du temps par classe (edit : double-clic)")
+    tpl = ListPageTemplate(page, "Planning")
     peut_editer = ctx.can_edit("planning")
 
     combo_classe = QComboBox()

@@ -26,8 +26,7 @@ def comptes(page, ctx):
     if page.layout() is not None:
         return
     tpl = ListPageTemplate(
-        page, "Comptes",
-        "Utilisateurs, roles et gestion de la securite")
+        page, "Comptes")
 
     combo_role = QComboBox()
     combo_role.addItems(["Tous les roles", "Directeur", "Gestionnaire"])
@@ -78,8 +77,7 @@ def comptes(page, ctx):
                    for u in rows]
         tpl.remplir(
             valeurs,
-            message_vide="Aucun compte",
-            sous_titre_vide="Modifiez votre recherche ou changez de filtre.")
+            message_vide="Aucun compte")
         for i, u in enumerate(rows):
             if peut_gerer:
                 tpl.table.setCellWidget(i, 5, _actions_cell(

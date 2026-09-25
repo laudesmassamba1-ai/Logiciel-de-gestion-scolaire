@@ -32,8 +32,7 @@ def paiements(page, ctx):
     lay.setContentsMargins(20, 20, 20, 20)
     lay.setSpacing(16)
     lay.addWidget(PageHeader(
-        "Paiements, Suivi & Bilans",
-        "Encaissements, suivi mensuel des eleves et bilans"))
+        "Paiements, Suivi & Bilans"))
 
     tabs = QTabWidget()
     lay.addWidget(tabs, 1)
@@ -111,8 +110,7 @@ def paiements(page, ctx):
         ["Date", "Matricule", "Eleve", "Classe", "Type frais",
          "Montant", "Mode", "Trimestre", "Actions"])
     vide_p = EmptyState(
-        "Aucun paiement enregistre",
-        "Enregistrez un paiement via le bouton ci-dessus.")
+        "Aucun paiement enregistre")
     pile_p = QStackedWidget()
     pile_p.addWidget(table_p)
     pile_p.addWidget(vide_p)
@@ -181,7 +179,7 @@ def paiements(page, ctx):
     table_suivi.setColumnCount(3)
     table_suivi.setHorizontalHeaderLabels(["Mois", "Attendu", "Paye"])
     vide_suivi = EmptyState(
-        "Selectionnez un eleve pour afficher son suivi mensuel", "")
+        "Selectionnez un eleve pour afficher son suivi mensuel")
     pile_s = QStackedWidget()
     pile_s.addWidget(table_suivi)
     pile_s.addWidget(vide_suivi)
@@ -225,7 +223,7 @@ def paiements(page, ctx):
                 cell.setForeground(QColor(coul_p["paye"] if regle else coul_p["du"]))
         if not suivi:
             vide_suivi.set_message(
-                "Aucun paiement enregistre pour cet eleve sur l'annee active", "")
+                "Aucun paiement enregistre pour cet eleve sur l'annee active")
         pile_s.setCurrentWidget(vide_suivi if not suivi else table_suivi)
 
     combo_classe_s.currentIndexChanged.connect(fill_eleves)
@@ -280,8 +278,7 @@ def paiements(page, ctx):
         ["Date", "Matricule", "Eleve", "Classe", "Type frais",
          "Montant", "Mode", "Trimestre"])
     vide_b = EmptyState(
-        "Aucun paiement ne correspond a ces criteres",
-        "Modifiez les filtres ou le trimestre pour voir d'autres encaissements.")
+        "Aucun paiement ne correspond a ces criteres")
     pile_b = QStackedWidget()
     pile_b.addWidget(table_b)
     pile_b.addWidget(vide_b)
