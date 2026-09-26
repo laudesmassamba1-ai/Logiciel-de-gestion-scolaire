@@ -118,6 +118,15 @@ def dernier_update(conn, prefixe):
     return maj[-1]
 
 
+def dernier_sql(conn, fragment):
+    """Dernier SQL execute contenant `fragment` (les lectures serveur
+    n'ecrivent rien : seule l'historique du faux curseur permet de les
+    controler)."""
+    sqls = [s for s, _ in conn.curseur_obj.historique if fragment in s]
+    assert sqls, f"aucune requete contenant « {fragment} »"
+    return sqls[-1]
+
+
 # ============================================================
 # NORMALISATEURS PURS
 # ============================================================
@@ -240,6 +249,26 @@ def test_post_eleve_sans_classe_refuse_400(client):
     insertions_eleve = [s for s, _ in conn.curseur_obj.historique
                         if "INSERT INTO eleve" in s]
     assert not insertions_eleve
+
+
+def test_lectures_eleve_ignorent_les_archives(client):
+    """Tombstone : un eleve archive (est_supprime) ne doit plus ressortir
+    dans la recherche, les parents par classe ni la syndication (sinon la
+    sync resolvait son id et pouvait le modifier / le payer)."""
+    c, conn = client
+    r = c.get("/eleve_recherche", params={"recherche": "Kone"})
+    assert r.status_code == 200, r.text
+    sql_recherche = dernier_sql(conn, "from eleve, inscription, classe")
+    assert "est_supprime = 0" in sql_recherche
+    assert "LOWER(eleve.nom)" in sql_recherche
+
+    c.get("/parents_par_classe/CP1")
+    sql_parents = dernier_sql(conn, "FROM eleve, classe, inscription")
+    assert "est_supprime = 0" in sql_parents
+
+    c.get("/eleve-syndication")
+    sql_syndication = dernier_sql(conn, "SELECT id, uuid_client FROM eleve")
+    assert "est_supprime = 0" in sql_syndication
 
 
 def test_put_modifier_eleve_champs_bureau_uniquement(client):

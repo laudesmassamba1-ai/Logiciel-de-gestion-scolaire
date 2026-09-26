@@ -1609,7 +1609,10 @@ def enregistrer_routes_compat(app):
         conn = connexion()
         curseur = conn.cursor(dictionary=True)
         try:
-            curseur.execute("SELECT id, uuid_client FROM eleve")
+            # est_supprime filtre : sans lui, la syndication resolvait encore
+            # l'id d'un eleve archive et la sync pouvait le modifier/payer.
+            curseur.execute(
+                "SELECT id, uuid_client FROM eleve WHERE est_supprime = 0")
             return {"eleves": curseur.fetchall()}
         finally:
             curseur.close()

@@ -2,6 +2,7 @@
 import sqlite3
 import uuid as _uuid
 from database import db
+from database.db import _sans_accents
 from repositories.base import RepositoryBase
 
 
@@ -19,8 +20,13 @@ class EleveRepository(RepositoryBase):
             sql += " AND e.statut = ?"
             params.append(statut)
         if recherche:
-            sql += " AND (e.nom LIKE ? OR e.prenom LIKE ? OR e.matricule LIKE ?)"
-            like = f"%{recherche}%"
+            # sans_accents() : « KONE » trouve « KONÉ », « konan » trouve
+            # « Konan », peu importe la casse ; la comparaison porte sur les
+            # trois champs, donc une recherche par prenom seul fonctionne.
+            sql += (" AND (sans_accents(e.nom) LIKE ?"
+                    " OR sans_accents(e.prenom) LIKE ?"
+                    " OR sans_accents(e.matricule) LIKE ?)")
+            like = f"%{_sans_accents(recherche)}%"
             params += [like, like, like]
         sql += " ORDER BY e.nom, e.prenom"
         return db.query(sql, params)

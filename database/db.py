@@ -3,9 +3,25 @@ import hashlib
 import hmac
 import os
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
 
 from core.config import DB_PATH, DEFAULT_MATIERES, DOCS_DIR, VILLE_DEFAUT, PAYS_DEFAUT
+
+
+def _sans_accents(valeur):
+    """UDF SQLite : minuscules sans diacritiques.
+
+    LIKE de SQLite est sensible a la casse (ASCII) et aux accents :
+    « KONE » ne trouvait pas « KONÉ ». Cette fonction, enregistree sur
+    chaque connexion par connect(), permet d'ecrire
+    « sans_accents(e.nom) LIKE ? » et de chercher « kone » comme « koné ».
+    """
+    if valeur is None:
+        return ""
+    decompose = unicodedata.normalize("NFD", str(valeur))
+    return "".join(c for c in decompose
+                   if unicodedata.category(c) != "Mn").lower()
 
 
 SCHEMA = """
@@ -271,6 +287,8 @@ class Database:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
+        # Recherche insensible a la casse ET aux accents (cf. _sans_accents).
+        conn.create_function("sans_accents", 1, _sans_accents)
         return conn
 
 

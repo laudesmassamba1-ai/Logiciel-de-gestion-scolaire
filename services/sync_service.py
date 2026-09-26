@@ -36,6 +36,30 @@ def _bool_int(valeur):
                                                 "true", "yes") else 0
 
 
+# Le serveur stocke le statut d'un eleve dans son propre vocabulaire
+# (actif / inactif / exclu) ; l'interface filtre et compte sur
+# « Inscrit / Pre-inscrit / Inactif ». Sans traduction, un eleve rapatrie
+# etait invisible sous TOUS les filtres de statut et ses KPI etaient faux.
+_STATUTS_LOCAL_ELEVE = ("Inscrit", "Pre-inscrit", "Inactif")
+
+
+def _statut_eleve_local(valeur, default="Inscrit"):
+    s = str(valeur if valeur is not None else "").strip()
+    if s in _STATUTS_LOCAL_ELEVE:
+        return s
+    s = s.lower()
+    correspondance = {
+        "actif": "Inscrit", "inscrit": "Inscrit", "en règle": "Inscrit",
+        "en regle": "Inscrit",
+        "pre-inscrit": "Pre-inscrit", "preinscrit": "Pre-inscrit",
+        "pré-inscrit": "Pre-inscrit", "pre": "Pre-inscrit",
+        "inactif": "Inactif", "suspendu": "Inactif", "abandon": "Inactif",
+        "exclu": "Inactif", "exclus": "Inactif", "radié": "Inactif",
+        "radie": "Inactif",
+    }
+    return correspondance.get(s, default)
+
+
 def _coef_float(valeur):
     """Convertit une valeur numerique (eventuellement '1,5' francais) en float."""
     if valeur is None:
@@ -462,7 +486,7 @@ def pull_donnees():
                      _champ(e, "date_naissance"), _champ(e, "lieu_naissance"),
                      _champ(e, "adresse"),
                      _bool_int(_champ(e, "redoublant", default=0)),
-                     _champ(e, "statut", default="Inscrit")))
+                     _statut_eleve_local(_champ(e, "statut"))))
                 existant = db.query_one(
                     "SELECT id, uuid_client FROM eleves WHERE uuid_client = ?",
                     (uuid_client,))
@@ -475,7 +499,7 @@ def pull_donnees():
                        _champ(e, "date_naissance"), _champ(e, "lieu_naissance"),
                        _champ(e, "adresse"),
                        _bool_int(_champ(e, "redoublant", default=0)),
-                       _champ(e, "statut", default="Inscrit")]
+                       _statut_eleve_local(_champ(e, "statut"))]
             if _champ(e, "classe") is not None:
                 classe_id = _classe_id_par_nom(_champ(e, "classe"))
                 if classe_id:

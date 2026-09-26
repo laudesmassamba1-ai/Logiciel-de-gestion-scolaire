@@ -46,6 +46,10 @@ def eleves(page, ctx):
         return
     tpl = ListPageTemplate(
         page, "Eleves")
+    # Deny-by-default : la page ne propose l'edition (creation, modification,
+    # suppression) qu'aux roles autorises par RoleAuthorizer. Sans cette
+    # garde, tout role ayant la page en lecture pouvait aussi ecrire.
+    peut_editer = ctx.can_edit("eleves")
 
     search = QLineEdit()
     search.setPlaceholderText("Rechercher (nom, prenom, matricule)...")
@@ -884,10 +888,11 @@ def eleves(page, ctx):
             tpl.table.setCellWidget(i, 7, _actions_cell(
                 _btn("Détails", partial(_ouvrir_detail_eleve, page, ctx, e),
                      _simple_btn_style(bg=C_GREEN_BG, fg=C_GREEN, border=C_BORDER, compact=True)),
-                _btn("Modifier", partial(open_inscription_dialog, page, ctx, e),
-                     _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER, compact=True)),
-                _btn("Supprimer", partial(_delete_eleve, page, ctx, e),
-                     _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER, compact=True))))
+                *((_btn("Modifier", partial(open_inscription_dialog, page, ctx, e),
+                        _simple_btn_style(bg=C_BLUE_LIGHT, fg=C_BLUE, border=C_BLUE_BORDER, compact=True)),
+                    _btn("Supprimer", partial(_delete_eleve, page, ctx, e),
+                         _simple_btn_style(bg=C_RED_BG, fg=C_RED, border=C_RED_BORDER, compact=True)))
+                   if peut_editer else ())))
         page._rows = rows
 
         eleves_all = repos.eleves(classe_id=classe_id)
@@ -912,10 +917,17 @@ def eleves(page, ctx):
 
     def double_clicked(row, _col):
         if 0 <= row < len(getattr(page, "_rows", [])):
-            _ouvrir_inscription(page._rows[row])
+            # Role non editeur : le double-clic ouvre la fiche (lecture),
+            # jamais le dossier d'inscription (edition).
+            if peut_editer:
+                _ouvrir_inscription(page._rows[row])
+            else:
+                _ouvrir_detail_eleve(page, ctx, page._rows[row])
 
     tpl.table.cellDoubleClicked.connect(double_clicked)
-    tpl.table.setToolTip("Double-cliquez sur une ligne pour modifier le dossier")
+    tpl.table.setToolTip(
+        "Double-cliquez sur une ligne pour modifier le dossier" if peut_editer
+        else "Double-cliquez sur une ligne pour voir la fiche")
 
     fill()
     page.refresh = fill
@@ -935,8 +947,10 @@ def eleves(page, ctx):
                 "rapport_liste_eleves.pdf"):
             toast.info(page, "Rien a exporter : aucun eleve dans ce filtre.")
 
-    btn_add = _btn("+ Nouvel Eleve", lambda: _ouvrir_inscription(), STYLE_BTN_PRIMARY)
-    tpl.header.ajouter_action(btn_add)
+    if peut_editer:
+        btn_add = _btn("+ Nouvel Eleve", lambda: _ouvrir_inscription(),
+                       STYLE_BTN_PRIMARY)
+        tpl.header.ajouter_action(btn_add)
     btn_export = _btn("Exporter CSV",
                       lambda: reports.export_eleves_csv(getattr(page, "_rows", [])),
                       STYLE_BTN_SECONDARY)
@@ -1191,6 +1205,13 @@ def open_inscription_dialog(parent, ctx, eleve=None):
             idx = dlg.combo_classe.findData(select_id)
             if idx >= 0:
                 dlg.combo_classe.setCurrentIndex(idx)
+            else:
+                # La classe de l'eleve a disparu (supprimee, ou eleve
+                # rapatrie avant que la classe n'existe en local) : on
+                # l'affiche malgre tout pour ne pas perdre l'information et
+                # ne pas bloquer toute sauvegarde du dossier.
+                dlg.combo_classe.addItem("(classe supprimee)", select_id)
+                dlg.combo_classe.setCurrentIndex(dlg.combo_classe.count() - 1)
 
     refresh_classes(eleve["classe_id"] if eleve else None)
 
@@ -1217,6 +1238,11 @@ def open_inscription_dialog(parent, ctx, eleve=None):
                                 "Le nom et le prenom sont obligatoires.")
             return
         classe_id = dlg.combo_classe.currentData()
+        if not classe_id and eleve:
+            # Edition : l'eleve garde sa classe si aucune n'est selectionnee
+            # (classe absente de la liste) — bloquer ici rendait le dossier
+            # entierement non modifiable.
+            classe_id = eleve["classe_id"]
         if not classe_id:
             QMessageBox.warning(dlg, "Inscription",
                                 "Selectionnez une classe (ou creez-en une).")

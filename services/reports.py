@@ -5,6 +5,7 @@ from pathlib import Path
 from core.config import CRENEAUX, DOCS_DIR, JOURS, VILLE_DEFAUT
 from database import db
 from repositories import repos
+from services import csvsafe
 from ui.widgets import fmt_money
 
 
@@ -12,6 +13,12 @@ def echap(valeur):
     """Echappe une donnee utilisateur avant insertion dans le HTML :
     un nom contenant '<' ou un script ne doit jamais casser le rapport."""
     return html.escape(str(valeur if valeur is not None else ""))
+
+
+# Reexportee ici pour compatibilite (les appelants historiques font
+# « reports.csv_sur ») ; l'implementation vit dans services/csvsafe.py pour
+# rester importable par repositories/ sans cycle.
+csv_sur = csvsafe.csv_sur
 
 STYLE = """
 body { font-family: 'Inter', 'Segoe UI', sans-serif; margin: 40px; color: #1e293b; }
@@ -73,9 +80,12 @@ def export_eleves_csv(eleves):
         writer.writerow(["Matricule", "Nom", "Prenom", "Sexe", "Date Naissance",
                          "Classe", "Contact Tuteur", "Statut"])
         for e in eleves:
-            writer.writerow([e["matricule"], e["nom"], e["prenom"], e["sexe"],
-                             e["date_naissance"], e["classe_nom"] or "-",
-                             e["tuteur_tel"] or "-", e["statut"]])
+            writer.writerow([csv_sur(e["matricule"]), csv_sur(e["nom"]),
+                             csv_sur(e["prenom"]), csv_sur(e["sexe"]),
+                             csv_sur(e["date_naissance"]),
+                             csv_sur(e["classe_nom"] or "-"),
+                             csv_sur(e["tuteur_tel"] or "-"),
+                             csv_sur(e["statut"])])
     _open_in_browser(path)
 
 def bulletins(classe_id, periode):

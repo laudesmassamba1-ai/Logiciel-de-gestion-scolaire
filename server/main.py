@@ -327,25 +327,30 @@ def get_eleve_par_son_nom(recherche: Optional[str]=None, recherche1: Optional[st
     # ignores (avant : prenom like None renvoyait des resultats faux).
     conditions, params = [], []
     if recherche:
-        conditions.append("eleve.nom LIKE %s")
+        # LOWER() : la recherche serveur est insensible a la casse (les
+        # accents restent compares tels quels, cote serveur la colonne
+        # « nom » n'a pas de version normalisee).
+        conditions.append("LOWER(eleve.nom) LIKE LOWER(%s)")
         params.append(f"%{recherche}%")
     if recherche1:
-        conditions.append("eleve.prenom LIKE %s")
+        conditions.append("LOWER(eleve.prenom) LIKE LOWER(%s)")
         params.append(f"%{recherche1}%")
     sql = """select eleve.id, nom, prenom, sexe, classe.classe AS classe,
              date_naissance, lieu_naissance, eleve.adresse AS adresse,
              eleve.nom_parent AS nom_parent, redoublant, eleve.statut AS statut,
              numero_parent
              from eleve, inscription, classe
-             where inscription.eleve_id=eleve.id and inscription.classe_id=classe.id"""
+             where inscription.eleve_id=eleve.id and inscription.classe_id=classe.id
+             and eleve.est_supprime = 0"""
     if conditions:
         sql += " and " + " and ".join(conditions)
     cursor.execute(sql, tuple(params))
 
     eleve = cursor.fetchall()
 
-    if eleve is None:
-        raise HTTPException(status_code=404, detail="Élève non trouvé")
+    # Comportement conserve : 200 + liste vide si rien ne correspond
+    # (l'ancien « if eleve is None » etait du code mort, fetchall renvoyant
+    # toujours une liste).
 
     cursor.close()
     conn.close()
@@ -654,7 +659,8 @@ def get_parents_par_classe(classe_name: str):
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT nom, prenom, nom_parent, numero_parent, classe FROM eleve, classe, inscription 
-        WHERE inscription.classe_id = classe.id and inscription.eleve_id=eleve.id AND classe.classe LIKE %s
+        WHERE inscription.classe_id = classe.id and inscription.eleve_id=eleve.id
+        AND classe.classe LIKE %s AND eleve.est_supprime = 0
     """, (f"{classe_name}",))
     parents = cursor.fetchall()
     return {"parents": parents}

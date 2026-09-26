@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from database import db
 from repositories.base import RepositoryBase, _gen_reference
+from services.csvsafe import csv_sur
 
 
 def _canoniser_mode(mode):
@@ -112,9 +113,13 @@ class FinanceRepository(RepositoryBase):
             writer = csv.writer(fh, delimiter=";")
             writer.writerow(["Date", "Reference", "Beneficiaire", "Motif", "Categorie", "Type", "Montant", "Mode", "Annee"])
             for r in rows:
-                writer.writerow([r["date"], r["reference"], r["beneficiaire"], r["motif"],
-                                 r["categorie"], r["type"], r["montant"], r["mode_reglement"],
-                                 r.get("annee_scolaire") or "-"])
+                # csv_sur : le beneficiaire / le motif viennent de saisies
+                # utilisateur, un « =... » deviendrait une formule Excel.
+                writer.writerow([csv_sur(r["date"]), csv_sur(r["reference"]),
+                                 csv_sur(r["beneficiaire"]), csv_sur(r["motif"]),
+                                 csv_sur(r["categorie"]), csv_sur(r["type"]),
+                                 r["montant"], csv_sur(r["mode_reglement"]),
+                                 csv_sur(r.get("annee_scolaire") or "-")])
 
 
     def tarifs(self, classe_id=None):
