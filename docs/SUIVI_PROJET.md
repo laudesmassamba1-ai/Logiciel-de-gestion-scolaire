@@ -3393,3 +3393,59 @@ Remis à l'utilisateur dans la conversation OpenCode (session QA, branche `ci/re
   - `GestionScolaire.exe` (15 Mo, onefile) — `22ccb0be82101861e493f4a9485f17e3c863ef52cd77e6c92e93b7c06dd3d34c`
   - Copies locales : `~/Téléchargements/Gestion_Scolaire_1.6.3/`. Installation sur le poste NON faite (consigne utilisateur).
 - Rappel : le vérificateur de mises à jour de l'app (1.6.2 installée) consultant les releases GitHub, il proposera désormais la 1.6.3 aux postes connectés à Internet — la mise à jour du poste utilisateur peut passer par ce canal ou par un `sudo dpkg -i` manuel.
+
+---
+
+## Session XXXVIII — Version 1.6.4 : mises à jour fiabilisées, Charo web + auto-apprentissage, audit et correctifs « Élèves »
+- **Demande utilisateur** : « les mises à jour ne s'installent pas », puis « Charo doit répondre même sans clé API » et « qu'elle apprenne des questions fréquentes », enfin « fais un audit de la section Élèves et règle tout — bugs d'abord ».
+
+### 1. Mises à jour distantes (commits `003f03c`, `1545e63`)
+- **Timeouts** : `ReadTimeout 90s` trop court pour les gros paquets (connexions lentes) → délais distincts (`connexion 30s` / `lecture 900s`) + message d'erreur convivial.
+- **Installation Linux bloquée** : une `QSystemTrayIcon` empêchait Qt de quitter après `close()` → le script `pgrep` restait bloqué et l'installation ne se déclenchait jamais. Fermeture forcée de l'application avant installation.
+
+### 2. Charo — recherche web sans clé API (commit `e8ca659`)
+- **Nouveau module** `services/ia/webrecherche.py` : recherche DuckDuckGo (HTML) + repli Wikipédia FR, **100 % stdlib `urllib`** (aucune dépendance, aucune clé), timeouts 6 s / 4 sondes, cache de disponibilité 30 s, classes `Resultat` / `formater()`.
+- **Intégration** : `traiter()` interroge le web **entre** la base locale et le LLM (`_essayer_web`) — l'ordre reste local-first (la base de gestion prime), le web ne sert que pour les questions hors périmètre métier. Garde-fous : question de 12 à 200 caractères, réseau disponible, `RechercheWeb.disponible()`.
+- **Choix utilisateur** : « Apprendre cette réponse » (mémorisation) ou « Posez-moi autre chose » (reformulation) ; attributs `_last_llm_reponse` / `_llm_question_originale` pour l'apprentissage.
+- **Correctif** : `_essayer_explication` utilisait `_contexte_conversation[-1]` (une **réponse**) comme question → `_derniere_question_brute`.
+- **Tests** : `tests/test_webrecherche.py` (8) + `TestRechercheWeb` (2) ; `conftest.py` neutralise `RechercheWeb.disponible` hors `test_webrecherche` / `test_llm_backend`. Suite IA : **146 passed** (dont `test_apprentissage` 33).
+
+### 3. Charo — auto-apprentissage des questions fréquentes (commit `e8ca659`)
+- `_COOLDOWN_ENTRAINEMENT = 600 s` (10 min) entre deux apprentissages automatiques.
+- `_apprendre_questions_frequentes()` : au moins **3 fois** la même paire question/réponse, filtre des réponses de secours (`_est_bonne_reponse`), score 0.6, source `auto`, jamais d.double apprentissage d'une question déjà en mémoire.
+- Métrique `auto_apprentissages` dans `statistiques()` ; `ameliorer()` expose la clé `appris` (0 pendant le cooldown).
+
+### 4. Audit « Élèves » et correctifs — lot 1 : structure et synchronisation (commit `2ad32de`)
+- **C1 (critique)** : supprimer une classe (`server/compat.py::_supprimer_classe`) **détruisait les inscriptions avant d'archiver les élèves** → l'`UPDATE eleve SET est_supprime` ne marquait plus personne (sous-requête vide). Archivage **avant** le `DELETE FROM inscription`. Test de régression dedicated.
+- **C3** : `services/sync_service.py` — le miroir des tarifs était **destructeur** (un tarif absent localement était supprimé côté serveur) : miroir neutralisé.
+- **C4** : seuls les types de frais **inscription / scolarité / pension** sont synchronisables (`_type_frais_synchro`) ; les tarifs annexes (cantine, transport, tenue) sont consommés localement sans file infinie — nouvelle action `done` comprise par `api/mapping.py::remap`, `repositories/base.py::_route_write` et `api/sync_worker.py::vider_file_attente` (6 tests `tests/test_mapping_tarifs.py`).
+- **M1** : la page Élèves affichait **tous les paiements de la base** au lieu de ceux de l'élève (`repos.paiements()` accepte désormais `eleve_id`, 3 appels corrigés).
+- **M2** : `solde_eleve()` calculé sur l'**année scolaire active** (survol + fiche) au lieu de « la dernière ».
+- **M5** : « + Nouvel Élève », « Exporter CSV/PDF » étaient reconstruits à chaque `fill()` (donc supprimés au rafraîchissement) → créés une seule fois.
+- **M16** : création d'élève — date de naissance par défaut **2012-09-01** (et non la date du jour) + `setMaximumDate(aujourd'hui)`.
+- **M17** : `_route_write` envoyait au serveur **avant** l'écriture locale : si l'insertion locale échouait, un élève restait **orphelin côté serveur**. Inversion : **écriture locale d'abord, envoi ensuite** (donc plus d'envoi ni de file si l'insertion échoue).
+
+### 5. Audit « Élèves » et correctifs — lot 2 : les 3 critiques restantes (commit `7f90c7e`)
+- **Matricule (critique)** : le serveur ignore le matricule (colonne absente de son schéma) et chaque poste génère `ELEV{année}{MAX+1}` **en local** → deux postes produisent le même numéro, le `INSERT` local viole `matricule UNIQUE` sans rattrapage (traceback PyQt). `add_eleve` **régénère le matricule et retente** (5 essais max) ; aucun envoi serveur si l'insertion échoue (garanti par M17). 2 tests `tests/test_eleve_repository.py`.
+- **Élève orphelin (critique)** : `POST /eleve` sans classe créait un élève **invisible de toutes les routes de lecture** (toutes les lectures jointent `inscription`/`classe`). Le serveur refuse maintenant **400 avant l'insertion** ; le poste garde l'opération en file et la rejoue au prochain drain. Test `test_post_eleve_sans_classe_refuse_400`.
+- **Trou de caisse (critique)** : l'encaissement saisi dans la fiche Élèves créait une écriture de caisse **sans paiement** (`paiement_id` NULL) → le montant n'était **jamais imputé** sur le compte de l'élève. Passage par `repos.add_paiement()` (paiement + écriture liée dans la **même transaction**), référence du reçu relue après coup.
+- **M16 complété** : la borne « pas de naissance future » s'applique aussi à la **création** (elle était dans la seule branche édition).
+
+### 6. Vérifications
+- `py_compile` OK sur tous les fichiers touchés ; `pyflakes` : uniquement des imports préexistants inutilisés.
+- Régression ciblée à chaque lot : `server/test_compat.py` (37), `tests/test_eleve_repository.py` (2), `tests/test_sync_convergence.py`, `tests/test_coherence.py`, `tests/test_rapport_bugs.py`, `tests/test_mapping_tarifs.py`, `tests/test_auth.py` → **100 passed**.
+- Rappel d'environnement : la suite complète `pytest tests/ server/ -q` crashe en **headless** (extensions PyQt5) → exécution **par fichier**.
+
+### 7. Livraison 1.6.4
+- Release **`v1.6.4`** publiée (run `build.yml` **36157026513** SUCCESS) : `gestion-scolaire_1.6.4_amd64.deb`, `GestionScolaire-1.6.4.AppImage`, `GestionScolaire-Portable-1.6.4.zip`, `GestionScolaire-Setup-1.6.4.exe`.
+- **Onefile Windows** ajouté ensuite (run `build_windows.yml` **36142170251** SUCCESS) : `GestionScolaire.exe` (15 Mo) uploadé sur la release → **5 assets**.
+
+### 8. Chantiers « Élèves » restants (recensés, non traités — pour la prochaine session)
+**Majeurs** : (a) `RoleAuthorizer` jamais interrogé sur la page Élèves (seule page de liste sans garde `can_edit`) — fail-open pour tout rôle futur ; (b) **tombstone contourné** : `/eleve_recherche`, `/parents_par_classe` et `/eleve-syndication` ne filtrent pas `est_supprime` (un élève archivé reste modifiable/payable) ; (c) **pas d'archive locale ni d'UI « élèves archivés »** (suppression dure sur le poste) ; (d) **tombstones notes/paiements/présences jamais posés** côté serveur → une suppression sur un poste **reste sur tous les autres** à jamais ; (e) **édition bloquée** d'un élève sans classe (`findData` = −1 ⇒ enregistrement refusé) ; (f) paiement rattaché à la **dernière inscription** (année précédente) côté serveur.
+**Moyens** : recherche sans repliement casse/acents (`KONE` ne trouve pas `KONÉ`) ; validations minimales (nom vide → `"-"` côté serveur, matricule non validé) ; **capacité de classe jamais vérifiée** à l'inscription ; vocabulaire `statut` serveur (`actif`/`exclu`/`inactif`) ≠ vocabulaire UI (`Inscrit`/`Pre-inscrit`) → élève rapatrié invisible sous tous les filtres ; pas de neutralisation des formules (`=`, `+`, `@`) dans l'export CSV ; année scolaire perdue côté serveur sur les écritures de caisse.
+**Mineurs** : KPI de la page ignorant la recherche et le filtre de statut ; `next_matricule()` appelé deux fois (matricule affiché ≠ enregistré à la limite) ; page ouverte filtrée sur la première classe au lieu de « Toutes les classes » ; `DELETE /eleve/{id}` renvoie 200 même si l'élève n'existe pas ; champ vidé côté poste (`""`) réécrit `"-"` côté serveur.
+**Accepté (documenté)** : aucune autorisation sur les routes élève du serveur (le code école est un identifiant, pas un secret — voir §sureté).
+
+### 9. Reste du programme
+1. **v2 Charo** : script d'évolution **sans téléchargement de modèle lourd** (pas de llama-cpp / Ollama / Qwen) — branché sur le moteur local existant.
+2. Release **1.6.5** (bugs + IA) puis fusion de `fix/updater-timeout` vers `main` (main est toujours en 1.5.0).
