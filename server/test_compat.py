@@ -227,6 +227,21 @@ def test_post_eleve_forme_enveloppee_avec_paiement(client):
     assert insertions_paiement
 
 
+def test_post_eleve_sans_classe_refuse_400(client):
+    """C2 : un eleve cree sans classe est invisible de toutes les routes de
+    lecture (jointures inscription/classe). Le serveur refuse donc la creation
+    : le poste garde l'operation en file et la rejouera apres resolution."""
+    c, conn = client
+    r = c.post("/eleve", json={
+        "nom": "ORPHELIN", "prenom": "Ali", "sexe": "M",
+        "statut": "Inscrit", "uuid_client": "u-orphan"})
+    assert r.status_code == 400, r.text
+    assert "Classe non renseignee" in r.json()["detail"]
+    insertions_eleve = [s for s, _ in conn.curseur_obj.historique
+                        if "INSERT INTO eleve" in s]
+    assert not insertions_eleve
+
+
 def test_put_modifier_eleve_champs_bureau_uniquement(client):
     c, conn = client
     r = c.put("/modifierEleve/5", json={"pere_nom": "Nouveau pere",

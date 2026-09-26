@@ -1143,6 +1143,10 @@ def open_inscription_dialog(parent, ctx, eleve=None):
         input_reins.setEnabled(is_reins)
         btn_reins.setEnabled(is_reins)
 
+    # M16 : quelle que soit la branche (creation, reinscription, edition),
+    # une naissance future fausserait l'age, les moyennes et les bulletins.
+    dlg.date_naissance.setMaximumDate(QDate.currentDate())
+
     if eleve:
         dlg.setWindowTitle(f"Modifier - {eleve['prenom']} {eleve['nom']}")
         dlg.radio_new.setChecked(eleve["statut"] != "Pre-inscrit")
@@ -1160,7 +1164,6 @@ def open_inscription_dialog(parent, ctx, eleve=None):
             # aujourd'hui » fausserait age, moyennes et bulletins). Une
             # date d'age scolaire est proposee, modifiable par l'utilisateur.
             dlg.date_naissance.setDate(QDate(2012, 9, 1))
-        dlg.date_naissance.setMaximumDate(QDate.currentDate())
         dlg.input_lieu_naiss.setText(eleve["lieu_naissance"] or "")
         dlg.input_ecole_provenance.setText(eleve["ecole_provenance"] or "")
         dlg.input_pere_nom.setText(eleve["pere_nom"] or "")
@@ -1200,6 +1203,10 @@ def open_inscription_dialog(parent, ctx, eleve=None):
     dlg.radio_reins.toggled.connect(lambda _: on_radio())
     on_radio()
     update_matricule()
+    # M16 : a la creation, propose une date d'age scolaire (et non la date
+    # du jour donnee par defaut par le .ui), toujours modifiable.
+    if not eleve and not reins_source["eleve"]:
+        dlg.date_naissance.setDate(QDate(2012, 9, 1))
 
 
     def save():
@@ -1272,15 +1279,28 @@ def open_inscription_dialog(parent, ctx, eleve=None):
         else:
             data["photo"] = photo_state["nom"] or ""
 
-        def _encaisser_si_montant(matricule):
+        def _encaisser_si_montant(eleve_id, matricule):
             montant = _parse_money(dlg.input_montant_verse.text())
             if not montant or montant <= 0:
                 return
             mode = dlg.combo_mode_reglement.currentText().split(":")[-1].strip()
-            reference = repos.add_transaction(
-                "entree", montant, "Droits de scolarite - inscription",
-                "Inscription", f"{prenom} {nom}",
-                mode if mode and mode != "Especes" else "Especes")
+            mode = mode if mode and mode != "Especes" else "Especes"
+            try:
+                paiement_id = repos.add_paiement(
+                    eleve_id, montant, mode, "Inscription",
+                    (repos.annee_scolaire_active()
+                     if hasattr(repos, "annee_scolaire_active") else ""),
+                    "")
+            except Exception as e:
+                QMessageBox.warning(
+                    dlg, "Paiement",
+                    f"Impossible d'enregistrer le paiement :\n{e}")
+                return
+            from database import db
+            ref_row = db.query_one(
+                "SELECT reference FROM transactions WHERE paiement_id = ?",
+                (paiement_id,))
+            reference = ref_row["reference"] if ref_row else f"REC-{paiement_id}"
             from ui.pages.helpers import confirmer
             if confirmer(
                     dlg,
@@ -1299,12 +1319,12 @@ def open_inscription_dialog(parent, ctx, eleve=None):
         elif source:
             # Reinscription : mise a jour du dossier EXISTANT (pas de doublon)
             repos.update_eleve(source["id"], data)
-            _encaisser_si_montant(source["matricule"])
+            _encaisser_si_montant(source["id"], source["matricule"])
             toast.succes(dlg,
                          f"{prenom} {nom} reinscrit. Matricule : {source['matricule']}")
         else:
             new_id = repos.add_eleve(data)
-            _encaisser_si_montant(data["matricule"])
+            _encaisser_si_montant(new_id, data.get("matricule") or "")
             if not (dlg.input_montant_verse.text() or "").strip() or \
                     _parse_money(dlg.input_montant_verse.text()) <= 0:
                 toast.succes(dlg, f"Eleve inscrit. Matricule : {data['matricule']}")

@@ -1,4 +1,5 @@
 
+import sqlite3
 import uuid as _uuid
 from database import db
 from repositories.base import RepositoryBase
@@ -31,8 +32,6 @@ class EleveRepository(RepositoryBase):
         return db.query_one("SELECT * FROM eleves WHERE matricule = ?", (matricule,))
 
     def add_eleve(self, data):
-        if not data.get("matricule"):
-            data["matricule"] = self.next_matricule()
         data = dict(data)
         data.setdefault("check_acte", 0)
         data.setdefault("check_photos", 0)
@@ -49,13 +48,29 @@ class EleveRepository(RepositoryBase):
             "photo",
         ]
         sql = "INSERT INTO eleves (" + ", ".join(cols) + ") VALUES (" + ", ".join("?" for _ in cols) + ")"
-        payload = dict(data)
-        payload.pop("photo", None)
         classe_nom = self._classe_nom(data.get("classe_id"))
-        if classe_nom:
-            payload["classe_nom"] = classe_nom
-        return self._route_write("POST", "/eleve", payload,
-                                 db.execute, sql, tuple(data.get(c) for c in cols))
+        # Le matricule est genere par MAX+1 sur la base LOCALE : deux postes
+        # peuvent produire le meme numero (la sync deduplique par uuid_client,
+        # pas par matricule). Si INSERT heurte la contrainte UNIQUE localement,
+        # on regenere un numero et on retente (avant tout envoi serveur :
+        # _route_write ecrit d'abord, donc un echec remonte sans envoi).
+        for _ in range(5):
+            if not data.get("matricule"):
+                data["matricule"] = self.next_matricule()
+            payload = dict(data)
+            payload.pop("photo", None)
+            if classe_nom:
+                payload["classe_nom"] = classe_nom
+            try:
+                return self._route_write("POST", "/eleve", payload,
+                                         db.execute, sql,
+                                         tuple(data.get(c) for c in cols))
+            except sqlite3.IntegrityError as exc:
+                if "matricule" not in str(exc):
+                    raise
+                data["matricule"] = None
+        raise sqlite3.IntegrityError(
+            "impossible de generer un matricule unique (5 essais)")
 
     def update_eleve(self, eleve_id, data):
         data = dict(data)

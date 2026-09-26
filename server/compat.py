@@ -394,6 +394,21 @@ def _creer_eleve_complet(payload_brut: dict):
                 return {"message": "Élève déjà enregistré (synchronisé)",
                         "eleve_id": existant[0]}
 
+        # C2 : sans classe, l'eleve serait invisible de toutes les routes de
+        # lecture (jointures inscription/classe). On refuse AVANT l'insertion
+        # plutot que de creer un orphelin : le poste garde l'operation en file
+        # et la rejouera au prochain drain une fois la classe resolue.
+        if classe_id is None:
+            conn.commit()
+            if brut_paiement:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Paiement ignore : classe non renseignee pour l'inscription")
+            raise HTTPException(
+                status_code=400,
+                detail="Classe non renseignee : eleve refuse (inscription impossible). "
+                       "La synchronisation retentera automatiquement.")
+
         curseur.execute(
             """INSERT INTO eleve (nom, prenom, sexe, date_naissance, lieu_naissance,
                adresse, nom_parent, redoublant, statut, numero_parent, uuid_client)
@@ -405,36 +420,30 @@ def _creer_eleve_complet(payload_brut: dict):
         eleve_id = curseur.lastrowid
 
         inscription_id = None
-        if classe_id is not None:
-            annee_id = _annee_scolaire_active(curseur)
-            if annee_id:
-                curseur.execute(
-                    "INSERT INTO inscription (eleve_id, classe_id, annee_scolaire_id)"
-                    " VALUES (%s, %s, %s)", (eleve_id, classe_id, annee_id))
-                inscription_id = curseur.lastrowid
+        annee_id = _annee_scolaire_active(curseur)
+        if annee_id:
+            curseur.execute(
+                "INSERT INTO inscription (eleve_id, classe_id, annee_scolaire_id)"
+                " VALUES (%s, %s, %s)", (eleve_id, classe_id, annee_id))
+            inscription_id = curseur.lastrowid
 
-                if brut_paiement:
-                    curseur.execute(
-                        """INSERT INTO paiement (inscription_id, type_frais, montant,
-                           mode_paiement, trimestre, mois, uuid_client)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                        (inscription_id,
-                         _type_frais(brut_paiement.get("type_frais")),
-                         _safe_float(brut_paiement.get("montant")),
-                         _mode_paiement(brut_paiement.get("mode_paiement")),
-                         _trimestre(brut_paiement.get("trimestre")),
-                         _chaine(brut_paiement.get("mois")) or None,
-                         _chaine(brut_paiement.get("uuid_client")) or None))
-            elif brut_paiement:
-                conn.commit()
-                raise HTTPException(
-                    status_code=409,
-                    detail="Paiement ignore : aucune annee scolaire active pour l'inscription")
+            if brut_paiement:
+                curseur.execute(
+                    """INSERT INTO paiement (inscription_id, type_frais, montant,
+                       mode_paiement, trimestre, mois, uuid_client)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (inscription_id,
+                     _type_frais(brut_paiement.get("type_frais")),
+                     _safe_float(brut_paiement.get("montant")),
+                     _mode_paiement(brut_paiement.get("mode_paiement")),
+                     _trimestre(brut_paiement.get("trimestre")),
+                     _chaine(brut_paiement.get("mois")) or None,
+                     _chaine(brut_paiement.get("uuid_client")) or None))
         elif brut_paiement:
             conn.commit()
             raise HTTPException(
                 status_code=409,
-                detail="Paiement ignore : classe non renseignee pour l'inscription")
+                detail="Paiement ignore : aucune annee scolaire active pour l'inscription")
 
         conn.commit()
         reponse = {"message": "Élève enregistré avec succès", "eleve_id": eleve_id}
