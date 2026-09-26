@@ -342,7 +342,7 @@ def eleves(page, ctx):
         from services import pdf_export
         try:
             # Récupérer le dernier paiement pour générer le reçu
-            paiements = repos.paiements(nom=eleve['nom'], prenom=eleve['prenom'])
+            paiements = repos.paiements(eleve_id=eleve['id'])
             if not paiements:
                 toast.info(dlg, "Aucun paiement trouvé pour générer un reçu.")
                 return
@@ -376,7 +376,7 @@ def eleves(page, ctx):
             parts.append(f"<span style='color: {C_TEXT_SECONDARY};'>Classe : {eleve['classe_nom']}</span>")
         
         # Dernier paiement
-        paiements = repos.paiements(nom=eleve['nom'], prenom=eleve['prenom']) if hasattr(repos, 'paiements') else []
+        paiements = repos.paiements(eleve_id=eleve['id']) if hasattr(repos, 'paiements') else []
         if paiements:
             dernier = max(paiements, key=lambda p: (p.get('date_paiement', ''), p.get('id', 0)))
             montant = float(dernier.get('montant', 0) or 0)
@@ -385,8 +385,11 @@ def eleves(page, ctx):
         else:
             parts.append(f"<span style='color: {C_TEXT_SECONDARY};'>Aucun paiement</span>")
         
-        # Solde
-        solde_info = repos.solde_eleve(eleve["id"]) if hasattr(repos, 'solde_eleve') else {"solde": 0}
+        # Solde (année scolaire active : un solde « toutes années » mélangerait
+        # les tarifs de l'année précédente avec les versements cumulés)
+        _annee = repos.annee_scolaire_active() if hasattr(repos, 'annee_scolaire_active') else None
+        _annee_lib = _annee.get('libelle', '') if _annee else ''
+        solde_info = repos.solde_eleve(eleve["id"], _annee_lib) if hasattr(repos, 'solde_eleve') else {"solde": 0}
         solde = float(solde_info.get('solde', 0) or 0)
         color_solde = C_GREEN if solde <= 0 else C_RED
         parts.append(f"<span style='color: {color_solde};'>Solde : {solde:+,.0f} FCFA</span>")
@@ -817,7 +820,7 @@ def eleves(page, ctx):
         
         def charger_paiements():
             table.setRowCount(0)
-            paiements = repos.paiements(nom=eleve['nom'], prenom=eleve['prenom'])
+            paiements = repos.paiements(eleve_id=eleve['id'])
             total = 0
             for p in paiements:
                 total += float(p.get('montant', 0) or 0)
@@ -830,8 +833,10 @@ def eleves(page, ctx):
                 table.setItem(row, 4, QTableWidgetItem(p.get('trimestre', '') or ''))
                 table.setItem(row, 5, QTableWidgetItem(p.get('mois', '') or ''))
             
-            # Solde
-            solde_info = repos.solde_eleve(eleve["id"]) if hasattr(repos, 'solde_eleve') else {"attendu": 0, "paye": 0, "solde": 0}
+            # Solde (année scolaire active)
+            _annee = repos.annee_scolaire_active() if hasattr(repos, 'annee_scolaire_active') else None
+            _annee_lib = _annee.get('libelle', '') if _annee else ''
+            solde_info = repos.solde_eleve(eleve["id"], _annee_lib) if hasattr(repos, 'solde_eleve') else {"attendu": 0, "paye": 0, "solde": 0}
             lbl_attendu.setText(f"Attendu : {fmt_money(solde_info.get('attendu', 0))}")
             lbl_paye.setText(f"Payé : {fmt_money(solde_info.get('paye', 0))}")
             lbl_solde.setText(f"Solde : {fmt_money(solde_info.get('solde', 0))}")
@@ -891,31 +896,6 @@ def eleves(page, ctx):
         kpi[2].set_value(len([e for e in eleves_all if e["statut"] == "Inscrit"]))
         kpi[3].set_value(len([e for e in eleves_all if e["statut"] == "Inactif"]))
 
-        btn_add = _btn("+ Nouvel Eleve", lambda: _ouvrir_inscription(), STYLE_BTN_PRIMARY)
-    tpl.header.ajouter_action(btn_add)
-    btn_export = _btn("Exporter CSV",
-                      lambda: reports.export_eleves_csv(getattr(page, "_rows", [])),
-                      STYLE_BTN_SECONDARY)
-    tpl.header.ajouter_action(btn_export)
-    btn_pdf = _btn("Exporter PDF",
-                   lambda: _exporter_pdf(), STYLE_BTN_SECONDARY)
-    tpl.header.ajouter_action(btn_pdf)
-
-    def _exporter_pdf():
-        from services import rapports
-        rows = getattr(page, "_rows", [])
-        lignes = [[e["matricule"], f"{e['prenom']} {e['nom']}",
-                   e["classe_nom"] or "-", e["sexe"] or "-",
-                   e["date_naissance"] or "-", e["tuteur_tel"] or "-",
-                   e["statut"]] for e in rows]
-        if not rapports.export_table_pdf(
-                "Liste des eleves",
-                f"Filtres actuels - le {rapports._date_pdf()}",
-                ["Matricule", "Nom complet", "Classe", "Sexe", "Naissance",
-                 "Tel tuteur", "Statut"], lignes,
-                "rapport_liste_eleves.pdf"):
-            toast.info(page, "Rien a exporter : aucun eleve dans ce filtre.")
-
     def populate_class_combo():
         combo_classe.clear()
         combo_classe.addItem("Toutes les classes", None)
@@ -939,6 +919,31 @@ def eleves(page, ctx):
 
     fill()
     page.refresh = fill
+
+    def _exporter_pdf():
+        from services import rapports
+        rows = getattr(page, "_rows", [])
+        lignes = [[e["matricule"], f"{e['prenom']} {e['nom']}",
+                   e["classe_nom"] or "-", e["sexe"] or "-",
+                   e["date_naissance"] or "-", e["tuteur_tel"] or "-",
+                   e["statut"]] for e in rows]
+        if not rapports.export_table_pdf(
+                "Liste des eleves",
+                f"Filtres actuels - le {rapports._date_pdf()}",
+                ["Matricule", "Nom complet", "Classe", "Sexe", "Naissance",
+                 "Tel tuteur", "Statut"], lignes,
+                "rapport_liste_eleves.pdf"):
+            toast.info(page, "Rien a exporter : aucun eleve dans ce filtre.")
+
+    btn_add = _btn("+ Nouvel Eleve", lambda: _ouvrir_inscription(), STYLE_BTN_PRIMARY)
+    tpl.header.ajouter_action(btn_add)
+    btn_export = _btn("Exporter CSV",
+                      lambda: reports.export_eleves_csv(getattr(page, "_rows", [])),
+                      STYLE_BTN_SECONDARY)
+    tpl.header.ajouter_action(btn_export)
+    btn_pdf = _btn("Exporter PDF",
+                   lambda: _exporter_pdf(), STYLE_BTN_SECONDARY)
+    tpl.header.ajouter_action(btn_pdf)
 
 
 def open_inscription_dialog(parent, ctx, eleve=None):
@@ -1150,6 +1155,12 @@ def open_inscription_dialog(parent, ctx, eleve=None):
             dlg.combo_sexe.setCurrentIndex(idx)
         if eleve["date_naissance"]:
             dlg.date_naissance.setDate(QDate.fromString(eleve["date_naissance"], "yyyy-MM-dd"))
+        else:
+            # Creation : jamais la date du jour (un eleve « ne a
+            # aujourd'hui » fausserait age, moyennes et bulletins). Une
+            # date d'age scolaire est proposee, modifiable par l'utilisateur.
+            dlg.date_naissance.setDate(QDate(2012, 9, 1))
+        dlg.date_naissance.setMaximumDate(QDate.currentDate())
         dlg.input_lieu_naiss.setText(eleve["lieu_naissance"] or "")
         dlg.input_ecole_provenance.setText(eleve["ecole_provenance"] or "")
         dlg.input_pere_nom.setText(eleve["pere_nom"] or "")

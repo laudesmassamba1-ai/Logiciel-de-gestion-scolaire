@@ -161,6 +161,19 @@ def _type_frais_role(type_frais):
         else "Scolarite"
 
 
+def _type_frais_synchro(type_frais):
+    """Seuls Inscription et Scolarite sont representables cote serveur.
+
+    Les types annexes (Cantine, Transport, Tenues, Autres...) n'existent
+    pas dans la base serveur : les pousser ecrasait le montant_pension
+    (bug C4). Ils sont donc geres strictement en local tant que le
+    serveur n'expose pas type_frais."""
+    if not type_frais:
+        return True
+    return str(type_frais).strip().casefold() in (
+        "inscription", "scolarite", "scolarité", "pension")
+
+
 def _tarif_id(classe_nom, type_frais, annee_scolaire):
     if not classe_nom:
         return None
@@ -337,6 +350,13 @@ def _remapper(method, endpoint, payload):
         return _remapper_transactionnel(method, endpoint, pl)
 
     # ---------- Obligatoire a re-placer : paiements / notes / presences ----
+    if method in ("POST", "PUT", "DELETE") and "tarifs-scolarite" in endpoint:
+        if not _type_frais_synchro(pl.get("type_frais")):
+            # Tarif annexe (Cantine, Transport...) : le serveur ne sait pas
+            # le representer. Consomme l'operation sans envoi (action done)
+            # pour ne pas ecraser montant_pension ni remplir la file.
+            return ("done",)
+
     if method == "POST" and endpoint == "/tarifs-scolarite":
         cid = _classe_id(_pop(pl, "classe_nom"))
         if cid is None:
@@ -466,4 +486,7 @@ def remap(method, endpoint, payload):
         return ("enqueue",)
     if resultat is None:
         return ("skip",)
+    if isinstance(resultat, tuple) and resultat and resultat[0] == "done":
+        # Operation insynchronisable (tarif annexe) : consommee localement.
+        return ("done",)
     return ("send", resultat[0], resultat[1])

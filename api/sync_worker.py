@@ -38,6 +38,11 @@ def vider_file_attente(interruption=None) -> int:
                 method, endpoint = row["method"], row["endpoint"]
                 from api import mapping
                 action = mapping.remap(method, endpoint, payload)
+                if action[0] == "done":
+                    # Operation insynchronisable (tarif annexe) : consideree
+                    # traitee localement, retiree sans envoi.
+                    db.mark_queue_done(row["id"])
+                    continue
                 if action[0] == "skip":
                     continue
                 if action[0] == "enqueue":

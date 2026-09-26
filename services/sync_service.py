@@ -353,33 +353,13 @@ def pull_structure():
                         """INSERT INTO tarifs (classe_id, type_frais, montant, annee_scolaire)
                            VALUES (?, ?, ?, ?)""",
                         (classe_id, type_frais, montant, annee))
-            # Mirroir : retirer les tarifs locaux absents du serveur — sauf
-            # ceux qui ont une operation PENDING dans la file (crees
-            # hors-ligne, encore non pousses) et sauf si le pull a echoue.
-            pends_pairs = set()
-            try:
-                for r in db.query(
-                        "SELECT payload FROM file_attente_synchro WHERE status = 'PENDING'"):
-                    import json as _json
-                    try:
-                        p = _json.loads(r["payload"])
-                    except (ValueError, TypeError):
-                        continue
-                    if isinstance(p, dict):
-                        p_classe = (_champ(p, "classe_nom", "classe") or "")
-                        if p_classe == classe_nom:
-                            pends_pairs.add((
-                                _champ(p, "type_frais"),
-                                _champ(p, "annee_scolaire") or ""))
-            except Exception:
-                pends_pairs = set()
-            pour_supprimer = [
-                cle for cle, tid in existants.items()
-                if cle not in entrees and cle not in pends_pairs]
-            if not resultat["erreurs"]:
-                for cle in pour_supprimer:
-                    db.execute("DELETE FROM tarifs WHERE id = ?",
-                               (existants[cle],))
+            # PAS DE MIROIR DESTRUCTEUR : le serveur ne sait representer que
+            # pension/inscription (pas de type_frais). Supprimer les tarifs
+            # locaux absents du serveur effacerait a chaque sync les types
+            # annexes (Cantine, Transport, Tenues...) — perte de donnees
+            # reelle pour toutes les classes. Les tarifs locaux sont donc
+            # conserves ; une suppression volontaire sera possible quand le
+            # serveur exposera type_frais.
             resultat["tarifs"] += len(entrees)
     except Exception as exc:
         resultat["erreurs"].append(f"tarifs: {exc}")

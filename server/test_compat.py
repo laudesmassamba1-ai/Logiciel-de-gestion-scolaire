@@ -253,6 +253,21 @@ def test_supprimer_classe_par_id_et_par_nom(client):
     assert c.delete("/supprimerClasse/inconnue").status_code == 404
 
 
+def test_supprimer_classe_archive_eleves_avant_les_inscriptions(client):
+    """Regression C1 : l'UPDATE est_supprime doit precéder le DELETE des
+    inscriptions, sinon les eleves de la classe restent actifs sans
+    inscription et deviennent invisibles sur tous les postes."""
+    c, conn = client
+    conn.curseur_obj.historique = []
+    assert c.delete("/supprimerClasse/3").status_code == 200
+    ordre = [sql.strip().lower() for sql, _ in conn.curseur_obj.historique]
+    i_update = next(i for i, s in enumerate(ordre)
+                    if s.startswith("update eleve set est_supprime"))
+    i_delete = next(i for i, s in enumerate(ordre)
+                    if s.startswith("delete from inscription"))
+    assert i_update < i_delete
+
+
 def test_classe_cycle_validation(client):
     c, _ = client
     assert c.post("/classe", json={"nom": "Terminale C", "cycle_id": 1}).status_code == 200

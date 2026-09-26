@@ -168,13 +168,19 @@ class FinanceRepository(RepositoryBase):
 
 
     def paiements(self, classe_id=None, type_frais=None, annee_scolaire=None,
-                  mode=None, trimestre=None, nom=None, prenom=None):
+                  mode=None, trimestre=None, nom=None, prenom=None,
+                  eleve_id=None):
         sql = """SELECT p.*, e.nom, e.prenom, e.matricule, c.nom AS classe_nom
                  FROM paiements p
                  JOIN eleves e ON e.id = p.eleve_id
                  LEFT JOIN classes c ON c.id = e.classe_id
                  WHERE 1=1"""
         params = []
+        if eleve_id:
+            # Priorite a l'identifiant : evite de melanger les paiements de
+            # deux homonymes (nom + prenom ne suffisent pas).
+            sql += " AND e.id = ?"
+            params.append(eleve_id)
         if classe_id:
             sql += " AND e.classe_id = ?"
             params.append(classe_id)

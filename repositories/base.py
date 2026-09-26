@@ -34,6 +34,11 @@ class RepositoryBase:
         #   * « enqueue » -> resolution impossible maintenant : on met en
         #                    file, le drain reessaiera (vrai moyen de retry).
         server_sent = False
+        # ECRITURE LOCALE D'ABORD : si elle echoue, l'envoi serveur ne doit
+        # jamais avoir eu lieu (sinon un eleve reste orphelin cote serveur).
+        # L'interface relit la base locale pour afficher, le drain s'occupe
+        # de normaliser ulterieurement.
+        result = fn(*args, **kwargs)
         if network.sync_active() and network.is_online():
             from api import mapping
             action = mapping.remap(method, endpoint, payload)
@@ -52,9 +57,12 @@ class RepositoryBase:
                     self._enqueue(method, endpoint, payload)
             elif action[0] == "enqueue":
                 self._enqueue(method, endpoint, payload)
+            elif action[0] == "done":
+                # Operation insynchronisable (tarif annexe) : locale, ni
+                # envoi ni file.
+                pass
             elif action[0] == "skip":
                 self._enqueue(method, endpoint, payload)
-        result = fn(*args, **kwargs)
-        if not server_sent and network.sync_active() and not network.is_online():
+        elif network.sync_active() and not network.is_online():
             self._enqueue(method, endpoint, payload)
         return result

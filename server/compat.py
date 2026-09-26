@@ -614,11 +614,15 @@ def _supprimer_classe(ref: str):
         id_classe = ligne[0]
         curseur.execute("DELETE FROM programme WHERE classe_id = %s", (id_classe,))
         curseur.execute("DELETE FROM tarif_scolarite WHERE classe_id = %s", (id_classe,))
-        curseur.execute("DELETE FROM inscription WHERE classe_id = %s", (id_classe,))
-        curseur.execute("DELETE FROM planning WHERE classe_id = %s", (id_classe,))
+        # Archiver les eleves de la classe AVANT de supprimer les inscriptions :
+        # la sous-requete doit encore voir les lignes `inscription` pour marquer
+        # est_supprime. Sinon les eleves restent actifs cote serveur sans
+        # inscription et deviennent invisibles sur tous les postes.
         curseur.execute(
             "UPDATE eleve SET est_supprime = TRUE WHERE id IN "
             "(SELECT eleve_id FROM inscription WHERE classe_id = %s)", (id_classe,))
+        curseur.execute("DELETE FROM inscription WHERE classe_id = %s", (id_classe,))
+        curseur.execute("DELETE FROM planning WHERE classe_id = %s", (id_classe,))
         curseur.execute("DELETE FROM classe WHERE id = %s", (id_classe,))
         enregistrer_audit(curseur, None, "suppression_classe",
                           f"classe_id={id_classe} ref={ref}")
