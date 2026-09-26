@@ -42,15 +42,20 @@ Cartographie issue de l'audit du moteur (HEAD 1c7cb9a) :
 
 ## 3. Architecture cible v2 (5 piliers, toujours stdlib)
 
-### Pilier 1 — Moteur d'intentions déclaratif (« routeur » unifié)
+### Pilier 1 — Moteur d'intentions déclaratif (« routeur » unifié) — **livré (P1)**
 
 Un **registre déclaratif** remplace la cascade implicite, sans réécrire `traiter()`.
 
-- Nouveau module : `services/ia/intentions.py` (~250 l.)
-- Chaque intention : `Intent(nom, patterns, poids, handler, exemple, exige_donnees, sources)`
-- `resolver(question) -> (intention, score, slots)` : scoring = somme pondérée des patterns (mots-clés exacts `\b` via `_mot_present` existant, expressions régulières limited, synonymes) ; seuil global 0.45 ; départage en cas d'égalité par `poids` puis ordre d'écriture.
-- **Compatibilité** : `traiter()` garde son ordre actuel (local-first) ; `intentions.resolver` est appelé **en amont** du tuple `_q_*` et court-circuite uniquement les intentions qu'il sait traiter avec le même code. Les handlers métier existants sont **ré-enregistrés** (mapping intention → méthode existante), pas réécrits.
-- Sortie : `{"nom", "score", "slots", "handler"}` + journal `source="routeur"` (champ `source` de `_rep` déjà libre).
+- Module livré : `services/ia/intentions.py` (~330 l., stdlib + `ia/langue.py`)
+- Chaque intention : `Intention(nom, cles, mots, synonymes, expressions, poids, handler, exige_donnees, exemple)`
+- API : `RouteurIntentions.resoudre(question, seuil=0.45) -> (intention|None, score, classement)` et `.expliquer(question)` (trace lisible, réutilisée par les tests et le journal)
+- **Barème de scoring** (explicite, dans le module) : 1 clé → 0.60 · 2 clés ou plus → 0.80 · 2 mots d'appoint → 0.50 · 3 mots → 0.60 · 1 seul mot → 0.30 (sous le seuil, donc repli) · expression régulière → +0.25 ; le tout est multiplié par le poids puis borné à 1.0.
+- **Insensibilité** : la question est normalisée (minuscules, sans accents, espaces compactes) via `ia/langue.normaliser`, et les mots sont recherchés en mot entier (`\b`) — « moyenneponderee » ne déclenche pas « moyenne ».
+- **Seuil de confiance** (0.80) : au-dessus seulement, le routeur court-circuite l'ordre fixe ; en dessous, il ne tranche pas et l'ordre historique reste décisionnaire.
+- **Repli systématique** : si le handler choisi renvoie `None` (ou lève une exception), `traiter()` poursuit sur l'ordre historique `HANDLERS_METIER` — le comportement v1 est intégralement conservé, d'où le critère « 0 régression » tenu.
+- **Feature flag** : `CHARO_V2["ROUTEUR"]` (`core/config.py`, surchargeable par `GS_CHARO_ROUTEUR=false`), plus `SEUIL_INTENTION` / `SEUIL_CONFIANT` (idem `GS_CHARO_SEUIL_INTENTION`, `GS_CHARO_SEUIL_CONFIANT`).
+- Les 12 handlers métier existants sont **ré-enregistrés** (intention → méthode existante), aucun n'est réécrit : `tests/test_intentions.py` vérifie que le registre couvre exactement `HANDLERS_METIER`.
+- Tests : 39 tests unitaires (`tests/test_intentions.py`) + 16 tests d'intégration dans `tests/test_assistant_ia.py` (non-régression v1/v2 réponse par réponse, court-circuit vérifié sur l'ordre d'appel, repli, désactivation du flag, hors-périmètre).
 
 ### Pilier 2 — Index de connaissance local enrichi (BM25 maison)
 
@@ -95,14 +100,14 @@ Un **registre déclaratif** remplace la cascade implicite, sans réécrire `trai
 | Phase | Contenu | Fichiers | Critère de sortie | Version |
 |---|---|---|---|---|
 | **P0 — Socle** (fait) | web sans clé + auto-apprentissage | `ia/webrecherche.py`, `apprentissage.py` | 146 tests IA verts | 1.6.4 ✔ |
-| **P1 — Routeur** | `ia/intentions.py`, ré-enregistrement des `_q_*` | nouveau + `assistant_ia.py` | 0 régression sur `test_assistant_ia.py`; chaque intention a ≥ 1 test via `traiter()` | 1.6.5 |
+| **P1 — Routeur** (fait) | `ia/intentions.py`, ré-enregistrement des `_q_*` | nouveau + `assistant_ia.py` | 0 régression sur `test_assistant_ia.py`; chaque intention a ≥ 1 test via `traiter()` | 1.6.5 ✔ |
 | **P2 — Index BM25 + synonymes** | `IndexSemantique` étendu, sources enrichies | `assistant_ia.py`, `ia/langue.py` | recall ≥ actuel sur la base de tests; seuil paramétrable | 1.6.5 |
 | **P3 — Raisonnement** | `ia/raisonnement.py` + explication | nouveau | « explique » fournit ≥ 3 étapes vérifiables sur moyennes et soldes | 1.6.5 |
 | **P4 — Mémoire renforcée** | decay, faits, feedback élargi | `apprentissage.py` | stats mémoire stables; purge testée; export CSV intact | 1.6.6 |
 | **P5 — Graphe déductif** | arêtes, contradictions, « qui n'a pas payé » | `ia/graphe.py` | 3 nouveaux tests de contradiction | 1.6.6 |
 | **P6 — Qualité** | batterie de 100 questions-types, rapport de taux de réussite | `tests/test_ia_qualite.py` | rapport versionné dans `docs/` | 1.6.6 |
 
-Chaque phase : feature flag `core/config.py` (`CHARO_V2_ROUTEUR`, etc.) pour revenir à la v1 en un paramètre.
+Chaque phase : feature flag dans `core/config.py` (dict `CHARO_V2`, clés `ROUTEUR`, `SEUIL_INTENTION`, `SEUIL_CONFIANT`, etc.) pour revenir à la v1 en un paramètre, surchargeable aussi par variable d'environnement (`GS_CHARO_ROUTEUR`, `GS_CHARO_SEUIL_INTENTION`, `GS_CHARO_SEUIL_CONFIANT`) sans toucher au code.
 
 ---
 

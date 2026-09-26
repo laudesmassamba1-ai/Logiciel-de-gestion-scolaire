@@ -631,6 +631,129 @@ class TestExtrairePeriode:
         assert AssistantIA._extraire_periode("moyenne generale") is None
 
 
+class TestRouteurIntentions:
+    """Phase P1 : le routeur d'intentions ne doit ni casse, ni degrader
+    l'assistant, et doit se neutraliser par feature flag."""
+
+    QUESTIONS = [
+        "quelle est la moyenne generale de Mambou Junior ?",
+        "quel est le classement de la classe 6eme ?",
+        "est-ce que Mambou Junior a paye sa scolarite ?",
+        "quels sont les frais de la classe 6eme ?",
+        "quel est l'etat de la caisse ?",
+        "qui est le professeur de 6eme ?",
+        "quel trimestre sommes-nous ?",
+        "combien d'eleves en 6eme ?",
+        "combien d'absences a Mambou Junior ?",
+        "fiche de Mambou Junior",
+    ]
+
+    def _peuple(self, db):
+        _ajouter_eleve(db, "Mambou", "Junior", "6eme")
+        return db
+
+    def test_flag_actif_par_default(self):
+        from core.config import CHARO_V2
+        assert CHARO_V2["ROUTEUR"] is True
+
+    @pytest.mark.parametrize("question", QUESTIONS)
+    def test_reponses_identiques_avec_ou_sans_routeur(
+            self, base_vierge, monkeypatch, question):
+        """Non-regression : le routeur peut court-circuiter un handler, mais
+        si celui-ci ne sait pas repondre, on retombe sur l'ordre historique
+        et la reponse finale reste la meme qu'en v1."""
+        from core.config import CHARO_V2
+        db = self._peuple(base_vierge)
+
+        def _texte(flag):
+            monkeypatch.setitem(CHARO_V2, "ROUTEUR", flag)
+            rep = _assistant().traiter(question)
+            return (rep or {}).get("texte", "")
+
+        avec = _texte(True)
+        sans = _texte(False)
+        assert avec and sans, f"{question} : reponse vide"
+        # Le fond compte plus que la formule d'introduction : on compare le
+        # corps utile (chiffres et majuscules du contenu).
+        def _ossature(texte):
+            return [m for m in texte.split() if any(c.isdigit() for c in m)]
+        assert _ossature(avec) == _ossature(sans), (
+            f"{question}\n  v2: {avec}\n  v1: {sans}")
+
+    def test_routeur_selectionne_le_bon_handler(self, base_vierge, monkeypatch):
+        """Une question franche (score >= seuil de confiance) court-circuite
+        l'ordre fixe : le handler choisi est appele en premier, meme s'il
+        arrive plus tard dans la liste historique."""
+        from services.assistant_ia import AssistantIA
+        db = self._peuple(base_vierge)
+        appels = []
+        for nom in AssistantIA.__dict__:
+            if nom.startswith("_q_"):
+                original = getattr(AssistantIA, nom)
+                def enveloppe(self, t, _n=nom, _o=original):
+                    appels.append(_n)
+                    return _o(self, t)
+                monkeypatch.setattr(AssistantIA, nom, enveloppe)
+        # _q_classement est 4e dans l'ordre fixe : seul le routeur peut
+        # l'appeler en premier.
+        _assistant().traiter("quel est le classement et le rang de 6eme ?")
+        assert appels[0] == "_q_classement", appels
+
+    def test_question_moyenne_bien_sans_court_circuit(self, base_vierge,
+                                                      monkeypatch):
+        """Sous le seuil de confiance, le routeur ne tranche pas : c'est
+        l'ordre historique qui reste decisionnaire (comportement v1)."""
+        from services.assistant_ia import AssistantIA
+        db = self._peuple(base_vierge)
+        appels = []
+        for nom in AssistantIA.__dict__:
+            if nom.startswith("_q_"):
+                original = getattr(AssistantIA, nom)
+                def enveloppe(self, t, _n=nom, _o=original):
+                    appels.append(_n)
+                    return _o(self, t)
+                monkeypatch.setattr(AssistantIA, nom, enveloppe)
+        _assistant().traiter("quel est l'etat de la caisse ?")
+        assert appels[0] == "_q_graphe", appels
+
+    def test_handler_sans_reponse_bascule_sur_lordre_historique(
+            self, base_vierge, monkeypatch):
+        """Si le routeur choisit un handler qui renvoie None, on doit
+        couvrir le reste de l'ordre fixe (et ne jamais renvoyer None)."""
+        from services.assistant_ia import AssistantIA
+        db = self._peuple(base_vierge)
+        monkeypatch.setattr(AssistantIA, "_q_effectifs",
+                            lambda self, t: None)
+        rep = _assistant().traiter("combien d'eleves en 6eme ?")
+        assert rep is not None and "1" in rep["texte"]
+
+    def test_desactivation_du_flag(self, base_vierge, monkeypatch):
+        """Flag False : plus aucun appel au routeur, comportement v1."""
+        from core.config import CHARO_V2
+        from services.ia import intentions
+        db = self._peuple(base_vierge)
+        appels = []
+        monkeypatch.setitem(CHARO_V2, "ROUTEUR", False)
+        monkeypatch.setattr(intentions.get_routeur(), "classer",
+                            lambda self, q: appels.append(q) or [])
+        rep = _assistant().traiter("quel est l'etat de la caisse ?")
+        assert appels == []
+        assert rep is not None and "caisse" in rep["texte"].lower()
+
+    def test_question_hors_perimetre_inchangee(self, base_vierge, monkeypatch):
+        """Une question sans intention ne doit pas etre capturee par le
+        routeur : elle suit le parcours normal (web, corpus, memoire...)."""
+        from core.config import CHARO_V2
+        db = self._peuple(base_vierge)
+        for flag in (True, False):
+            monkeypatch.setitem(CHARO_V2, "ROUTEUR", flag)
+            rep = _assistant().traiter("bonjour")
+            assert rep is not None
+            texte = rep["texte"].lower()
+            assert any(m in texte for m in
+                       ("bonjour", "salut", "coucou", "bon apres", "bonsoir"))
+
+
 class TestRechercheWeb:
     def test_question_generale_retourne_le_web(self, base_vierge, monkeypatch):
         from services.assistant_ia import AssistantIA

@@ -63,6 +63,21 @@ VILLE_DEFAUT = "Brazzaville"
 INDICATIF_TEL = "+242"
 DEVISE = "FCFA"
 
+# --- Charo IA locale v2 (voir docs/PROJET_CHARO_IA_LOCALE.md) --------------
+# Chaque palier est branche derriere un interrupteur : le passage v1/v2 se
+# fait sans deploiement ni redemarrage, et un palier douteux se desactive
+# immediatement. Les seuils restent lisibles pour etre ajustes sans code.
+CHARO_V2 = {
+    # P1 : routeur d'intentions declaratif (remplace l'ordre fixe des
+    # handlers metier, avec repli automatique sur l'ancien ordre).
+    "ROUTEUR": _os.environ.get("GS_CHARO_ROUTEUR", "true").lower() in (
+        "true", "1", "yes"),
+    # Seuil de retention d'une intention (module intentions.py).
+    "SEUIL_INTENTION": float(_os.environ.get("GS_CHARO_SEUIL_INTENTION", "0.45")),
+    # Au-dela, on court-circuite les handlers de priorite superieure.
+    "SEUIL_CONFIANT": float(_os.environ.get("GS_CHARO_SEUIL_CONFIANT", "0.80")),
+}
+
 # Modes de reglement acceptes par l'etablissement (source unique) :
 # partage entre la caisse, les paiements et le dossier d'inscription.
 MODES_PAIEMENT = ("Especes", "Mobile Money (MTN / Airtel)",

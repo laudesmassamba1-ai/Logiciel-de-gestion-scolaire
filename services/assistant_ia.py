@@ -39,12 +39,13 @@ import unicodedata
 from collections import Counter
 from difflib import SequenceMatcher
 
-from core.config import DOCS_DIR, PERIODES, ROLE_LABELS
+from core.config import CHARO_V2, DOCS_DIR, PERIODES, ROLE_LABELS
 from database import db
 from repositories import repos
 from services.ia.contexte import ContexteConversation
 from services.ia.graphe import GrapheEcole
 from services.ia.langue import corriger_phrase, normaliser as normaliser_ia, similarite
+from services.ia import intentions
 from services.ia import maths as ia_maths
 from services.ia import webrecherche
 from services.ia.llm_backend import get_backend
@@ -53,6 +54,17 @@ from services.ia.apprentissage import MoteurApprentissage
 NOM_ASSISTANT = "Charo"
 
 _LLM = None
+
+#: Handlers metier dans leur ORDRE DE PRIORITE HISTORIQUE. Sert de repli
+#: quand le routeur v2 (pilier 1) est desactive ou indecisif : le
+#: comportement d'avant est alors exactement identique.
+HANDLERS_METIER = (
+    "_q_graphe", "_q_absences",
+    "_q_moyenne_generale", "_q_classement",
+    "_q_moyennes", "_q_paiements_eleve",
+    "_q_tarifs_classe", "_q_caisse", "_q_personnel",
+    "_q_annee_active", "_q_fiche_eleve", "_q_effectifs",
+)
 
 
 # =============================================================================
@@ -1080,13 +1092,32 @@ class AssistantIA:
         if rep is not None:
             return rep
 
+        # Charo v2, P1 : routeur d'intentions declaratif. Il designe le
+        # handler metier le plus pertinent (au lieu d'un ordre fixe) et ne
+        # fait QUE reordonner : si le handler choisi renvoie None, on
+        # rebascule sur l'ancien ordre fixe, donc aucune regression.
+        if CHARO_V2["ROUTEUR"]:
+            intention, score, _classement = intentions.get_routeur().resoudre(
+                t, seuil=CHARO_V2["SEUIL_INTENTION"])
+            if (intention is not None
+                    and score >= CHARO_V2["SEUIL_CONFIANT"]
+                    and intention.handler in HANDLERS_METIER):
+                essai = getattr(self, intention.handler, None)
+                if essai is not None:
+                    try:
+                        rep = essai(t)
+                    except Exception:
+                        rep = None
+                    if rep is not None:
+                        try:
+                            self._noter_contexte(t)
+                        except Exception:
+                            pass
+                        return rep
+
         # Questions metier (ordre de priorite fixe)
-        for essai in (
-                self._q_graphe, self._q_absences,
-                self._q_moyenne_generale, self._q_classement,
-                self._q_moyennes, self._q_paiements_eleve,
-                self._q_tarifs_classe, self._q_caisse, self._q_personnel,
-                self._q_annee_active, self._q_fiche_eleve, self._q_effectifs):
+        for nom_handler in HANDLERS_METIER:
+            essai = getattr(self, nom_handler)
             try:
                 rep = essai(t)
             except Exception:
