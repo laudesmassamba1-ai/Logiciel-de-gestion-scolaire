@@ -7,7 +7,7 @@ from resources.design_tokens import Radius as _R
 
 
 APP_NAME = "Gestion Scolaire"
-APP_VERSION = "1.6.4"
+APP_VERSION = "1.6.5"
 
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
