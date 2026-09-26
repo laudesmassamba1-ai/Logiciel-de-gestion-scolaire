@@ -39,10 +39,11 @@ from difflib import SequenceMatcher
 from database import db
 
 _LIMITE_JOURNAL = 1500
-_COOLDOWN_ENTRAINEMENT = 2 * 3600.0
+_COOLDOWN_ENTRAINEMENT = 600.0
 _SEUIL_FUSION = 0.90
 _SEUIL_SUPPRESSION = 0.25
 _MAX_USAGE_SUPPRESSION = 2
+_SEUIL_QUESTION_FREQUENTE = 3
 
 
 def _nettoyer(texte):
@@ -200,21 +201,25 @@ class MoteurApprentissage:
     # ------------------------------------------------------------------
 
     def ameliorer(self, force=False):
-        """Pass d'entrainement : fusion des doublons, nettoyage, purge.
+        """Pass d'entrainement : fusion des doublons, nettoyage, purge,
+        et auto-apprentissage des questions frequentes.
 
-        Automatiquement mis en veille (cooldown) sauf si force=True.
-        Retourne un rapport {fusionne, retires, memoire, journal}.
+        Automatiquement mis en veille (cooldown court de 10 min) sauf si
+        force=True.
+        Retourne un rapport {fusionne, retires, appris, memoire, journal}.
         """
         self.ensure_tables()
         if not force:
             dernier = self._metrique_lire("dernier_entrainement")
             if dernier and time.time() - dernier < _COOLDOWN_ENTRAINEMENT:
-                return {"fusionne": 0, "retires": 0, "rejouee": 0,
+                return {"fusionne": 0, "retires": 0, "appris": 0,
+                        "rejouee": 0,
                         "memoire": self._taille_memoire(),
                         "journal": self._taille_journal(), "publicite": False}
 
         fusionnes = self._consolider_memoire()
         retires = self._supprimer_faibles()
+        appris = self._apprendre_questions_frequentes()
         self._purger_journal()
 
         maintenant = time.time()
@@ -225,9 +230,61 @@ class MoteurApprentissage:
             (maintenant,))
         self._metrique("entrainements")
 
-        return {"fusionne": fusionnes, "retires": retires, "rejouee": 0,
+        return {"fusionne": fusionnes, "retires": retires, "appris": appris,
+                "rejouee": 0,
                 "memoire": self._taille_memoire(),
                 "journal": self._taille_journal(), "publicite": True}
+
+    def _apprendre_questions_frequentes(self):
+        """Apprend tout seul les questions qui reviennent regulierement.
+
+        Principe « l'IA apprend toute seule » : une question posee au
+        moins _SEUIL_QUESTION_FREQUENTE fois provient d'un vrai besoin
+        metier — il serait dommage de n'avoir jamais de reponse. Le moteur
+        transforme alors la meilleure reponse du journal (la plus stable,
+        hors messages de secours) en souvenir durable `ia_memoire`
+        (source="auto"), rejouable des la session suivante.
+
+        Inoffensif et borne : aucune question unique n'est apprise ; les
+        souvenirs ainsi crees peuvent etre ajustes par le feedback puis
+        supprimes par l'entrainement s'ils s'averent mauvais."""
+        self.ensure_tables()
+        deja = {_nettoyer(r["question"])
+                for r in db.query("SELECT question FROM ia_memoire")}
+        candidates = db.query(
+            "SELECT question, reponse, source, COUNT(*) AS c "
+            "FROM ia_journal GROUP BY question, reponse HAVING c >= ?",
+            (_SEUIL_QUESTION_FREQUENTE,))
+        appris = 0
+        for ligne in candidates:
+            q = _nettoyer(ligne["question"])
+            if not q or q in deja:
+                continue
+            reponse = (ligne["reponse"] or "").strip()
+            if not self._est_bonne_reponse(reponse):
+                continue
+            db.execute(
+                "INSERT INTO ia_memoire (type, question, reponse, source, "
+                "score) VALUES ('qa', ?, ?, 'auto', 0.6)",
+                (ligne["question"][:200], reponse[:2000]))
+            deja.add(q)
+            appris += 1
+        if appris:
+            self._metrique("auto_apprentissages", appris)
+        return appris
+
+    @staticmethod
+    def _est_bonne_reponse(reponse):
+        """Considere qu'une reponse de secours n'est pas a retenir."""
+        if not reponse or len(reponse) < 10:
+            return False
+        rl = reponse.lower()
+        for marqueur in ("n'ai pas", "pas la reponse", "pas compris",
+                         "proposez", "proposons", "apprends-moi",
+                         "essayons", "je peux vous aider"):
+            if marqueur in rl:
+                return False
+        return True
 
     def _consolider_memoire(self):
         """Fusionne les questions quasi identiques (garder la plus utilisee)."""
@@ -277,6 +334,8 @@ class MoteurApprentissage:
             "feedback_pos": int(self._metrique_lire("feedback_pos")),
             "feedback_neg": int(self._metrique_lire("feedback_neg")),
             "entrainements": int(self._metrique_lire("entrainements")),
+            "auto_apprentissages": int(
+                self._metrique_lire("auto_apprentissages")),
             "journal": self._taille_journal(),
         }
 

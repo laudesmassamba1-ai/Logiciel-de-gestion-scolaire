@@ -185,6 +185,51 @@ class TestAutoAmelioration:
         assert rapport["publicite"] is False
 
 
+class TestAutoApprentissage:
+    def test_apprend_question_frequente(self, base_vierge):
+        m = _moteur()
+        m.ensure_tables()
+        for _ in range(3):
+            m.consigner("quel est le numero du pere de antoine",
+                        "06 22 33 44 est le numero", "memoire")
+        rapport = m.ameliorer(force=True)
+        assert rapport["appris"] == 1
+        assert m.statistiques()["apprentissages"] == 1
+        ligne = base_vierge.query_one(
+            "SELECT source FROM ia_memoire WHERE question = "
+            "'quel est le numero du pere de antoine'")
+        assert ligne["source"] == "auto"
+
+    def test_question_unique_non_apprise(self, base_vierge):
+        m = _moteur()
+        m.ensure_tables()
+        m.consigner("question posee une seule fois", "une reponse")
+        rapport = m.ameliorer(force=True)
+        assert rapport["appris"] == 0
+
+    def test_reponse_de_secours_non_apprise(self, base_vierge):
+        m = _moteur()
+        m.ensure_tables()
+        for _ in range(3):
+            m.consigner("qui est le president",
+                        "Je n'ai pas la reponse pour cette question...")
+        rapport = m.ameliorer(force=True)
+        assert rapport["appris"] == 0
+
+    def test_ne_duplique_pas_via_cooldown(self, base_vierge):
+        m = _moteur()
+        m.ensure_tables()
+        for _ in range(4):
+            m.consigner("quelle est la couleur du ciel", "le ciel est bleu",
+                        "web")
+        base_vierge.execute(
+            "INSERT INTO ia_memoire (question, reponse) VALUES (?, ?)",
+            ("quelle est la couleur du ciel", "le ciel est bleu"))
+        rapport = m.ameliorer(force=True)
+        assert rapport["appris"] == 0
+        assert m.statistiques()["apprentissages"] == 1
+
+
 class TestIntegration:
     def test_memoire_rejouee_et_journalisee(self, base_vierge):
         ia = _assistant()

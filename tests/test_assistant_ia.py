@@ -629,3 +629,33 @@ class TestExtrairePeriode:
         assert AssistantIA._extraire_periode("notes du deuxieme trimestre") == PERIODES[1]
         assert AssistantIA._extraire_periode("trimestre 3") == PERIODES[2]
         assert AssistantIA._extraire_periode("moyenne generale") is None
+
+
+class TestRechercheWeb:
+    def test_question_generale_retourne_le_web(self, base_vierge, monkeypatch):
+        from services.assistant_ia import AssistantIA
+        from services.ia import webrecherche
+        ia = AssistantIA(DIRECTEUR)
+        monument = webrecherche.Resultat(
+            "Le fleuve Ogooué traverse le Gabon",
+            "https://fr.wikipedia.org/wiki/Ogooué",
+            "Principal fleuve du Gabon.")
+        def fake_rechercher(self, question, nombre=5):
+            return [monument]
+        monkeypatch.setattr(webrecherche.RechercheWeb, "disponible",
+                            lambda self: True)
+        monkeypatch.setattr(webrecherche.RechercheWeb, "rechercher",
+                            fake_rechercher)
+        rep = ia.traiter("dans quel pays coule le fleuve ogooue ?")
+        assert rep is not None
+        assert "web" in rep.get("texte", "").lower()
+        assert "Ogooué" in rep["texte"]
+        assert "Apprendre cette reponse" in (rep.get("choix") or [])
+
+    def test_web_indisponible_retombe_sur_le_proposer(self, base_vierge):
+        from services.assistant_ia import AssistantIA
+        ia = AssistantIA(DIRECTEUR)
+        rep = ia.traiter("dans quel pays coule le fleuve ogooue ?")
+        assert rep is not None
+        assert "autre chose" in rep.get("texte", "") or \
+               "apprendre" in rep.get("texte", "").lower()

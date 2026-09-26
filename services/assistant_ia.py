@@ -2,7 +2,10 @@
 
 100 % Python standard : aucun modele a telecharger, aucune carte graphique,
 aucune connexion Internet requise. Elle tourne instantanement sur n'importe
-quel PC, meme sans GPU.
+quel PC, meme sans GPU. La recherche web est un ENRICHISSEMENT facultatif :
+si Internet est absent, Charo continue de repondre parfaitement depuis la
+memoire, les donnees locales et le LLM optionnel — elle ne depend jamais
+du reseau.
 
 Trois couches cooperent :
 
@@ -43,6 +46,7 @@ from services.ia.contexte import ContexteConversation
 from services.ia.graphe import GrapheEcole
 from services.ia.langue import corriger_phrase, normaliser as normaliser_ia, similarite
 from services.ia import maths as ia_maths
+from services.ia import webrecherche
 from services.ia.llm_backend import get_backend
 from services.ia.apprentissage import MoteurApprentissage
 
@@ -257,7 +261,7 @@ class PersonaliteCharo:
             f"Bonne journée {prenom} ! Charo reste là si vous avez besoin.",
             f"À la prochaine {prenom} ! 😊",
         ]
-        return random.choice(messages).replace("{prenom} ", "") if not prenom else random.choice(messages).format(prenom=prenom)
+        return random.choice(messages)
     
     def merci(self):
         messages = [
@@ -426,6 +430,7 @@ _MOTS_VIDES = {
     "quels", "quelles", "ce", "cet", "cette", "donne", "dis", "svp",
     "peux", "tu", "je", "voudrais", "veux", "il", "elle", "on", "nous",
     "vous", "son", "sa", "ses", "leur", "leurs", "y", "s", "plus", "moins",
+    "tout", "toute", "toutes", "tous",
 }
 
 
@@ -480,14 +485,17 @@ def _contient_un(texte, *mots):
 def _oui(texte):
     if _non(texte):
         return False
-    return _contient_un(texte, "oui", "confirm", "valide", "vas y", "va y",
-                        "yes") or texte in ("ok", "ok ", "d accord", "daccord",
-                                            "c est parti", "go")
+    return (_mot_present(texte, "oui", "confirm", "valide", "yes") or
+            _contient_un(texte, "vas y", "va y") or
+            texte in ("ok", "ok ", "d accord", "daccord",
+                      "c est parti", "go"))
 
 
 def _non(texte):
-    return _contient_un(texte, "annuler", "annule", "abandon", "stop") \
-        or texte in ("non", "no", "nan")
+    return (_mot_present(texte, "annuler", "annule", "annulation", "abandon",
+                         "abandonne", "annuler") or
+            _mot_present(texte, "stop") or
+            texte in ("non", "no", "nan"))
 
 
 def _mot_present(texte, *mots):
@@ -887,6 +895,8 @@ class AssistantIA:
         self._derniere_reponse = None
         # Backend LLM optionnel (enhancement, not required)
         self._llm = get_backend()
+        # Recherche web optionnelle (desactivee sans Internet)
+        self._web = webrecherche.get_recherche_web()
         self._contexte_conversation = []
         self._historique = []            # (role, texte) pour le LLM, dans l'ordre reel
         # Faits de l'ecole (cache 30 s) injectes dans les prompts LLM.
@@ -934,7 +944,11 @@ class AssistantIA:
         if self._attente is not None:
             return self._avancer_flux(t, brut)
 
-        if _non(t):
+        # Annulation : uniquement une phrase courte et pure (« non », «
+        # annuler », « stop »). Une vraie question qui contient « annule »
+        # (« combien d'eleves ont annule leur inscription ») ne doit jamais
+        # être confondue avec un ordre d'annulation.
+        if _non(t) and len(t.split()) <= 3:
             return self._rep(self._personnalite.envelopper(
                 "Rien à annuler. Comment puis-je vous aider ?"), contexte_type="general")
 
@@ -946,7 +960,8 @@ class AssistantIA:
 
         # Demande d'explication sur la derniere reponse
         if _contient_un(t, "explique", "expliquer", "comment tu as",
-                        "comment as-tu", "comment ca", "raisonn", "pourquoi"):
+                        "comment as tu", "comment as-tu", "comment ca",
+                        "raisonn", "pourquoi"):
             rep = self._essayer_explication(t)
             if rep is not None:
                 return rep
@@ -957,7 +972,18 @@ class AssistantIA:
             if rep is not None:
                 return rep
 
-        if len(t.split()) <= 4 and _mot_present(
+        # Salutation : seulement si le message est une pure salutation
+        # (court + pas d'action métier à l'intérieur). « merci, ouvre les
+        # paiements » ou « bonjour combien d'eleves » ne sont pas des
+        # salutations : on laisse passer le reste du pipeline.
+        if len(t.split()) <= 4 and not _contient_un(
+                t, "ouvre", "ouvrir", "affiche", "afficher", "combien",
+                "moyenne", "paiement", "paye", "eleve", "classe", "caisse",
+                "solde", "cree", "creer", "ajoute", "inscri", "tarif",
+                "absent", "retard", "note", "salaire", "personnel",
+                "planning", "effectif", "total", "fiche", "supprime",
+                "modifie", "enregistre", "imprime", "qui est", "montant") \
+                and _mot_present(
                 t, "bonjour", "salut", "bonsoir", "hello", "coucou", "hey",
                 "merci", "super", "genial", "top", "bye", "revoir"):
             if _mot_present(t, "merci"):
@@ -993,7 +1019,7 @@ class AssistantIA:
                 "etendue.",
                 source="memoire")
 
-        if _contient_un(t, "posez-moi autre chose"):
+        if _contient_un(t, "posez moi autre chose", "pose moi autre chose"):
             return self._rep("Bien sur ! Que voulez-vous savoir ?",
                              choix=self.suggestions(),
                              deja_naturel=True)
@@ -1087,6 +1113,13 @@ class AssistantIA:
         if trouve is not None:
             return trouve
 
+        # Recherche web : question d'information generale (hors donnees
+        # scolaires), uniquement si Internet repond. Charo n'utilise le web
+        # qu'en dernier recours, avant le LLM.
+        rep = self._essayer_web(brut)
+        if rep is not None:
+            return rep
+
         # Rien trouve : tenter le LLM, sinon proposer l'apprentissage
         rep = self._essayer_llm_brut(brut)
         if rep is not None:
@@ -1154,6 +1187,40 @@ class AssistantIA:
         self._faits_cache = "\n".join(parties)
         self._faits_date = time.monotonic()
         return self._faits_cache
+
+    def _essayer_web(self, brut):
+        """Recherche web pour une question d'information generale.
+
+        Filet supplementaire avant le LLM : quand Charo n'a pas la
+        reponse dans les donnees de l'ecole (culture generale, actualite,
+        geographie...), elle peut la chercher sur Internet SI le reseau
+        repond. Hors ligne, cette methode retourne vite None : l'IA reste
+        philosophiquement autonome, sans jamais dependre du reseau ni
+        consommer de ressources materiaux du poste (tout est servi par
+        les serveurs distants).
+
+        Les resultats sont consignes au journal et peuvent etre appris via
+        « Apprendre cette reponse » (memoire durable)."""
+        if self._attente is not None:
+            return None
+        if not brut or len(brut) < 12 or len(brut) > 200:
+            return None
+        if not self._web.disponible():
+            return None
+        try:
+            resultats = self._web.rechercher(brut, nombre=5)
+        except Exception:
+            return None
+        if not resultats:
+            return None
+        texte = ("Voici ce que j'ai trouve sur le web :\n"
+                 + webrecherche.formater(resultats, brut))
+        texte += ("\n\n(Web — verifiez les sources avant de diffuser.)")
+        self._last_llm_reponse = texte
+        self._llm_question_originale = brut
+        return self._rep(
+            texte, source="web", contexte_type="general",
+            choix=["Apprendre cette reponse", "Posez-moi autre chose"])
 
     def _essayer_llm_brut(self, brut):
         """Fallback LLM : quand le système rule-based ne sait pas répondre,
@@ -1266,8 +1333,7 @@ class AssistantIA:
         leur chaîne de pensée."""
         if _contient_un(t, "pourquoi") and self._derniere_explication:
             if self._llm.disponible() and self._derniere_reponse:
-                question = self._contexte_conversation[-1] \
-                    if self._contexte_conversation else ""
+                question = self._derniere_question_brute or ""
                 faits = f"{self._derniere_reponse.get('texte', '')}\n\n" \
                         f"{self._faits_ecole()}"
                 raisonnement = self._llm.raisonner(question, faits,
@@ -2176,8 +2242,9 @@ class AssistantIA:
         lignes.sort(key=lambda x: x["moyenne"])
         return lignes
 
-    def _moyenne_generale_texte(self):
-        lignes = self._collecter_moyennes_globales()
+    def _moyenne_generale_texte(self, lignes=None):
+        if lignes is None:
+            lignes = self._collecter_moyennes_globales()
         if not lignes:
             return None
         moy = round(sum(l["moyenne"] for l in lignes) / len(lignes), 2)
@@ -2197,26 +2264,27 @@ class AssistantIA:
         refus = self._verifier_acces("notes")
         if refus:
             return refus
-        texte = self._moyenne_generale_texte()
-        if texte is None:
+        lignes = self._collecter_moyennes_globales()
+        if not lignes:
             return self._rep("Aucune note enregistrée : impossible de "
                              "calculer une moyenne générale.",
                              contexte_type="moyenne")
-        moy = self._collecter_moyennes_globales()
+        texte = self._moyenne_generale_texte(lignes)
         return self._rep(
             texte,
             explication=(f"J'ai calculé la moyenne générale pondérée de "
                          f"chaque élève (formule (D1 + D2 + 2 x Composition) "
                          f"/ 4 par matière, puis moyenne pondérée par les "
                          f"coefficients), puis la moyenne simple des "
-                         f"{len(moy)} élèves notés."),
+                         f"{len(lignes)} élèves notés."),
             suggestions=["Classement des élèves", "Moyenne de la classe 6ème",
                          "Solde de la caisse"],
             contexte_type="moyenne")
 
     def _q_classement(self, t):
-        if not _contient_un(t, "classement", "classer", "rang", "rangement",
-                            "top", "meill", "pire"):
+        if not (_contient_un(t, "classement", "classer", "rangement",
+                             "meill", "pire") or _mot_present(t, "rang",
+                                                              "top")):
             return None
         refus = self._verifier_acces("notes")
         if refus:
@@ -2364,9 +2432,12 @@ class AssistantIA:
     @staticmethod
     def _extraire_periode(t):
         motifs = [
-            (("1er trimestre", "premier trimestre", "trim 1"), PERIODES[0]),
-            (("2eme trimestre", "deuxieme trimestre", "trim 2"), PERIODES[1]),
-            (("3eme trimestre", "troisieme trimestre", "trim 3"), PERIODES[2]),
+            (("1er trimestre", "1ere trimestre", "1e trimestre",
+              "premier trimestre", "trim 1"), PERIODES[0]),
+            (("2eme trimestre", "2e trimestre", "deuxieme trimestre",
+              "trim 2"), PERIODES[1]),
+            (("3eme trimestre", "3e trimestre", "troisieme trimestre",
+              "trim 3"), PERIODES[2]),
         ]
         for chaines, periode in motifs:
             if any(ch in t for ch in chaines) or \
@@ -2440,8 +2511,9 @@ class AssistantIA:
         if not _contient_un(t, "paye", "payer", "paiement", "paiements",
                             "versement", "reste a payer"):
             return None
-        if self._verifier_acces("paiements"):
-            return self._verifier_acces("paiements")
+        refus = self._verifier_acces("paiements")
+        if refus:
+            return refus
         if _contient_un(t, "caisse", "tous les paiements", "total des paiements"):
             return None
         eleve = self._trouver_eleve(t)
@@ -2498,8 +2570,9 @@ class AssistantIA:
         if not _contient_un(t, "tarif", "tarifs", "frais", "cout", "couts",
         "prix", "coute"):
             return None
-        if self._verifier_acces("tarifs"):
-            return self._verifier_acces("tarifs")
+        refus = self._verifier_acces("tarifs")
+        if refus:
+            return refus
         classe = self._trouver_classe(t)
         if classe is None:
             return None
@@ -2528,8 +2601,9 @@ class AssistantIA:
                             "sortie", "recette", "depense", "transaction",
                             "argent", "finance"):
             return None
-        if self._verifier_acces("caisse"):
-            return self._verifier_acces("caisse")
+        refus = self._verifier_acces("caisse")
+        if refus:
+            return refus
         entree, sortie, solde = repos.finance.caisse_totals()
 
         if _contient_un(t, "dernier", "recente", "recentes", "recents",
@@ -2576,8 +2650,9 @@ class AssistantIA:
                             "professeur", "professeurs", "instituteur",
                             "masse salariale", "salaire", "salaires", "employe"):
             return None
-        if self._verifier_acces("personnel"):
-            return self._verifier_acces("personnel")
+        refus = self._verifier_acces("personnel")
+        if refus:
+            return refus
         tout = repos.personnel_repo.personnel()
         if not tout:
             return self._rep("Aucun membre du personnel enregistre.")
@@ -2633,9 +2708,10 @@ class AssistantIA:
     # ------------------------------------------------------------------
 
     def _q_fiche_eleve(self, t):
-        if not _contient_un(t, "qui est", "fiche", "info", "information",
-                            "cherche", "trouve", "contact", "parent",
-                            "telephone", "naissance", "matricule", "age"):
+        if not (_contient_un(t, "qui est", "fiche", "info", "information",
+                             "cherche", "trouve", "contact", "parent",
+                             "telephone", "naissance", "matricule")
+                or _mot_present(t, "age")):
             return None
         eleve = self._trouver_eleve(t)
         if eleve is None:
@@ -2683,8 +2759,9 @@ class AssistantIA:
         if not _contient_un(t, "eleve", "eleves", "fille", "filles", "garcon",
                             "garcons", "classe", "classes"):
             return None
-        if self._verifier_acces("eleves"):
-            return self._verifier_acces("eleves")
+        refus = self._verifier_acces("eleves")
+        if refus:
+            return refus
         
         filtre_sexe = None
         if _contient_un(t, "fille", "filles"):
@@ -2794,6 +2871,8 @@ class AssistantIA:
             score = max(score, score_ngram * 0.85)
             tokens_nom = set(nom_complet.split())
             for tok in t.split():
+                if tok in _MOTS_VIDES or len(tok) < 3:
+                    continue
                 if tok in tokens_nom:
                     score = max(score, 0.9)
                 elif len(tok) >= 4:

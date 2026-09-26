@@ -23,3 +23,8 @@ def _desactiver_llm(monkeypatch, pytestconfig, request):
     from services.ia.llm_backend import LLMBackend
     monkeypatch.setattr(LLMBackend, "disponible", lambda self: False)
     monkeypatch.setattr(LLMBackend, "_generer", lambda self, msgs: "")
+    # Neutralise la recherche web pendant les tests (le module
+    # test_webrecherche.py mocke urllib lui-meme).
+    if "test_webrecherche" not in request.module.__name__:
+        from services.ia.webrecherche import RechercheWeb
+        monkeypatch.setattr(RechercheWeb, "disponible", lambda self: False)
